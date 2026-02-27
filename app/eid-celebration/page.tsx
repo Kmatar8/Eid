@@ -7,12 +7,12 @@ export default function EidCelebrationPage() {
             <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)] z-[-1]" />
             {/* Fireworks Background */}
             <FireworksBackground
-                population={2}
+                population={1}
                 particleSpeed={3}
                 className="absolute inset-0 z-0"
             />
             {/* Monochrome Fireworks Demo Layer */}
-            <FireworksBackgroundDemo population={1} />
+            <FireworksBackgroundDemo population={0.5} />
 
             {/* Content Overlay */}
             <div className="relative z-10 flex flex-col items-center justify-center min-h-screen text-center p-4">

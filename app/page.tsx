@@ -242,12 +242,12 @@ export default function Home() {
 
       {/* Fireworks Effect - Increased for better visibility through glass */}
       <FireworksBackground
-        population={2}
+        population={1}
         particleSpeed={4}
         explosionHeight={{ min: 0, max: 0.15 }}
         className="absolute inset-0 z-0 pointer-events-none opacity-80"
       />
-      <FireworksBackgroundDemo population={3} />
+      <FireworksBackgroundDemo population={1.5} />
 
       {festiveSymbols.map((item) => (
         <motion.span

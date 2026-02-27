@@ -867,8 +867,8 @@ export default function HostStagePage() {
     return [...(room?.teams ?? [])].sort((a, b) => a.order - b.order)
   }, [room?.teams])
   const isTriviaStage = Boolean(room && stage === "trivia")
-  const fireworksBasePopulation = isTriviaStage ? 1 : 2
-  const fireworksDemoPopulation = 2
+  const fireworksBasePopulation = isTriviaStage ? 0.5 : 1
+  const fireworksDemoPopulation = 1
   const fireworksExplosionHeight = isTriviaStage ? { min: 0.08, max: 0.34 } : { min: 0, max: 0.15 }
 
   return (
