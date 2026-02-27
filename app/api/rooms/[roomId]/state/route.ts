@@ -1,7 +1,7 @@
 import { errorResponse, jsonResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
-import { buildRoomSnapshot, getRoom } from "@/lib/server/store"
+import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState } from "@/lib/server/store"
 import { withSharedStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
@@ -29,6 +29,17 @@ export async function GET(request: Request, context: RouteContext) {
 
     if (actor.actor.role === "host" && room.hostId !== actor.actor.actorId) {
       return errorResponse(403, "HOST_ROOM_MISMATCH", "Room does not belong to host")
+    }
+
+    if (actor.actor.role === "player") {
+      if (!isRoomActiveState(room.state)) {
+        return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active", { state: room.state })
+      }
+
+      const player = getPlayerInRoom(roomId, actor.actor.actorId)
+      if (!player) {
+        return errorResponse(404, "PLAYER_NOT_FOUND", "Player not found in this room")
+      }
     }
 
     const snapshot = buildRoomSnapshot(roomId)

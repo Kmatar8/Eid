@@ -36,7 +36,7 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     if (!isRoomActiveState(room.state)) {
-      return errorResponse(409, "ROOM_INACTIVE", "Room is no longer active")
+      return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active")
     }
 
     const player = getPlayerInRoom(roomId, claims.playerId)

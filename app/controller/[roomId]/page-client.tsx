@@ -68,20 +68,28 @@ function shouldRetrySubmit(error: unknown) {
   return error.code === "EMPTY_RESPONSE" || error.code === "UNKNOWN_ERROR"
 }
 
-function isFatalControllerSessionError(error: unknown) {
+function isTerminalControllerSessionError(error: unknown) {
   if (!(error instanceof LiveApiError)) {
     return false
   }
 
+  if (error.status === 401 || error.status === 403 || error.status === 404) {
+    return true
+  }
+
   return (
-    error.status === 401 ||
-    error.status === 403 ||
-    error.status === 404 ||
     error.code === "UNAUTHORIZED" ||
     error.code === "FORBIDDEN" ||
     error.code === "ROOM_NOT_FOUND" ||
+    error.code === "ROOM_NOT_ACTIVE" ||
+    error.code === "ROOM_INACTIVE" ||
+    error.code === "ROOM_TOKEN_MISMATCH" ||
     error.code === "PLAYER_NOT_FOUND"
   )
+}
+
+function isTerminalRoomState(state: RoomSnapshot["state"] | null | undefined) {
+  return state === "session_completed" || state === "expired" || state === "superseded"
 }
 
 function getTeamTone(teamId: string | null | undefined): TeamTone {
@@ -162,6 +170,23 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
   }, [])
 
+  const terminateControllerSession = useCallback(
+    (reason: unknown, message?: string) => {
+      clearPlayerSession(roomId)
+      setSession(null)
+      setRoom(null)
+      setSubmittedQuestionId(null)
+      setBusy(false)
+      if (message) {
+        setNotice(message)
+      } else {
+        setNotice(null)
+      }
+      setError(toErrorMessage(reason))
+    },
+    [roomId]
+  )
+
   useEffect(() => {
     const qId = room?.trivia?.selectedClue?.questionId
     if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
@@ -185,6 +210,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
     try {
       const response = await reconnectPlayer(roomId, session.token)
+      if (isTerminalRoomState(response.room.state)) {
+        terminateControllerSession(
+          new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
+          "انتهت هذه الغرفة. يرجى الانضمام إلى غرفة جديدة."
+        )
+        return
+      }
       setRoom(response.room)
       setSession((previous) => {
         const next = {
@@ -198,9 +230,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       })
       setError(null)
     } catch (requestError) {
+      if (isTerminalControllerSessionError(requestError)) {
+        terminateControllerSession(requestError, "انتهت هذه الغرفة. يرجى الانضمام إلى غرفة جديدة.")
+        return
+      }
       setError(toErrorMessage(requestError))
     }
-  }, [roomId, session])
+  }, [roomId, session, terminateControllerSession])
 
   const refreshState = useCallback(async () => {
     if (!session) {
@@ -215,14 +251,25 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     try {
       const response = await getRoomState(roomId, session.token)
       syncServerClock(response.ts)
+      if (isTerminalRoomState(response.payload.room.state)) {
+        terminateControllerSession(
+          new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
+          "تم إغلاق الغرفة. يرجى إعادة الانضمام."
+        )
+        return
+      }
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
+      if (isTerminalControllerSessionError(requestError)) {
+        terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى إعادة الانضمام.")
+        return
+      }
       setError(toErrorMessage(requestError))
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [roomId, session, syncServerClock])
+  }, [roomId, session, syncServerClock, terminateControllerSession])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -275,17 +322,21 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       },
       onError: (streamError) => {
         streamConnectedRef.current = false
-        if (isFatalControllerSessionError(streamError)) {
-          clearPlayerSession(roomId)
-          setSession(null)
-          setRoom(null)
-          setError(toErrorMessage(streamError))
+        if (isTerminalControllerSessionError(streamError)) {
+          terminateControllerSession(streamError, "تم إنهاء الغرفة الحالية. يرجى الانضمام إلى غرفة جديدة.")
           return
         }
         setError(toErrorMessage(streamError))
       },
       onState: (envelope) => {
         syncServerClock(envelope.ts)
+        if (isTerminalRoomState(envelope.payload.room.state)) {
+          terminateControllerSession(
+            new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
+            "تم إنهاء الغرفة الحالية. يرجى الانضمام إلى غرفة جديدة."
+          )
+          return
+        }
         setRoom(envelope.payload.room)
         setError(null)
       },
@@ -295,7 +346,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       streamConnectedRef.current = false
       unsubscribe()
     }
-  }, [isPageVisible, roomId, session, syncServerClock])
+  }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
 
   useEffect(() => {
     if (!session) {
@@ -344,7 +395,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         .then((ack) => {
           syncServerClock(ack.ts)
         })
-        .catch(() => {
+        .catch((requestError) => {
+          if (isTerminalControllerSessionError(requestError)) {
+            terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
+            return
+          }
           // Ignore transient heartbeat failures.
         })
     }, HEARTBEAT_MS)
@@ -352,7 +407,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return () => {
       window.clearInterval(timer)
     }
-  }, [isPageVisible, roomId, session, syncServerClock])
+  }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
 
   const selectedQuestionId = room?.trivia.selectedClue?.questionId ?? null
   useEffect(() => {
@@ -473,6 +528,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setRoom(ack.payload.room)
       setNotice("تم تسجيل ضغطتك.")
     } catch (requestError) {
+      if (isTerminalControllerSessionError(requestError)) {
+        terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
+        return
+      }
       setError(toErrorMessage(requestError))
     } finally {
       setBusy(false)
@@ -506,6 +565,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setNotice(`Answer submitted: ${option}`)
     } catch (requestError) {
       setSubmittedQuestionId(null)
+      if (isTerminalControllerSessionError(requestError)) {
+        terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
+        return
+      }
       setError(toErrorMessage(requestError))
     } finally {
       setBusy(false)

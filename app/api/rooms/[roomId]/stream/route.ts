@@ -1,7 +1,7 @@
 import { errorResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor, type RoomActor } from "@/lib/server/room-auth"
-import { buildRoomSnapshot, getRoom } from "@/lib/server/store"
+import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState } from "@/lib/server/store"
 import { withSharedStore } from "@/lib/server/store-sync"
 import type { RoomSnapshot } from "@/lib/server/types"
 
@@ -27,6 +27,23 @@ async function readAuthorizedSnapshot(roomId: string, actor: RoomActor): Promise
 
     if (actor.role === "host" && room.hostId !== actor.actorId) {
       return { ok: false, status: 403, code: "HOST_ROOM_MISMATCH", message: "Room does not belong to host" }
+    }
+
+    if (actor.role === "player") {
+      if (!isRoomActiveState(room.state)) {
+        return {
+          ok: false,
+          status: 409,
+          code: "ROOM_NOT_ACTIVE",
+          message: "Room is no longer active",
+          details: { state: room.state },
+        }
+      }
+
+      const player = getPlayerInRoom(roomId, actor.actorId)
+      if (!player) {
+        return { ok: false, status: 404, code: "PLAYER_NOT_FOUND", message: "Player not found in this room" }
+      }
     }
 
     const snapshot = buildRoomSnapshot(roomId)

@@ -1232,6 +1232,7 @@ type ApplyRoomActionResult =
       ok: false
       code:
         | "ROOM_NOT_FOUND"
+        | "ROOM_NOT_ACTIVE"
         | "HOST_ROOM_MISMATCH"
         | "PLAYER_NOT_FOUND"
         | "INVALID_STATE_TRANSITION"
@@ -1599,6 +1600,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
   const player = getPlayerInRoom(input.roomId, input.actorId)
   if (!player) {
     return { ok: false, code: "PLAYER_NOT_FOUND" }
+  }
+
+  if (!isRoomActiveState(room.state)) {
+    return { ok: false, code: "ROOM_NOT_ACTIVE", state: room.state }
   }
 
   if (input.actionType === "player.heartbeat") {

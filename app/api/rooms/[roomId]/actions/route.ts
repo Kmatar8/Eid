@@ -45,6 +45,12 @@ export async function POST(request: Request, context: RouteContext) {
         return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
       }
 
+      if (applied.code === "ROOM_NOT_ACTIVE") {
+        return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active", {
+          state: applied.state,
+        })
+      }
+
       if (applied.code === "PLAYER_NOT_FOUND") {
         return errorResponse(404, "PLAYER_NOT_FOUND", "Player not found in this room")
       }

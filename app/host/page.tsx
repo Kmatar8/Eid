@@ -95,6 +95,10 @@ function isFatalHostSessionError(error: unknown) {
   )
 }
 
+function isTerminalRoomState(state: RoomSnapshot["state"] | null | undefined) {
+  return state === "session_completed" || state === "expired" || state === "superseded"
+}
+
 function getTeamTone(teamId: string | null | undefined): TeamTone {
   if (!teamId) {
     return {
@@ -185,6 +189,15 @@ export default function HostStagePage() {
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
+  }, [])
+
+  const releaseRoomBinding = useCallback((message?: string) => {
+    clearHostRoomId()
+    setRoomId(null)
+    setRoom(null)
+    if (message) {
+      setNotice(message)
+    }
   }, [])
 
   useEffect(() => {
@@ -330,6 +343,11 @@ export default function HostStagePage() {
     try {
       const response = await getRoomState(roomId, hostToken)
       syncServerClock(response.ts)
+      if (isTerminalRoomState(response.payload.room.state)) {
+        setError(null)
+        releaseRoomBinding("انتهت الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
+        return
+      }
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
@@ -337,9 +355,7 @@ export default function HostStagePage() {
         requestError instanceof LiveApiError &&
         (requestError.code === "ROOM_NOT_FOUND" || requestError.code === "HOST_ROOM_MISMATCH")
       ) {
-        clearHostRoomId()
-        setRoomId(null)
-        setRoom(null)
+        releaseRoomBinding("تعذر الوصول إلى الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
         return
       }
 
@@ -347,7 +363,7 @@ export default function HostStagePage() {
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [hostToken, roomId, syncServerClock])
+  }, [hostToken, releaseRoomBinding, roomId, syncServerClock])
 
   const bootstrapRoom = useCallback(async () => {
     if (!hostToken || roomId || isBootstrappingRoom) {
@@ -413,15 +429,18 @@ export default function HostStagePage() {
       onError: (streamError) => {
         streamConnectedRef.current = false
         if (isFatalHostSessionError(streamError)) {
-          clearHostRoomId()
-          setRoomId(null)
-          setRoom(null)
+          releaseRoomBinding("انتهت صلاحية الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
           return
         }
         setError(toErrorMessage(streamError))
       },
       onState: (envelope) => {
         syncServerClock(envelope.ts)
+        if (isTerminalRoomState(envelope.payload.room.state)) {
+          setError(null)
+          releaseRoomBinding("تم إغلاق الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
+          return
+        }
         setRoom(envelope.payload.room)
         setError(null)
       },
@@ -431,7 +450,7 @@ export default function HostStagePage() {
       streamConnectedRef.current = false
       unsubscribe()
     }
-  }, [hostToken, isPageVisible, roomId, syncServerClock])
+  }, [hostToken, isPageVisible, releaseRoomBinding, roomId, syncServerClock])
 
   useEffect(() => {
     if (!hostToken || !roomId) {
@@ -636,12 +655,16 @@ export default function HostStagePage() {
 
   const handleEndSession = useCallback(async () => {
     try {
-      await runAction("host.endSession")
+      const nextRoom = await runAction("host.endSession")
+      if (isTerminalRoomState(nextRoom.state)) {
+        releaseRoomBinding("تم إنهاء الجلسة بنجاح. جارٍ تجهيز غرفة جديدة.")
+        return
+      }
       setNotice("تم إنهاء الجلسة بنجاح.")
     } catch (requestError) {
       setError(toErrorMessage(requestError))
     }
-  }, [runAction])
+  }, [releaseRoomBinding, runAction])
 
   const handleLogout = () => {
     clearHostSession()
