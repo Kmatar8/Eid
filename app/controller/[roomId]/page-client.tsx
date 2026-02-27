@@ -10,7 +10,9 @@ import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction 
 import { clearPlayerSession, getPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
 
-const POLL_MS = 1500
+const CONTROLLER_POLL_IDLE_MS = 1500
+const CONTROLLER_POLL_BOARD_MS = 850
+const CONTROLLER_POLL_ACTIVE_MS = 280
 const HEARTBEAT_MS = 10000
 const CLOCK_TICK_MS = 300
 
@@ -98,6 +100,31 @@ function isDocumentVisible() {
   return document.visibilityState === "visible"
 }
 
+function resolveControllerPollMs(room: RoomSnapshot | null) {
+  if (!room) {
+    return CONTROLLER_POLL_IDLE_MS
+  }
+
+  if (room.state !== "game_live" || room.trivia.status !== "in_progress") {
+    return CONTROLLER_POLL_IDLE_MS
+  }
+
+  if (room.trivia.phase === "board_turn") {
+    return CONTROLLER_POLL_BOARD_MS
+  }
+
+  if (
+    room.trivia.phase === "countdown" ||
+    room.trivia.phase === "buzzer_open" ||
+    room.trivia.phase === "answer_active" ||
+    room.trivia.phase === "answer_reveal"
+  ) {
+    return CONTROLLER_POLL_ACTIVE_MS
+  }
+
+  return CONTROLLER_POLL_IDLE_MS
+}
+
 export default function ControllerClientPage({ roomId }: ControllerClientPageProps) {
   const [session, setSession] = useState<PlayerSession | null>(() => getPlayerSession(roomId))
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
@@ -109,6 +136,12 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
+  const serverClockOffsetRef = useRef(0)
+
+  const syncServerClock = useCallback((serverTs: number) => {
+    const measuredOffset = serverTs - Date.now()
+    serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
+  }, [])
 
   useEffect(() => {
     const qId = room?.trivia?.selectedClue?.questionId
@@ -162,6 +195,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
     try {
       const response = await getRoomState(roomId, session.token)
+      syncServerClock(response.ts)
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
@@ -169,11 +203,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [roomId, session])
+  }, [roomId, session, syncServerClock])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setNowTs(Date.now())
+      setNowTs(Date.now() + serverClockOffsetRef.current)
     }, CLOCK_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
@@ -192,27 +226,59 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
   }, [hydrateState, session])
 
+  const controllerPollMs = resolveControllerPollMs(room)
+
   useEffect(() => {
     if (!session) {
       return
     }
 
-    const bootstrap = window.setTimeout(() => {
-      if (!busy && isDocumentVisible()) {
-        void refreshState()
-      }
-    }, 0)
-    const timer = window.setInterval(() => {
-      if (!busy && isDocumentVisible()) {
-        void refreshState()
-      }
-    }, POLL_MS)
+    let cancelled = false
+    let timer: number | null = null
+
+    const schedule = (delayMs: number) => {
+      timer = window.setTimeout(async () => {
+        if (cancelled) {
+          return
+        }
+
+        if (!busy && isDocumentVisible()) {
+          await refreshState()
+        }
+
+        if (!cancelled) {
+          schedule(controllerPollMs)
+        }
+      }, delayMs)
+    }
+
+    schedule(0)
 
     return () => {
-      window.clearTimeout(bootstrap)
-      window.clearInterval(timer)
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
     }
-  }, [busy, refreshState, session])
+  }, [busy, controllerPollMs, refreshState, session])
+
+  useEffect(() => {
+    if (!session) {
+      return
+    }
+
+    const handleVisibility = () => {
+      if (!isDocumentVisible()) {
+        return
+      }
+      void refreshState()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [refreshState, session])
 
   useEffect(() => {
     if (!session) {
@@ -224,12 +290,18 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         return
       }
       void sendAction(roomId, session.token, "player.heartbeat")
+        .then((ack) => {
+          syncServerClock(ack.ts)
+        })
+        .catch(() => {
+          // Ignore transient heartbeat failures.
+        })
     }, HEARTBEAT_MS)
 
     return () => {
       window.clearInterval(timer)
     }
-  }, [roomId, session])
+  }, [roomId, session, syncServerClock])
 
   const selectedQuestionId = room?.trivia.selectedClue?.questionId ?? null
   useEffect(() => {
@@ -346,6 +418,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     setNotice("تم إرسال إشارة البازر...")
     try {
       const ack = await sendAction(roomId, session.token, "player.input", { intent: "buzz" })
+      syncServerClock(ack.ts)
       setRoom(ack.payload.room)
       setNotice("تم تسجيل ضغطتك.")
     } catch (requestError) {
@@ -377,6 +450,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         ack = await sendAction(roomId, session.token, "player.submitAnswer", { option }, submitRequestId)
       }
 
+      syncServerClock(ack.ts)
       setRoom(ack.payload.room)
       setNotice(`Answer submitted: ${option}`)
     } catch (requestError) {

@@ -22,7 +22,9 @@ import {
 import type { ClientActionType } from "@/lib/server/protocol-v1"
 import type { RoomSnapshot } from "@/lib/server/types"
 
-const POLL_MS = 1700
+const HOST_POLL_IDLE_MS = 1700
+const HOST_POLL_BOARD_MS = 850
+const HOST_POLL_ACTIVE_MS = 260
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
 
@@ -115,6 +117,31 @@ function isDocumentVisible() {
   return document.visibilityState === "visible"
 }
 
+function resolveHostPollMs(room: RoomSnapshot | null) {
+  if (!room) {
+    return HOST_POLL_IDLE_MS
+  }
+
+  if (room.state !== "game_live" || room.trivia.status !== "in_progress") {
+    return HOST_POLL_IDLE_MS
+  }
+
+  if (room.trivia.phase === "board_turn") {
+    return HOST_POLL_BOARD_MS
+  }
+
+  if (
+    room.trivia.phase === "countdown" ||
+    room.trivia.phase === "buzzer_open" ||
+    room.trivia.phase === "answer_active" ||
+    room.trivia.phase === "answer_reveal"
+  ) {
+    return HOST_POLL_ACTIVE_MS
+  }
+
+  return HOST_POLL_IDLE_MS
+}
+
 export default function HostStagePage() {
   const router = useRouter()
 
@@ -134,6 +161,12 @@ export default function HostStagePage() {
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
+  const serverClockOffsetRef = useRef(0)
+
+  const syncServerClock = useCallback((serverTs: number) => {
+    const measuredOffset = serverTs - Date.now()
+    serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
+  }, [])
 
   useEffect(() => {
     if (!hostToken) {
@@ -143,7 +176,7 @@ export default function HostStagePage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setNowTs(Date.now())
+      setNowTs(Date.now() + serverClockOffsetRef.current)
     }, CLOCK_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
@@ -217,6 +250,8 @@ export default function HostStagePage() {
     return "lobby"
   }, [room])
 
+  const hostPollMs = resolveHostPollMs(room)
+
   const assignmentByPlayer = useMemo(
     () => new Map((room?.teamAssignments ?? []).map((entry) => [entry.playerId, entry.teamId])),
     [room?.teamAssignments]
@@ -264,6 +299,7 @@ export default function HostStagePage() {
 
     try {
       const response = await getRoomState(roomId, hostToken)
+      syncServerClock(response.ts)
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
@@ -281,7 +317,7 @@ export default function HostStagePage() {
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [hostToken, roomId])
+  }, [hostToken, roomId, syncServerClock])
 
   const bootstrapRoom = useCallback(async () => {
     if (!hostToken || roomId || isBootstrappingRoom) {
@@ -334,20 +370,50 @@ export default function HostStagePage() {
       return
     }
 
-    const bootstrap = window.setTimeout(() => {
-      if (isDocumentVisible()) {
-        void refreshState()
-      }
-    }, 0)
-    const timer = window.setInterval(() => {
-      if (isDocumentVisible()) {
-        void refreshState()
-      }
-    }, POLL_MS)
+    let cancelled = false
+    let timer: number | null = null
+
+    const schedule = (delayMs: number) => {
+      timer = window.setTimeout(async () => {
+        if (cancelled) {
+          return
+        }
+
+        if (isDocumentVisible()) {
+          await refreshState()
+        }
+
+        if (!cancelled) {
+          schedule(hostPollMs)
+        }
+      }, delayMs)
+    }
+
+    schedule(0)
 
     return () => {
-      window.clearTimeout(bootstrap)
-      window.clearInterval(timer)
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [hostPollMs, hostToken, refreshState, roomId])
+
+  useEffect(() => {
+    if (!hostToken || !roomId) {
+      return
+    }
+
+    const handleVisibility = () => {
+      if (!isDocumentVisible()) {
+        return
+      }
+      void refreshState()
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
     }
   }, [hostToken, refreshState, roomId])
 
@@ -360,7 +426,11 @@ export default function HostStagePage() {
       if (!isDocumentVisible()) {
         return
       }
-      void sendAction(roomId, hostToken, "host.heartbeat").catch(() => {
+      void sendAction(roomId, hostToken, "host.heartbeat")
+        .then((ack) => {
+          syncServerClock(ack.ts)
+        })
+        .catch(() => {
         // Ignore transient heartbeat failures; polling path handles visible errors.
       })
     }, HOST_HEARTBEAT_MS)
@@ -368,7 +438,7 @@ export default function HostStagePage() {
     return () => {
       window.clearInterval(timer)
     }
-  }, [hostToken, roomId])
+  }, [hostToken, roomId, syncServerClock])
 
   const runAction = useCallback(
     async (type: ClientActionType, payload?: Record<string, unknown>) => {
@@ -382,13 +452,14 @@ export default function HostStagePage() {
 
       try {
         const ack = await sendAction(roomId, hostToken, type, payload)
+        syncServerClock(ack.ts)
         setRoom(ack.payload.room)
         return ack.payload.room
       } finally {
         setBusyAction(null)
       }
     },
-    [hostToken, roomId]
+    [hostToken, roomId, syncServerClock]
   )
 
   const assignPlayer = useCallback(
