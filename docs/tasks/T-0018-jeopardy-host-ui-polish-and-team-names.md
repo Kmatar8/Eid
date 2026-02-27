@@ -19,6 +19,7 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 8. Convert host success notices to auto-dismiss bottom-right toast (~3 seconds).
 9. Place host action rail in bottom-left corner.
 10. Keep Jeopardy board centered in TV viewport without vertical page scrolling.
+11. Render host room actions as icon-only controls positioned outside host shell with hover labels.
 
 ### Out
 1. Trivia rules/timer/scoring logic changes.
@@ -49,7 +50,8 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 5. Success notices auto-dismiss in bottom-right toast (no persistent banner).
 6. Action rail is fixed at bottom-left corner.
 7. Trivia board stays centered in viewport without page down-scrolling.
-8. Lint/build pass.
+8. Host action controls are icon-only and show hover labels (`Close Room`, `Sign Out`).
+9. Lint/build pass.
 
 ## Validation Checklist
 - [x] Lint pass.
@@ -59,6 +61,7 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 - [ ] Manual: left rail buttons remain usable in lobby/trivia/celebration states.
 - [ ] Manual: action rail renders bottom-left.
 - [ ] Manual: trivia board fits TV viewport with no down-scroll.
+- [ ] Manual: icon controls stay outside shell and show hover label on pointer hover.
 
 ## Validation Evidence
 1. `npm run lint` passed with warnings only (no errors).
@@ -68,6 +71,7 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 5. Success `notice` messages now render as bottom-right transient toast and auto-dismiss after ~3.2 seconds.
 6. Host action rail repositioned to fixed bottom-left corner.
 7. Trivia stage layout now uses viewport-fit structure (`h-[100dvh]`, centered board grid) to prevent vertical down-scroll on TV host screen.
+8. Host action controls now render as icon-only buttons outside shell bounds with hover labels (`Close Room`, `Sign Out`).
 
 ## Rollback Plan
 1. Revert host layout changes in `app/host/page.tsx`.

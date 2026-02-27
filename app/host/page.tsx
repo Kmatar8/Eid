@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { X } from "lucide-react"
+import { LogOut, Power, X } from "lucide-react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
@@ -1435,21 +1435,39 @@ export default function HostStagePage() {
         ) : null}
       </main>
 
-      <div className="fixed bottom-4 left-4 z-30">
-        <div className="party-surface flex flex-col gap-2 rounded-2xl p-2.5">
+      <div className="fixed bottom-4 left-[max(0.375rem,calc((100vw-1820px)/2-3.25rem))] z-30">
+        <div className="flex flex-col gap-2">
           {room ? (
-            <Button
-              type="button"
-              variant="destructive"
-              className="h-11 rounded-xl bg-red-500/20 text-red-100 hover:bg-red-500/40"
-              onClick={() => void handleEndSession()}
-            >
-              إنهاء الفعالية
-            </Button>
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={() => void handleEndSession()}
+                aria-label="Close Room"
+                title="Close Room"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95"
+              >
+                <Power className="size-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/20 bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                Close Room
+              </span>
+            </div>
           ) : null}
-          <Button type="button" variant="destructive" className="h-11 rounded-xl" onClick={handleLogout}>
-            تسجيل خروج
-          </Button>
+
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={handleLogout}
+              aria-label="Sign Out"
+              title="Sign Out"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
+            >
+              <LogOut className="size-5" />
+            </button>
+            <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/20 bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+              Sign Out
+            </span>
+          </div>
         </div>
       </div>
 
