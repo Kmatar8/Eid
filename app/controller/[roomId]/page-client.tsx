@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction } from "@/lib/client/live-api"
+import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import { clearPlayerSession, getPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
 
@@ -65,6 +66,22 @@ function shouldRetrySubmit(error: unknown) {
   }
 
   return error.code === "EMPTY_RESPONSE" || error.code === "UNKNOWN_ERROR"
+}
+
+function isFatalControllerSessionError(error: unknown) {
+  if (!(error instanceof LiveApiError)) {
+    return false
+  }
+
+  return (
+    error.status === 401 ||
+    error.status === 403 ||
+    error.status === 404 ||
+    error.code === "UNAUTHORIZED" ||
+    error.code === "FORBIDDEN" ||
+    error.code === "ROOM_NOT_FOUND" ||
+    error.code === "PLAYER_NOT_FOUND"
+  )
 }
 
 function getTeamTone(teamId: string | null | undefined): TeamTone {
@@ -128,6 +145,7 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
 export default function ControllerClientPage({ roomId }: ControllerClientPageProps) {
   const [session, setSession] = useState<PlayerSession | null>(() => getPlayerSession(roomId))
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
+  const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
   const [busy, setBusy] = useState(false)
   const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState(() => Date.now())
@@ -137,6 +155,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
+  const streamConnectedRef = useRef(false)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -213,6 +232,17 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }, [])
 
   useEffect(() => {
+    const handleVisibility = () => {
+      setIsPageVisible(isDocumentVisible())
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!session) {
       return
     }
@@ -229,6 +259,45 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const controllerPollMs = resolveControllerPollMs(room)
 
   useEffect(() => {
+    if (!session || !isPageVisible) {
+      streamConnectedRef.current = false
+      return
+    }
+
+    const unsubscribe = subscribeRoomStateStream({
+      roomId,
+      token: session.token,
+      onOpen: () => {
+        streamConnectedRef.current = true
+      },
+      onClose: () => {
+        streamConnectedRef.current = false
+      },
+      onError: (streamError) => {
+        streamConnectedRef.current = false
+        if (isFatalControllerSessionError(streamError)) {
+          clearPlayerSession(roomId)
+          setSession(null)
+          setRoom(null)
+          setError(toErrorMessage(streamError))
+          return
+        }
+        setError(toErrorMessage(streamError))
+      },
+      onState: (envelope) => {
+        syncServerClock(envelope.ts)
+        setRoom(envelope.payload.room)
+        setError(null)
+      },
+    })
+
+    return () => {
+      streamConnectedRef.current = false
+      unsubscribe()
+    }
+  }, [isPageVisible, roomId, session, syncServerClock])
+
+  useEffect(() => {
     if (!session) {
       return
     }
@@ -242,7 +311,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           return
         }
 
-        if (!busy && isDocumentVisible()) {
+        if (!busy && isPageVisible && !streamConnectedRef.current) {
           await refreshState()
         }
 
@@ -260,25 +329,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         window.clearTimeout(timer)
       }
     }
-  }, [busy, controllerPollMs, refreshState, session])
-
-  useEffect(() => {
-    if (!session) {
-      return
-    }
-
-    const handleVisibility = () => {
-      if (!isDocumentVisible()) {
-        return
-      }
-      void refreshState()
-    }
-
-    document.addEventListener("visibilitychange", handleVisibility)
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility)
-    }
-  }, [refreshState, session])
+  }, [busy, controllerPollMs, isPageVisible, refreshState, session])
 
   useEffect(() => {
     if (!session) {
@@ -286,7 +337,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     const timer = window.setInterval(() => {
-      if (!isDocumentVisible()) {
+      if (!isPageVisible) {
         return
       }
       void sendAction(roomId, session.token, "player.heartbeat")
@@ -301,7 +352,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return () => {
       window.clearInterval(timer)
     }
-  }, [roomId, session, syncServerClock])
+  }, [isPageVisible, roomId, session, syncServerClock])
 
   const selectedQuestionId = room?.trivia.selectedClue?.questionId ?? null
   useEffect(() => {

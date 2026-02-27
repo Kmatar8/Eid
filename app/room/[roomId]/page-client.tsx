@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import RoomStatePanel from "@/components/live/room-state-panel"
 import { Button } from "@/components/ui/button"
 import { LiveApiError, getRoomState } from "@/lib/client/live-api"
+import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import { getHostToken } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
 
@@ -38,8 +39,10 @@ function toErrorMessage(error: unknown) {
 export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageProps) {
   const [hostToken] = useState<string | null>(() => getHostToken())
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
+  const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
   const [error, setError] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
+  const streamConnectedRef = useRef(false)
 
   const refreshState = useCallback(async () => {
     if (!hostToken) {
@@ -63,26 +66,80 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
   }, [hostToken, roomId])
 
   useEffect(() => {
+    const handleVisibility = () => {
+      setIsPageVisible(isDocumentVisible())
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!hostToken || !isPageVisible) {
+      streamConnectedRef.current = false
+      return
+    }
+
+    const unsubscribe = subscribeRoomStateStream({
+      roomId,
+      token: hostToken,
+      onOpen: () => {
+        streamConnectedRef.current = true
+      },
+      onClose: () => {
+        streamConnectedRef.current = false
+      },
+      onError: (streamError) => {
+        streamConnectedRef.current = false
+        setError(toErrorMessage(streamError))
+      },
+      onState: (envelope) => {
+        setRoom(envelope.payload.room)
+        setError(null)
+      },
+    })
+
+    return () => {
+      streamConnectedRef.current = false
+      unsubscribe()
+    }
+  }, [hostToken, isPageVisible, roomId])
+
+  useEffect(() => {
     if (!hostToken) {
       return
     }
 
-    const bootstrap = window.setTimeout(() => {
-      if (isDocumentVisible()) {
-        void refreshState()
-      }
-    }, 0)
-    const timer = window.setInterval(() => {
-      if (isDocumentVisible()) {
-        void refreshState()
-      }
-    }, POLL_MS)
+    let cancelled = false
+    let timer: number | null = null
+
+    const schedule = (delayMs: number) => {
+      timer = window.setTimeout(async () => {
+        if (cancelled) {
+          return
+        }
+
+        if (isPageVisible && !streamConnectedRef.current) {
+          await refreshState()
+        }
+
+        if (!cancelled) {
+          schedule(POLL_MS)
+        }
+      }, delayMs)
+    }
+
+    schedule(0)
 
     return () => {
-      window.clearTimeout(bootstrap)
-      window.clearInterval(timer)
+      cancelled = true
+      if (timer !== null) {
+        window.clearTimeout(timer)
+      }
     }
-  }, [hostToken, refreshState])
+  }, [hostToken, isPageVisible, refreshState])
 
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">

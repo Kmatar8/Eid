@@ -4,7 +4,7 @@ import { exportStoreSnapshot, getStoreRevision, importStoreSnapshot } from "@/li
 
 const GLOBAL_STORE_DO_NAME = "hroof-global-store-v1"
 const STORE_STATE_URL = "https://hroof-store/state"
-const HYDRATE_TTL_MS = 1200
+const HYDRATE_TTL_MS = 350
 
 type DurableObjectNamespaceLike = {
   idFromName: (name: string) => unknown

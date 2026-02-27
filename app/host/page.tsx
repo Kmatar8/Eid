@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
+import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import {
   clearHostRoomId,
   clearHostSession,
@@ -76,6 +77,22 @@ function isInvalidTransitionAt(error: unknown, allowedStates: string[]) {
 
   const state = typeof error.details?.state === "string" ? error.details.state : null
   return state ? allowedStates.includes(state) : false
+}
+
+function isFatalHostSessionError(error: unknown) {
+  if (!(error instanceof LiveApiError)) {
+    return false
+  }
+
+  return (
+    error.status === 401 ||
+    error.status === 403 ||
+    error.status === 404 ||
+    error.code === "UNAUTHORIZED" ||
+    error.code === "FORBIDDEN" ||
+    error.code === "ROOM_NOT_FOUND" ||
+    error.code === "HOST_ROOM_MISMATCH"
+  )
 }
 
 function getTeamTone(teamId: string | null | undefined): TeamTone {
@@ -149,6 +166,7 @@ export default function HostStagePage() {
   const [hostUsername] = useState(() => getHostUsername() ?? "Host")
   const [roomId, setRoomId] = useState<string | null>(() => getHostRoomId())
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
+  const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [isBootstrappingRoom, setIsBootstrappingRoom] = useState(false)
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null)
@@ -162,6 +180,7 @@ export default function HostStagePage() {
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
+  const streamConnectedRef = useRef(false)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -179,6 +198,17 @@ export default function HostStagePage() {
       setNowTs(Date.now() + serverClockOffsetRef.current)
     }, CLOCK_TICK_MS)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      setIsPageVisible(isDocumentVisible())
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
   }, [])
 
   useEffect(() => {
@@ -366,6 +396,44 @@ export default function HostStagePage() {
   }, [bootstrapRoom, hostToken, refreshState, roomId])
 
   useEffect(() => {
+    if (!hostToken || !roomId || !isPageVisible) {
+      streamConnectedRef.current = false
+      return
+    }
+
+    const unsubscribe = subscribeRoomStateStream({
+      roomId,
+      token: hostToken,
+      onOpen: () => {
+        streamConnectedRef.current = true
+      },
+      onClose: () => {
+        streamConnectedRef.current = false
+      },
+      onError: (streamError) => {
+        streamConnectedRef.current = false
+        if (isFatalHostSessionError(streamError)) {
+          clearHostRoomId()
+          setRoomId(null)
+          setRoom(null)
+          return
+        }
+        setError(toErrorMessage(streamError))
+      },
+      onState: (envelope) => {
+        syncServerClock(envelope.ts)
+        setRoom(envelope.payload.room)
+        setError(null)
+      },
+    })
+
+    return () => {
+      streamConnectedRef.current = false
+      unsubscribe()
+    }
+  }, [hostToken, isPageVisible, roomId, syncServerClock])
+
+  useEffect(() => {
     if (!hostToken || !roomId) {
       return
     }
@@ -379,7 +447,7 @@ export default function HostStagePage() {
           return
         }
 
-        if (isDocumentVisible()) {
+        if (isPageVisible && !streamConnectedRef.current) {
           await refreshState()
         }
 
@@ -397,25 +465,7 @@ export default function HostStagePage() {
         window.clearTimeout(timer)
       }
     }
-  }, [hostPollMs, hostToken, refreshState, roomId])
-
-  useEffect(() => {
-    if (!hostToken || !roomId) {
-      return
-    }
-
-    const handleVisibility = () => {
-      if (!isDocumentVisible()) {
-        return
-      }
-      void refreshState()
-    }
-
-    document.addEventListener("visibilitychange", handleVisibility)
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility)
-    }
-  }, [hostToken, refreshState, roomId])
+  }, [hostPollMs, hostToken, isPageVisible, refreshState, roomId])
 
   useEffect(() => {
     if (!hostToken || !roomId) {
@@ -423,7 +473,7 @@ export default function HostStagePage() {
     }
 
     const timer = window.setInterval(() => {
-      if (!isDocumentVisible()) {
+      if (!isPageVisible) {
         return
       }
       void sendAction(roomId, hostToken, "host.heartbeat")
@@ -431,14 +481,14 @@ export default function HostStagePage() {
           syncServerClock(ack.ts)
         })
         .catch(() => {
-        // Ignore transient heartbeat failures; polling path handles visible errors.
-      })
+          // Ignore transient heartbeat failures; polling path handles visible errors.
+        })
     }, HOST_HEARTBEAT_MS)
 
     return () => {
       window.clearInterval(timer)
     }
-  }, [hostToken, roomId, syncServerClock])
+  }, [hostToken, isPageVisible, roomId, syncServerClock])
 
   const runAction = useCallback(
     async (type: ClientActionType, payload?: Record<string, unknown>) => {
