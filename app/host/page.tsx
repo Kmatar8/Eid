@@ -939,7 +939,7 @@ export default function HostStagePage() {
                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                    className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border border-white/20 bg-slate-950 p-8 shadow-[0_0_100px_rgba(139,92,246,0.3)] scrollbar-hide"
+                    className="relative w-full max-w-7xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border border-white/20 bg-slate-950 p-6 md:p-12 shadow-[0_0_100px_rgba(139,92,246,0.3)] scrollbar-hide"
                   >
                     {/* Modal Header/Close */}
                     <div className="absolute right-6 top-6 flex gap-3">
@@ -953,49 +953,40 @@ export default function HostStagePage() {
                       </Button>
                     </div>
 
-                    <div className="grid gap-8 lg:grid-cols-[1fr_2fr]">
-                      {/* Left Side: Status & Context */}
-                      <div className="space-y-6">
-                        <article className={`rounded-3xl border p-6 ${currentTone.border} ${currentTone.bg} shadow-lg`}>
-                          <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Live Status</p>
-                          <h2 className="mt-3 text-3xl font-black leading-tight">{liveHeadline}</h2>
-                          <div className="mt-4 space-y-2 text-sm text-slate-300">
-                            <p>الدور: {currentTurnTeam?.name ?? "غير محدد"}</p>
-                            <p>المجيب: {responderPlayer?.displayName ?? "بانتظار البازر..."}</p>
-                          </div>
-                        </article>
-
-                        <div className="flex flex-wrap gap-3">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="flex-1 rounded-xl h-14 font-bold"
-                            disabled={Boolean(busyAction) || !canSelectAnotherResponder}
-                            onClick={() => void handleSelectAnotherResponder()}
-                          >
-                            تغيير اللاعب
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            className="flex-1 rounded-xl h-14 font-bold"
-                            onClick={() => void handleEndSession()}
-                          >
-                            إنهاء الجلسة
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Right Side: Question Display */}
+                    <div className="w-full">
                       <div className="space-y-6">
                         {selectedClue ? (
                           <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-inner">
-                            <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
+                            <div className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
                               <div>
-                                <p className="text-xs uppercase tracking-[0.2em] text-violet-300">{selectedClue.categoryName}</p>
-                                <h3 className="mt-1 text-2xl font-bold">{selectedClue.points} نقطة</h3>
+                                <p className="text-sm uppercase tracking-[0.25em] text-violet-300">{selectedClue.categoryName}</p>
+                                <h3 className="mt-2 text-3xl font-black">{selectedClue.points} نقطة</h3>
                               </div>
-                              <p className="text-sm opacity-60">السؤال رقم {trivia?.questionIndex} من {trivia?.totalQuestions}</p>
+
+                              <div className="flex flex-wrap items-center gap-4">
+                                {responderPlayer ? (
+                                  <>
+                                    <div className={`flex items-center gap-2 rounded-full border px-6 py-3 shadow-[0_0_20px_inherit] animate-pulse ${currentTone.chip}`}>
+                                      <span className="text-2xl font-black">{responderPlayer.displayName}</span>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      className="rounded-full px-6 py-6 font-bold"
+                                      disabled={Boolean(busyAction) || !canSelectAnotherResponder}
+                                      onClick={() => void handleSelectAnotherResponder()}
+                                    >
+                                      تغيير اللاعب
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-3">
+                                    <span className="text-xl font-bold text-slate-300">
+                                      {trivia?.phase === "board_turn" ? `دور فريق: ${currentTurnTeam?.name ?? "..."}` : "بانتظار البازر..."}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {isCountdownPhase ? (
@@ -1014,20 +1005,20 @@ export default function HostStagePage() {
 
                             {isQuestionRevealed ? (
                               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-                                <p className="text-4xl font-black leading-tight text-white mb-8">
+                                <p className="text-5xl lg:text-6xl font-black leading-tight text-white mb-10 text-center">
                                   {selectedClue.prompt}
                                 </p>
 
-                                <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="grid gap-6 sm:grid-cols-2">
                                   {selectedClue.options.map((option, index) => (
                                     <div
                                       key={`${selectedClue.questionId}-${index}`}
-                                      className="group relative rounded-2xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-colors"
+                                      className="group relative flex items-center rounded-3xl border border-white/10 bg-white/5 p-8 hover:bg-white/10 transition-colors"
                                     >
-                                      <span className="absolute left-6 top-6 text-2xl font-black text-violet-500 opacity-50">
+                                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-violet-500 opacity-50">
                                         {["A", "B", "C", "D"][index]}
                                       </span>
-                                      <p className="pr-10 text-xl font-bold">{option}</p>
+                                      <p className="pr-8 text-3xl font-bold leading-tight">{option}</p>
                                     </div>
                                   ))}
                                 </div>
@@ -1062,10 +1053,10 @@ export default function HostStagePage() {
                           </motion.div>
                         )}
 
-                        <div className="pt-4">
+                        <div className="pt-6">
                           <Button
                             type="button"
-                            className="h-16 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xl font-bold shadow-xl hover:scale-[1.01] transition-all"
+                            className="h-20 w-full rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-2xl font-bold shadow-xl hover:scale-[1.01] transition-all"
                             disabled={
                               Boolean(busyAction) ||
                               trivia?.status !== "in_progress" ||
@@ -1144,6 +1135,11 @@ export default function HostStagePage() {
             <Button type="button" variant="outline" onClick={() => void refreshState()} disabled={!roomId}>
               تحديث
             </Button>
+            {room ? (
+              <Button type="button" variant="destructive" className="bg-red-500/20 text-red-100 hover:bg-red-500/40" onClick={() => void handleEndSession()}>
+                إنهاء الفعالية
+              </Button>
+            ) : null}
             <Button type="button" variant="destructive" onClick={handleLogout}>
               تسجيل خروج
             </Button>
