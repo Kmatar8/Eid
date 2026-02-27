@@ -6,11 +6,17 @@ import { Check, X } from "lucide-react"
 
 type FeedbackType = "correct" | "wrong" | null
 
+function formatScoreDelta(score: number) {
+  return score >= 0 ? `+${score}` : `${score}`
+}
+
 export function FeedbackOverlay({
   currentStatus,
+  scoreDelta,
   onComplete,
 }: {
   currentStatus: FeedbackType
+  scoreDelta?: number | null
   onComplete?: () => void
 }) {
   useEffect(() => {
@@ -50,27 +56,40 @@ export function FeedbackOverlay({
               rotate: [-45, 10, 0],
             }}
             transition={{ type: "spring", stiffness: 200, damping: 15 }}
-            className="relative z-10 flex items-center justify-center"
+            className="relative z-10 flex flex-col items-center justify-center gap-4"
           >
-            <div className="absolute -inset-10 animate-pulse rounded-full bg-emerald-500/20 blur-2xl" />
-            <div className="rounded-full border-4 border-emerald-100 bg-gradient-to-br from-emerald-400 to-green-600 p-8 shadow-[0_0_50px_rgba(16,185,129,0.5)]">
-              <Check className="h-20 w-20 text-white" strokeWidth={4} />
+            <div className="relative flex items-center justify-center">
+              <div className="absolute -inset-10 animate-pulse rounded-full bg-emerald-500/20 blur-2xl" />
+              <div className="rounded-full border-4 border-emerald-100 bg-gradient-to-br from-emerald-400 to-green-600 p-8 shadow-[0_0_50px_rgba(16,185,129,0.5)]">
+                <Check className="h-20 w-20 text-white" strokeWidth={4} />
+              </div>
+
+              {[...Array(8)].map((_, i) => (
+                <motion.div
+                  key={`particle-${i}`}
+                  className="absolute h-4 w-4 rounded-full bg-emerald-400"
+                  initial={{ x: 0, y: 0, scale: 0 }}
+                  animate={{
+                    x: Math.cos((i * 45 * Math.PI) / 180) * 150,
+                    y: Math.sin((i * 45 * Math.PI) / 180) * 150,
+                    scale: [0, 1, 0],
+                    opacity: [1, 0],
+                  }}
+                  transition={{ duration: 1, ease: "easeOut" }}
+                />
+              ))}
             </div>
 
-            {[...Array(8)].map((_, i) => (
-              <motion.div
-                key={`particle-${i}`}
-                className="absolute h-4 w-4 rounded-full bg-emerald-400"
-                initial={{ x: 0, y: 0, scale: 0 }}
-                animate={{
-                  x: Math.cos((i * 45 * Math.PI) / 180) * 150,
-                  y: Math.sin((i * 45 * Math.PI) / 180) * 150,
-                  scale: [0, 1, 0],
-                  opacity: [1, 0],
-                }}
-                transition={{ duration: 1, ease: "easeOut" }}
-              />
-            ))}
+            {typeof scoreDelta === "number" ? (
+              <motion.p
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.32, ease: "easeOut" }}
+                className="text-8xl font-black leading-none text-[#00ff66] drop-shadow-[0_0_26px_rgba(16,255,130,0.85)]"
+              >
+                {formatScoreDelta(scoreDelta)}
+              </motion.p>
+            ) : null}
           </motion.div>
         </motion.div>
       )}
@@ -98,12 +117,25 @@ export function FeedbackOverlay({
               x: [0, -15, 15, -15, 15, 0],
             }}
             transition={{ duration: 0.5, type: "spring" }}
-            className="relative z-10 flex items-center justify-center"
+            className="relative z-10 flex flex-col items-center justify-center gap-4"
           >
-            <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
-            <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
-              <X className="h-20 w-20 text-white" strokeWidth={4} />
+            <div className="relative flex items-center justify-center">
+              <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
+              <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                <X className="h-20 w-20 text-white" strokeWidth={4} />
+              </div>
             </div>
+
+            {typeof scoreDelta === "number" ? (
+              <motion.p
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.32, ease: "easeOut" }}
+                className="text-8xl font-black leading-none text-[#ff1f3d] drop-shadow-[0_0_26px_rgba(255,31,61,0.85)]"
+              >
+                {formatScoreDelta(scoreDelta)}
+              </motion.p>
+            ) : null}
           </motion.div>
         </motion.div>
       )}

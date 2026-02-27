@@ -160,6 +160,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
+  const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
@@ -192,6 +193,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
         setFeedbackState(wasCorrect ? "correct" : "wrong")
+        setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
         setProcessedFeedbackQuestionId(qId)
       }
     }
@@ -199,6 +201,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     if (room?.trivia?.phase === "board_turn") {
       setProcessedFeedbackQuestionId(null)
       setFeedbackState(null)
+      setFeedbackScoreDelta(null)
     }
   }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
 
@@ -591,7 +594,14 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       <div className="party-stage-grid" />
       <div className="pointer-events-none fixed -left-24 top-16 h-64 w-64 rounded-full bg-pink-400/30 blur-3xl" />
       <div className="pointer-events-none fixed -right-20 top-56 h-72 w-72 rounded-full bg-cyan-400/25 blur-3xl" />
-      <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
+      <FeedbackOverlay
+        currentStatus={feedbackState}
+        scoreDelta={feedbackState ? feedbackScoreDelta : null}
+        onComplete={() => {
+          setFeedbackState(null)
+          setFeedbackScoreDelta(null)
+        }}
+      />
 
       <main className="relative z-10 mx-auto min-h-screen w-full max-w-2xl px-4 py-7 sm:py-9">
         <div className="mb-4 flex items-center justify-between">

@@ -180,6 +180,7 @@ export default function HostStagePage() {
   const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
   const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
+  const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
@@ -257,6 +258,7 @@ export default function HostStagePage() {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
         setFeedbackState(wasCorrect ? "correct" : "wrong")
+        setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
         setProcessedFeedbackQuestionId(qId)
       }
     }
@@ -264,6 +266,7 @@ export default function HostStagePage() {
     if (room?.trivia?.phase === "board_turn") {
       setProcessedFeedbackQuestionId(null)
       setFeedbackState(null)
+      setFeedbackScoreDelta(null)
     }
   }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
 
@@ -877,7 +880,14 @@ export default function HostStagePage() {
 
   return (
     <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
-      <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
+      <FeedbackOverlay
+        currentStatus={feedbackState}
+        scoreDelta={feedbackState ? feedbackScoreDelta : null}
+        onComplete={() => {
+          setFeedbackState(null)
+          setFeedbackScoreDelta(null)
+        }}
+      />
       <FireworksBackground
         population={fireworksBasePopulation}
         particleSpeed={4}
@@ -1423,26 +1433,6 @@ export default function HostStagePage() {
                                   )})}
                                 </div>
 
-                                {hasScoredReveal ? (
-                                  <motion.div
-                                    initial={{ opacity: 0, y: 12 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="mt-6 flex flex-col items-center justify-center text-center"
-                                  >
-                                    <motion.p
-                                      initial={{ scale: 0.9, opacity: 0 }}
-                                      animate={{ scale: 1, opacity: 1 }}
-                                      transition={{ duration: 0.35, ease: "easeOut" }}
-                                      className={`text-7xl font-black leading-none ${
-                                        (revealResult?.awardedPoints ?? 0) >= 0
-                                          ? "text-emerald-300 drop-shadow-[0_0_26px_rgba(16,185,129,0.58)]"
-                                          : "text-rose-300 drop-shadow-[0_0_26px_rgba(244,63,94,0.58)]"
-                                      }`}
-                                    >
-                                      {scoreBadge(revealResult?.awardedPoints ?? 0)}
-                                    </motion.p>
-                                  </motion.div>
-                                ) : null}
                               </motion.div>
                             ) : null}
                           </div>
