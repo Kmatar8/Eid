@@ -82,7 +82,7 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
       </header>
 
       {!hostToken ? (
-        <section className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+        <section className="rounded-xl border border-violet-400/30 bg-violet-500/10 p-4 text-sm text-violet-100">
           Host token is not available in this browser. Login first at <Link className="underline" href="/host">/host</Link>.
         </section>
       ) : null}
@@ -95,7 +95,7 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
             {room.teams.map((team) => (
               <article key={team.teamId} className="rounded-2xl border border-white/20 bg-black/30 p-6 text-center">
                 <p className="text-xl text-slate-200">{team.name}</p>
-                <p className="mt-2 text-7xl font-bold text-amber-300">{team.score}</p>
+                <p className="mt-2 text-7xl font-bold text-violet-300">{team.score}</p>
                 <p className="mt-2 text-sm text-slate-300">Players: {team.playerCount}</p>
               </article>
             ))}

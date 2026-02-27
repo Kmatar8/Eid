@@ -26,9 +26,9 @@ type TeamTone = {
 
 const TEAM_TONES: Record<string, TeamTone> = {
   team_a: {
-    border: "border-amber-300/50",
-    text: "text-amber-100",
-    bg: "bg-amber-500/10",
+    border: "border-pink-300/50",
+    text: "text-pink-100",
+    bg: "bg-pink-500/10",
   },
   team_b: {
     border: "border-cyan-300/50",
@@ -363,7 +363,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)] z-[-2]" />
-      <div className="pointer-events-none fixed inset-0 bg-[size:56px_56px] z-[-1] opacity-60" style={{ backgroundImage: 'linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)' }} />
+      <div className="pointer-events-none fixed inset-0 bg-[size:56px_56px] z-[-1] opacity-60" style={{ backgroundImage: 'linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)' }} />
       <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
 
       <main className="relative z-10 mx-auto min-h-screen w-full max-w-xl px-4 py-7">

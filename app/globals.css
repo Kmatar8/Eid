@@ -70,9 +70,10 @@
   --border: #e2e8f0;
   --input: #e2e8f0;
   --ring: #f59e0b;
-  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-bg: rgba(255, 255, 255, 0.85);
   --glass-border: rgba(255, 255, 255, 0.6);
   --festive-glow: rgba(245, 158, 11, 0.35);
+  --grid-line: rgba(0, 0, 0, 0.08);
 }
 
 .dark {
@@ -94,9 +95,10 @@
   --border: rgba(255, 255, 255, 0.15);
   --input: rgba(255, 255, 255, 0.2);
   --ring: #f59e0b;
-  --glass-bg: rgba(0, 0, 0, 0.35);
+  --glass-bg: rgba(0, 0, 0, 0.75);
   --glass-border: rgba(255, 255, 255, 0.2);
   --festive-glow: rgba(245, 158, 11, 0.15);
+  --grid-line: rgba(255, 255, 255, 0.12);
 }
 
 @layer base {
@@ -111,6 +113,7 @@
 }
 
 @keyframes float-soft {
+
   0%,
   100% {
     transform: translateY(0px);
@@ -122,9 +125,26 @@
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
-  20%, 40%, 60%, 80% { transform: translateX(6px); }
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-6px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(6px);
+  }
 }
 
 @keyframes twinkle {
@@ -167,7 +187,7 @@
   }
 
   .animate-shake {
-    animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+    animation: shake 0.5s cubic-bezier(.36, .07, .19, .97) both;
   }
 
   .scrollbar-hide::-webkit-scrollbar {

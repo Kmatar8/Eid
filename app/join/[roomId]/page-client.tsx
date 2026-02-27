@@ -55,59 +55,64 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-xl px-4 py-8 text-white">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold">Join Room</h1>
-        <p className="mt-1 text-sm text-slate-300">Room: {roomId}</p>
-      </header>
+    <div className="relative min-h-screen overflow-hidden text-foreground">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)] z-[-2]" />
+      <div className="pointer-events-none fixed inset-0 bg-[size:56px_56px] z-[-1] opacity-60" style={{ backgroundImage: 'linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)' }} />
 
-      <section className="rounded-xl border border-white/15 bg-white/5 p-4">
-        <form className="space-y-3" onSubmit={handleJoin}>
-          <label className="block text-sm">
-            Display Name
-            <input
-              className="mt-1 w-full rounded-md border border-white/20 bg-black/30 px-3 py-2"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="2-40 characters"
-              required
-              minLength={2}
-              maxLength={40}
-            />
-          </label>
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-xl px-4 py-8">
+        <header className="mb-6">
+          <h1 className="text-3xl font-bold font-cairo">انضم للغرفة</h1>
+          <p className="mt-1 text-sm text-muted-foreground">ID: {roomId}</p>
+        </header>
 
-          <label className="block text-sm">
-            Avatar Emoji (optional)
-            <input
-              className="mt-1 w-full rounded-md border border-white/20 bg-black/30 px-3 py-2"
-              value={avatarEmoji}
-              onChange={(event) => setAvatarEmoji(event.target.value)}
-              maxLength={8}
-            />
-          </label>
+        <section className="rounded-3xl border border-glass-border bg-glass-bg p-6 backdrop-blur-xl shadow-xl">
+          <form className="space-y-4" onSubmit={handleJoin}>
+            <label className="block text-sm font-medium">
+              الاسم المستعار
+              <input
+                className="mt-1 w-full rounded-xl border border-glass-border bg-background/50 px-3 py-2 focus:ring-2 focus:ring-primary/20 transition-all"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="2-40 characters"
+                required
+                minLength={2}
+                maxLength={40}
+              />
+            </label>
 
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Joining..." : "Join Room"}
-          </Button>
-        </form>
+            <label className="block text-sm font-medium">
+              رمز تعبيري (اختياري)
+              <input
+                className="mt-1 w-full rounded-xl border border-glass-border bg-background/50 px-3 py-2 focus:ring-2 focus:ring-primary/20 transition-all"
+                value={avatarEmoji}
+                onChange={(event) => setAvatarEmoji(event.target.value)}
+                maxLength={8}
+              />
+            </label>
 
-        {hasExistingSession ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-3 w-full"
-            onClick={() => router.push(`/controller/${roomId}`)}
-          >
-            Continue Existing Session
-          </Button>
-        ) : null}
+            <Button type="submit" className="w-full h-12 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-lg" disabled={busy}>
+              {busy ? "جاري الانضمام..." : "انضم الآن"}
+            </Button>
+          </form>
 
-        {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
-      </section>
+          {hasExistingSession ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full h-12 rounded-xl border-glass-border bg-glass-bg/50"
+              onClick={() => router.push(`/controller/${roomId}`)}
+            >
+              متابعة الجلسة الحالية
+            </Button>
+          ) : null}
 
-      <p className="mt-4 text-sm text-slate-300">
-        Host controls are available at <Link className="text-cyan-300 underline" href="/host">/host</Link>.
-      </p>
-    </main>
+          {error ? <p className="mt-4 rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-2 text-sm text-destructive">{error}</p> : null}
+        </section>
+
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          لوحة تحكم المضيف متاحة هنا <Link className="text-primary underline font-bold" href="/host">/host</Link>.
+        </p>
+      </main>
+    </div>
   )
 }

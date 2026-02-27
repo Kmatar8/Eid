@@ -60,7 +60,7 @@ export default function HostLoginPage() {
 
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-8">
         <section className="w-full max-w-md rounded-3xl border border-white/25 bg-black/45 p-6 backdrop-blur-xl sm:p-8">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Host Login</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-violet-100/80">Host Login</p>
           <h1 className="mt-2 text-4xl font-extrabold">ابدأ الفعالية</h1>
           <p className="mt-2 text-sm text-slate-200">
             سجل دخولك كمضيف، ثم اعرض شاشة المضيف على التلفزيون وابدأ استقبال اللاعبين عبر QR.
@@ -90,7 +90,7 @@ export default function HostLoginPage() {
             </label>
             <Button
               type="submit"
-              className="h-11 w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950"
+              className="h-11 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 font-bold text-slate-950"
               disabled={busy}
             >
               {busy ? "جاري تسجيل الدخول..." : "دخول المضيف"}
@@ -101,7 +101,7 @@ export default function HostLoginPage() {
 
           <p className="mt-4 text-center text-sm text-slate-300">
             رجوع إلى{" "}
-            <Link href="/" className="text-amber-200 underline">
+            <Link href="/" className="text-violet-200 underline">
               الصفحة الرئيسية
             </Link>
           </p>

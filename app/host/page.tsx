@@ -34,10 +34,10 @@ type TeamTone = {
 
 const TEAM_TONES: Record<string, TeamTone> = {
   team_a: {
-    border: "border-amber-300/50",
-    text: "text-amber-100",
-    bg: "bg-amber-500/10",
-    chip: "bg-amber-500/20 text-amber-100 border-amber-300/40",
+    border: "border-pink-300/50",
+    text: "text-pink-100",
+    bg: "bg-pink-500/10",
+    chip: "bg-pink-500/20 text-pink-100 border-pink-300/40",
   },
   team_b: {
     border: "border-cyan-300/50",
@@ -556,14 +556,14 @@ export default function HostStagePage() {
       <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-65" />
       <FireworksBackgroundDemo population={2} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[size:56px_56px]" style={{ backgroundImage: 'linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)' }} />
+      <div className="pointer-events-none absolute inset-0 bg-[size:56px_56px]" style={{ backgroundImage: 'linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)' }} />
 
       <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1700px] px-4 pb-28 pt-5 sm:px-8">
         {error ? <p className="mb-3 rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-100">{error}</p> : null}
         {notice ? <p className="mb-3 rounded-xl bg-emerald-500/20 px-4 py-3 text-sm text-emerald-100">{notice}</p> : null}
 
         {!room ? (
-          <section className="rounded-3xl border border-white/20 bg-black/40 p-10 text-center backdrop-blur-xl">
+          <section className="rounded-3xl border border-white/20 bg-glass-bg p-10 text-center backdrop-blur-xl">
             <p className="text-lg text-slate-100">
               {isBootstrappingRoom ? "جارٍ تجهيز الغرفة..." : "في انتظار بيانات الغرفة..."}
             </p>
@@ -572,7 +572,7 @@ export default function HostStagePage() {
 
         {room && stage === "lobby" ? (
           <section className="grid gap-4 xl:grid-cols-[37rem_1fr]">
-            <article className="rounded-3xl border border-white/20 bg-black/40 p-5 backdrop-blur-xl">
+            <article className="rounded-3xl border border-white/20 bg-glass-bg p-5 backdrop-blur-xl">
               <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Join QR</p>
               <h2 className="mt-2 text-3xl font-bold">امسح الرمز للانضمام</h2>
               <p className="mt-2 text-base text-slate-200">
@@ -589,7 +589,7 @@ export default function HostStagePage() {
                 )}
               </div>
 
-              <div className="mt-4 rounded-xl border border-white/15 bg-black/30 p-3 text-sm">
+              <div className="mt-4 rounded-xl border border-white/15 bg-glass-bg p-3 text-sm">
                 <p className="text-slate-300">رابط الانضمام:</p>
                 {joinUrl ? (
                   <a className="break-all text-cyan-200 underline" href={joinUrl} target="_blank" rel="noreferrer">
@@ -602,7 +602,7 @@ export default function HostStagePage() {
 
               <Button
                 type="button"
-                className="mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-lg font-bold text-slate-950"
+                className="mt-5 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction) || room.playerCount === 0}
                 onClick={() => void handleStartSession()}
               >
@@ -610,7 +610,7 @@ export default function HostStagePage() {
               </Button>
             </article>
 
-            <article className="space-y-4 rounded-3xl border border-white/20 bg-black/40 p-5 backdrop-blur-xl">
+            <article className="space-y-4 rounded-3xl border border-white/20 bg-glass-bg p-5 backdrop-blur-xl">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Players</p>
                 <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
@@ -619,7 +619,7 @@ export default function HostStagePage() {
 
               <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {room.players.length === 0 ? (
-                  <p className="col-span-full rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-slate-300">
+                  <p className="col-span-full rounded-xl border border-white/15 bg-glass-bg p-4 text-sm text-slate-300">
                     لا يوجد لاعبين بعد. انتظر الانضمامات عبر QR.
                   </p>
                 ) : null}
@@ -650,7 +650,7 @@ export default function HostStagePage() {
                       <div className="mt-3 flex gap-2">
                         <button
                           type="button"
-                          className="flex-1 rounded-lg border border-amber-300/40 bg-amber-500/15 px-2 py-1 text-xs text-amber-100 hover:bg-amber-500/25"
+                          className="flex-1 rounded-lg border border-pink-300/40 bg-pink-500/15 px-2 py-1 text-xs text-pink-100 hover:bg-pink-500/25"
                           onClick={() => void assignPlayer(player.playerId, "team_a")}
                         >
                           Team A
@@ -714,7 +714,7 @@ export default function HostStagePage() {
                               setDraggingPlayerId(null)
                               setDropTargetTeamId(null)
                             }}
-                            className="rounded-xl border border-white/20 bg-black/35 px-3 py-2 text-sm"
+                            className="rounded-xl border border-white/20 bg-glass-bg px-3 py-2 text-sm"
                           >
                             {player.displayName}
                           </div>
@@ -729,7 +729,7 @@ export default function HostStagePage() {
         ) : null}
 
         {room && stage === "overview" ? (
-          <section className="rounded-3xl border border-white/20 bg-black/40 p-6 backdrop-blur-xl">
+          <section className="rounded-3xl border border-white/20 bg-glass-bg p-6 backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Game Overview</p>
             <h2 className="mt-2 text-4xl font-bold">قواعد الجيوباردي قبل البداية</h2>
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -756,7 +756,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 text-lg font-bold text-slate-950"
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction)}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
@@ -792,7 +792,7 @@ export default function HostStagePage() {
             </article>
 
             <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
-              <article className="rounded-3xl border border-white/20 bg-black/40 p-4 backdrop-blur-xl">
+              <article className="rounded-3xl border border-white/20 bg-glass-bg p-4 backdrop-blur-xl">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Jeopardy Board</p>
@@ -829,8 +829,8 @@ export default function HostStagePage() {
                           disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                           onClick={() => void handleSelectTriviaClue(clue.questionId)}
                           className={`h-16 rounded-xl border text-lg font-black transition ${isUsed
-                            ? "border-white/10 bg-black/30 text-slate-500"
-                            : "border-amber-300/45 bg-amber-500/15 text-amber-100 hover:bg-amber-500/30"
+                            ? "border-white/10 bg-glass-bg text-slate-500"
+                            : "border-pink-300/45 bg-pink-500/15 text-pink-100 hover:bg-pink-500/30"
                             } ${isSelected ? "ring-2 ring-white/60" : ""}`}
                         >
                           {isUsed ? "تم" : clue.points}
@@ -841,7 +841,7 @@ export default function HostStagePage() {
                 </div>
               </article>
 
-              <article className="space-y-4 rounded-3xl border border-white/20 bg-black/40 p-4 backdrop-blur-xl">
+              <article className="space-y-4 rounded-3xl border border-white/20 bg-glass-bg p-4 backdrop-blur-xl">
                 <div className={`rounded-2xl border p-4 ${currentTone.border} ${currentTone.bg}`}>
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Turn Context</p>
                   <p className="mt-2 text-lg font-semibold">الفريق صاحب الدور: {currentTurnTeam?.name ?? "غير محدد"}</p>
@@ -857,9 +857,9 @@ export default function HostStagePage() {
                     </p>
 
                     {isCountdownPhase ? (
-                      <div className="mt-4 rounded-2xl border border-white/30 bg-black/35 p-5 text-center">
+                      <div className="mt-4 rounded-2xl border border-white/30 bg-glass-bg p-5 text-center">
                         <p className="text-sm text-slate-200">استعدوا... السؤال سيظهر حالًا</p>
-                        <p className="mt-2 text-8xl font-black leading-none text-amber-200 animate-pulse">
+                        <p className="mt-2 text-8xl font-black leading-none text-violet-200 animate-pulse">
                           {countdownSeconds}
                         </p>
                       </div>
@@ -872,7 +872,7 @@ export default function HostStagePage() {
                           {selectedClue.options.map((option, index) => (
                             <div
                               key={`${selectedClue.questionId}-${index}`}
-                              className="rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm"
+                              className="rounded-lg border border-white/20 bg-glass-bg px-3 py-2 text-sm"
                             >
                               <span className="font-bold">{["A", "B", "C", "D"][index]}.</span> {option}
                             </div>
@@ -933,7 +933,7 @@ export default function HostStagePage() {
         ) : null}
 
         {room && stage === "celebration" ? (
-          <section className="rounded-3xl border border-white/20 bg-black/40 p-6 text-center backdrop-blur-xl">
+          <section className="rounded-3xl border border-white/20 bg-glass-bg p-6 text-center backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Celebration</p>
             <h2 className="mt-2 text-5xl font-black text-amber-100">انتهت لعبة الجيوباردي</h2>
 
@@ -962,7 +962,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 text-lg font-bold text-slate-950"
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction)}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
@@ -977,7 +977,7 @@ export default function HostStagePage() {
       </main>
 
       <div className="fixed bottom-3 left-0 right-0 z-30 px-4">
-        <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/65 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-glass-bg px-4 py-3 backdrop-blur-xl">
           <p className="text-xs text-slate-200 sm:text-sm">
             {hostUsername} | الغرفة: {roomId ?? "..."}
           </p>
@@ -997,7 +997,7 @@ export default function HostStagePage() {
 
       {
         showTriviaRulesModal ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-glass-bg/90 px-4 py-6 backdrop-blur-sm">
             <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-slate-950/95 p-6 text-white shadow-2xl">
               <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Jeopardy Rules</p>
               <h3 className="mt-2 text-3xl font-bold">قواعد لعبة الجيوباردي</h3>
@@ -1015,7 +1015,7 @@ export default function HostStagePage() {
                 </Button>
                 <Button
                   type="button"
-                  className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 font-bold text-slate-950"
+                  className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 font-bold text-slate-950"
                   disabled={Boolean(busyAction)}
                   onClick={() => void handleStartTriviaFromModal()}
                 >

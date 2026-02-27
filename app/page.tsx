@@ -229,14 +229,14 @@ export default function Home() {
       <div
         className="pointer-events-none absolute inset-0 bg-[size:54px_54px] opacity-20"
         style={{
-          backgroundImage: `linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)`
+          backgroundImage: `linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)`
         }}
       />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 1 }}
-        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full blur-[120px] bg-amber-300/10 animate-glow-pulse"
+        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full blur-[120px] bg-violet-300/10 animate-glow-pulse"
       />
       <div className="pointer-events-none absolute -bottom-40 right-[-12%] h-[28rem] w-[28rem] rounded-full bg-cyan-400/5 blur-[130px] animate-glow-pulse" />
 
@@ -274,7 +274,7 @@ export default function Home() {
           transition={{ duration: 0.6 }}
           className="space-y-4 text-center"
         >
-          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-amber-100 backdrop-blur-md sm:text-sm">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
             <MoonStar className="size-4" />
             جمعة العيد العائلية
             <Sparkles className="size-4" />
@@ -329,7 +329,7 @@ export default function Home() {
               size="lg"
               onClick={startSequence}
               className={cn(
-                "rounded-full bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950 shadow-[0_20px_50px_-15px_rgba(245,158,11,0.5)] transition-all hover:scale-105 hover:shadow-orange-500/40 active:scale-95",
+                "rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 font-bold text-slate-950 shadow-[0_20px_50px_-15px_rgba(139,92,246,0.5)] transition-all hover:scale-105 hover:shadow-fuchsia-500/40 active:scale-95",
                 isTVMode ? "h-24 px-16 text-4xl" : "h-16 px-12 text-2xl"
               )}
             >
@@ -361,7 +361,7 @@ export default function Home() {
                     )}
                   >
                     <div className="h-[42%] overflow-hidden relative">
-                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-orange-500 text-2xl font-black text-white backdrop-blur-md border border-glass-border shadow-lg">
+                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-2xl font-black text-white backdrop-blur-md border border-glass-border shadow-lg">
                         {index + 1}
                       </div>
 
@@ -392,7 +392,7 @@ export default function Home() {
                         isTVMode ? "text-4xl" : "text-3xl"
                       )}>{game.title}</CardTitle>
                       <CardDescription className={cn(
-                        "text-amber-200/90 font-cairo transition-all duration-300 font-medium",
+                        "text-violet-200/90 font-cairo transition-all duration-300 font-medium",
                         isTVMode ? "text-xl" : "text-base"
                       )}>{game.tagline}</CardDescription>
                     </CardHeader>
@@ -433,8 +433,8 @@ export default function Home() {
           transition={{ delay: 0.6, duration: 0.5 }}
           className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-md sm:mt-6 sm:flex sm:items-center sm:justify-between sm:px-6"
         >
-          <p className="flex items-center gap-2 text-sm text-amber-50/95 sm:text-base font-cairo">
-            <Sparkles className="size-4 text-amber-200 ml-1" />
+          <p className="flex items-center gap-2 text-sm text-violet-50/95 sm:text-base font-cairo">
+            <Sparkles className="size-4 text-violet-200 ml-1" />
             نصيحة للعرض: خلو واحد هو المضيف والبقية يتوزعون فرق.
           </p>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/90 sm:mt-0 font-cairo">
@@ -467,7 +467,7 @@ export default function Home() {
               </button>
 
               <div className="flex flex-col items-center">
-                <div className="mb-4 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 p-4 shadow-lg shadow-orange-500/20">
+                <div className="mb-4 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 p-4 shadow-lg shadow-fuchsia-500/20">
                   <Maximize2 className="size-8 text-white" />
                 </div>
                 <h3 className="mb-2 text-xl font-bold text-white font-cairo">الشاشة الكاملة على الآيفون</h3>
