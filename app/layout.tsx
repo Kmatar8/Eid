@@ -1,11 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Cairo, Fira_Code } from "next/font/google";
+import { Cairo } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const cairo = Cairo({ subsets: ["arabic"], weight: ["400", "500", "600", "700", "800"] });
-
-const fira = Fira_Code({ subsets: ["latin"], weight: ["400"] });
 
 export const metadata: Metadata = {
   title: "حروف - ألعاب العيد",
@@ -34,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${cairo.className} antialiased bg-slate-950 text-slate-50 selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden`}>
+      <body className={`${cairo.className} antialiased bg-[#0c0a1f] text-slate-50 selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

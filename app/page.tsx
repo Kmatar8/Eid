@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import { useRouter } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
   Brain,
-  Gamepad2,
   Maximize2,
   Monitor,
   MoonStar,
   Paintbrush2,
-  PartyPopper,
   Share2,
   Sparkles,
   Timer,
@@ -28,7 +27,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -141,15 +139,27 @@ const festiveSymbols = [
   { id: 7, symbol: "✧", left: "90%", top: "16%", delay: 1.6, duration: 9.5 },
 ]
 
+const TRIVIA_GAME_ID = "family-trivia"
+
+type FullscreenDocument = Document & {
+  webkitExitFullscreen?: () => Promise<void> | void
+  mozCancelFullScreen?: () => Promise<void> | void
+  msExitFullscreen?: () => Promise<void> | void
+  webkitFullscreenElement?: Element | null
+  mozFullScreenElement?: Element | null
+  msFullscreenElement?: Element | null
+}
+
+type FullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void
+  mozRequestFullScreen?: () => Promise<void> | void
+  msRequestFullscreen?: () => Promise<void> | void
+}
+
 export default function Home() {
-  const [selectedGameId, setSelectedGameId] = useState(games[0].id)
+  const router = useRouter()
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
   const [isTVMode, setIsTVMode] = useState(false)
-
-  const selectedGame = useMemo(
-    () => games.find((game) => game.id === selectedGameId) ?? games[0],
-    [selectedGameId]
-  )
 
   useEffect(() => {
     let viewportMeta = document.querySelector('meta[name="viewport"]')
@@ -170,8 +180,8 @@ export default function Home() {
   }, [isTVMode])
 
   const toggleFullscreen = () => {
-    const doc = document as any
-    const el = document.documentElement as any
+    const doc = document as FullscreenDocument
+    const el = document.documentElement as FullscreenElement
 
     const requestFullScreen =
       el.requestFullscreen ||
@@ -204,26 +214,34 @@ export default function Home() {
     }
   }
 
-  const cycleGame = () => {
-    const currentIndex = games.findIndex((game) => game.id === selectedGame.id)
-    const nextIndex = (currentIndex + 1) % games.length
-    setSelectedGameId(games[nextIndex].id)
+  const startSequence = () => {
+    router.push("/host/login")
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.22),_transparent_42%),linear-gradient(160deg,_#12221b_0%,_#171d34_46%,_#331722_100%)] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:54px_54px] opacity-20" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full bg-amber-300/25 blur-[120px] animate-glow-pulse" />
-      <div className="pointer-events-none absolute -bottom-40 right-[-12%] h-[28rem] w-[28rem] rounded-full bg-cyan-400/20 blur-[130px] animate-glow-pulse" />
+    <div
+      className="relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-white"
+      style={{
+        background: `radial-gradient(circle_at_top, rgba(139, 92, 246, 0.1), transparent 50%), linear-gradient(160deg, #0c0a1f 0%, #1e1b4b 46%, #0c0a1f 100%)`
+      }}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:54px_54px] opacity:20" />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 1 }}
+        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full blur-[120px] bg-amber-300/10 animate-glow-pulse"
+      />
+      <div className="pointer-events-none absolute -bottom-40 right-[-12%] h-[28rem] w-[28rem] rounded-full bg-cyan-400/5 blur-[130px] animate-glow-pulse" />
 
-      {/* Fireworks Effect */}
+      {/* Fireworks Effect - Increased for better visibility through glass */}
       <FireworksBackground
         population={2}
-        particleSpeed={3}
+        particleSpeed={4}
         explosionHeight={{ min: 0, max: 0.15 }}
-        className="absolute inset-0 z-0 pointer-events-none opacity-50"
+        className="absolute inset-0 z-0 pointer-events-none opacity-80"
       />
-      <FireworksBackgroundDemo population={1} />
+      <FireworksBackgroundDemo population={3} />
 
       {festiveSymbols.map((item) => (
         <motion.span
@@ -281,175 +299,123 @@ export default function Home() {
             </Button>
           </div>
 
-          <h1 className="text-balance text-4xl font-extrabold tracking-tight text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.45)] sm:text-6xl lg:text-8xl font-cairo">
+          <h1 className={cn(
+            "text-balance font-extrabold tracking-tight text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.45)] font-cairo transition-all duration-500",
+            isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
+          )}>
             اختر لعبة الليلة
           </h1>
-          <p className="mx-auto max-w-3xl text-pretty text-base text-slate-100/85 sm:text-xl font-cairo">
-            صممت للشاشات الكبيرة. اختر لعبة، وزع الفرق، واستمتع بأجواء العيد المبهجة طوال الليل.
+          <p className={cn(
+            "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
+            isTVMode ? "text-2xl sm:text-3xl lg:text-4xl opacity-100" : "text-base sm:text-xl"
+          )}>
+            صممت للشاشات الكبيرة. تسلسل فعاليات الليلة جاهز، اضغط ابدأ للبدء.
           </p>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.4 }}
+            className="pt-6"
+          >
+            <Button
+              size="lg"
+              onClick={startSequence}
+              className={cn(
+                "rounded-full bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950 shadow-[0_20px_50px_-15px_rgba(245,158,11,0.5)] transition-all hover:scale-105 hover:shadow-orange-500/40 active:scale-95",
+                isTVMode ? "h-24 px-16 text-4xl" : "h-16 px-12 text-2xl"
+              )}
+            >
+              <Sparkles className="mr-2 size-6" />
+              ابدأ الفعالية الآن
+            </Button>
+          </motion.div>
         </motion.header>
 
-        <section className="mt-8 grid gap-6 xl:mt-10 xl:grid-cols-[1fr_2fr]">
-          <motion.div
-            initial={{ opacity: 0, x: 25 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15, duration: 0.5 }}
-          >
-            <Card className="relative h-full overflow-hidden border-white/25 bg-black/30 py-0 backdrop-blur-xl">
-              {selectedGame.image ? (
-                <>
-                  <div
-                    className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-in-out opacity-80"
-                    style={{ backgroundImage: `url(${selectedGame.image})` }}
-                  />
-                  {/* Removed heavy gradient */}
-                  <div className="h-1.5 w-full relative z-10" style={{ backgroundImage: selectedGame.gradient }} />
-                </>
-              ) : (
-                <>
-                  <div className="h-1.5 w-full" style={{ backgroundImage: selectedGame.gradient }} />
-                  <div className="absolute -left-20 -top-24 size-56 rounded-full bg-white/10 blur-3xl" />
-                </>
-              )}
-              {/* Removed pointer-events-none gradient */}
-
-              <CardHeader className="relative gap-4 pt-8">
-                <div className="flex items-center justify-between gap-3">
-                  <span
-                    className="grid size-16 place-items-center rounded-2xl shadow-lg animate-float-soft"
-                    style={{
-                      backgroundImage: selectedGame.gradient,
-                      boxShadow: `0 18px 40px -16px ${selectedGame.glow}`,
-                    }}
-                  >
-                    <selectedGame.icon className="size-8 text-white" />
-                  </span>
-                  <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90">
-                    مختارة
-                  </span>
-                </div>
-
-                <CardTitle className="text-3xl leading-tight text-white sm:text-4xl font-cairo">
-                  {selectedGame.title}
-                </CardTitle>
-                <CardDescription className="text-base text-amber-100/95 font-cairo">
-                  {selectedGame.tagline}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-6 text-slate-100/90 font-cairo">
-                <p className="text-base leading-relaxed sm:text-lg">{selectedGame.description}</p>
-
-                <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                  <InfoPill icon={Users} label="اللاعبين" value={selectedGame.players} />
-                  <InfoPill icon={Timer} label="الجولة" value={selectedGame.duration} />
-                  <InfoPill icon={Zap} label="الحماس" value={selectedGame.energy} />
-                </div>
-              </CardContent>
-
-              <CardFooter className="flex flex-wrap gap-3 border-t border-white/15 pb-7 pt-6">
-                <Button
-                  size="lg"
-                  className="h-12 min-w-[220px] flex-1 rounded-full px-7 text-base font-bold text-slate-950 transition-transform hover:-translate-y-0.5 font-cairo"
-                  style={{
-                    backgroundImage: selectedGame.gradient,
-                    boxShadow: `0 16px 35px -18px ${selectedGame.glow}`,
-                  }}
-                >
-                  <Gamepad2 className="size-5 ml-2" />
-                  ابدأ {selectedGame.title}
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={cycleGame}
-                  className="h-12 min-w-[170px] rounded-full border-white/30 bg-white/10 px-6 text-sm font-semibold text-white hover:bg-white hover:text-slate-900 font-cairo"
-                >
-                  <PartyPopper className="size-5 ml-2" />
-                  اختيار عشوائي
-                </Button>
-              </CardFooter>
-            </Card>
-          </motion.div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-12">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
             {games.map((game, index) => {
-              const isSelected = game.id === selectedGameId
+              const isSelected = game.id === TRIVIA_GAME_ID
 
               return (
-                <motion.button
+                <motion.div
                   key={game.id}
-                  type="button"
-                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ delay: 0.18 + index * 0.08, duration: 0.35 }}
-                  whileHover={{ y: -6, scale: 1.02 }}
-                  onClick={() => setSelectedGameId(game.id)}
                   className="text-right"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + index * 0.05, duration: 0.35 }}
                 >
                   <Card
                     className={cn(
-                      "group relative h-full overflow-hidden border-white/20 bg-white/5 py-0 text-white backdrop-blur-lg transition-all duration-300",
+                      "relative h-[30rem] overflow-hidden border-white/20 bg-black/10 py-0 text-white backdrop-blur-xl",
                       isSelected
-                        ? "border-white/60 bg-white/20 shadow-[0_20px_55px_-28px_rgba(255,255,255,0.8)]"
-                        : "hover:border-white/40 hover:bg-white/15"
+                        ? "border-white/60 bg-white/5"
+                        : ""
                     )}
-                    style={{
-                      boxShadow: isSelected ? `0 18px 40px -20px ${game.glow}` : undefined,
-                    }}
+                    style={{ backgroundColor: "rgba(0, 0, 0, 0.1)" }}
                   >
-                    {game.image ? (
-                      <>
+                    <div className="h-[42%] overflow-hidden relative">
+                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/90 to-orange-500/90 text-2xl font-black text-slate-950 backdrop-blur-md border border-white/40 shadow-lg">
+                        {index + 1}
+                      </div>
+
+                      {game.image ? (
                         <div
-                          className="absolute inset-0 bg-cover bg-center transition-all duration-500 opacity-60 group-hover:opacity-100"
+                          className="h-full w-full bg-cover bg-center"
                           style={{ backgroundImage: `url(${game.image})` }}
                         />
-                        {/* Removed dark overlay */}
-                        <div className="h-1.5 w-full relative z-10" style={{ backgroundImage: game.gradient }} />
-                      </>
-                    ) : (
-                      <div className="h-1.5 w-full" style={{ backgroundImage: game.gradient }} />
-                    )}
+                      ) : (
+                        <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.16),rgba(255,255,255,0.04))] flex items-center justify-center">
+                          <game.icon className="size-16 opacity-30" />
+                        </div>
+                      )}
 
-                    <CardHeader className="gap-3 pt-6 relative z-10">
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className="grid size-12 place-items-center rounded-xl"
-                          style={{
-                            backgroundImage: game.gradient,
-                            boxShadow: `0 12px 26px -14px ${game.glow}`,
-                          }}
-                        >
-                          <game.icon className="size-6 text-white" />
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full border px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.16em]",
-                            isSelected
-                              ? "border-amber-200/70 bg-amber-200/20 text-amber-100"
-                              : "border-white/25 bg-white/10 text-white/80"
-                          )}
-                        >
-                          {isSelected ? "التالي" : "اختر"}
-                        </span>
-                      </div>
-                      <CardTitle className="text-2xl leading-tight font-cairo">{game.title}</CardTitle>
-                      <CardDescription className="text-sm text-white/80 font-cairo">{game.tagline}</CardDescription>
+                      <div
+                        className="pointer-events-none absolute inset-0"
+                        style={{
+                          backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0) 20%, rgba(15,23,42,0.4) 70%, rgba(15,23,42,0.7) 100%)`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="relative h-1 w-full" style={{ backgroundImage: game.gradient }} />
+
+                    <CardHeader className="gap-2 pt-6 pb-2">
+                      <CardTitle className={cn(
+                        "font-cairo font-black transition-all duration-300 tracking-tight",
+                        isTVMode ? "text-4xl" : "text-3xl"
+                      )}>{game.title}</CardTitle>
+                      <CardDescription className={cn(
+                        "text-amber-200/90 font-cairo transition-all duration-300 font-medium",
+                        isTVMode ? "text-xl" : "text-base"
+                      )}>{game.tagline}</CardDescription>
                     </CardHeader>
 
-                    <CardContent className="pb-6 text-sm text-white/80 font-cairo">
-                      <p>{game.description}</p>
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.14em]">
-                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-1">
-                          {game.players} لاعب
-                        </span>
-                        <span className="rounded-full border border-white/20 bg-white/10 px-2 py-1">
-                          {game.duration}
-                        </span>
+                    <CardContent className={cn(
+                      "pb-8 text-white/90 font-cairo transition-all duration-300 leading-relaxed",
+                      isTVMode ? "text-lg" : "text-base"
+                    )}>
+                      <p className="line-clamp-2 opacity-80">{game.description}</p>
+
+                      <div className="mt-8 grid grid-cols-2 gap-4">
+                        <div className="rounded-xl bg-white/5 p-3 border border-white/10 backdrop-blur-md">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Users className="size-4 text-amber-400" />
+                            <p className="text-xs opacity-60">اللاعبين</p>
+                          </div>
+                          <p className="text-lg font-bold text-white">{game.players}</p>
+                        </div>
+                        <div className="rounded-xl bg-white/5 p-3 border border-white/10 backdrop-blur-md">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Timer className="size-4 text-cyan-400" />
+                            <p className="text-xs opacity-60">المدة</p>
+                          </div>
+                          <p className="text-lg font-bold text-white">{game.duration}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
-                </motion.button>
+                </motion.div>
               )
             })}
           </div>
@@ -463,7 +429,7 @@ export default function Home() {
         >
           <p className="flex items-center gap-2 text-sm text-amber-50/95 sm:text-base font-cairo">
             <Sparkles className="size-4 text-amber-200 ml-1" />
-            نصيحة للعرض: خلو واحد هو "المضيف" والبقية يتوزعون فرق.
+            نصيحة للعرض: خلو واحد هو المضيف والبقية يتوزعون فرق.
           </p>
           <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/90 sm:mt-0 font-cairo">
             أجواء الاحتفال: شغالة
@@ -531,26 +497,6 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  )
-}
-
-function InfoPill({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-}) {
-  return (
-    <div className="rounded-xl border border-white/20 bg-white/10 p-3">
-      <div className="mb-1 flex items-center gap-1.5 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-slate-100/75">
-        <Icon className="size-3.5" />
-        {label}
-      </div>
-      <div className="text-sm font-bold text-white sm:text-base">{value}</div>
-    </div>
+    </div >
   )
 }

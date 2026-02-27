@@ -1,0 +1,90 @@
+# T-0008: Production Host Journey UI (Landing -> Login -> Lobby -> Game -> Celebration)
+
+- Status: in_progress
+- Milestone: M4
+- PRD Reference: 6, 6.1, 8, 8.1, 8.2, 10.2, 12, 14
+
+## Objective
+Implement a production-oriented host journey that starts from landing CTA and runs as a single mirrored host experience: login, live lobby/team setup, game overview, trivia runtime guidance, and end-of-game celebration.
+
+## Scope
+### In
+1. Route landing CTA to dedicated host login page.
+2. Add `/host/login` UI using festive visual direction consistent with Eid celebration style.
+3. Redesign `/host` as primary mirrored host runtime page with:
+   - Large join QR code and join link.
+   - Live joined players cards.
+   - Two team columns and host drag/drop assignment.
+   - Clear instructions and session start CTA.
+4. Add host-side stage views:
+   - Games overview + general rules + start-first-game CTA.
+   - Trivia runtime view with horizontal scoreboard and clear responder/steal messaging.
+   - End-of-trivia winner celebration view with next-game CTA.
+5. Add trivia pre-start rules modal on host screen; start questions only after host confirm.
+6. Extend host action contract for server-authoritative manual team assignment.
+
+### Out
+1. New backend game engines beyond current trivia implementation.
+2. Public host signup/admin credential lifecycle.
+3. Migration to websocket hibernation transport in this task.
+4. New persistent schema tables for multi-game catalog.
+
+## Dependencies
+1. `T-0006` live runtime routes and client API helpers.
+2. `T-0007` controller simplification/reliability changes.
+3. Existing room lifecycle and trivia engine behavior in `lib/server/store.ts`.
+
+## API / Contract Impact
+1. Existing host/player routes remain in use.
+2. Add host action: `host.assignPlayerTeam` with payload `{ playerId, teamId }`.
+3. Update protocol role authorization to permit the new host action.
+4. Preserve existing scoring and trivia action contracts.
+
+## Data Model Impact
+1. D1: no schema change.
+2. DO/Runtime state: no durable schema migration; in-memory/team assignment map logic updated.
+3. R2: no impact.
+
+## Implementation Plan
+1. Update PRD and planning docs for the staged host journey.
+2. Add `/host/login` and wire landing CTA to it.
+3. Refactor `/host` into stage-based mirrored UI (lobby -> overview -> trivia -> celebration).
+4. Implement host drag/drop team assignment UX.
+5. Add `host.assignPlayerTeam` protocol/store handling and preserve manual assignments when starting teams.
+6. Add trivia rules modal and runtime team-context messaging with team-color cues.
+7. Validate with lint/build + live smoke flow and capture evidence.
+
+## Acceptance Criteria
+1. Landing CTA navigates to `/host/login`.
+2. Host login succeeds and routes to `/host` with persistent host session.
+3. `/host` lobby shows large QR, joined players, team columns, and supports manual team assignment.
+4. Host can start session and see games overview and rules before starting trivia.
+5. Trivia start is gated behind host confirmation modal.
+6. Trivia runtime view clearly indicates active responder/team and steal-state messaging.
+7. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
+
+## Validation Checklist
+- [x] Lint/typecheck pass.
+- [x] Build pass.
+- [ ] Manual: landing -> login -> host lobby flow.
+- [ ] Manual: player joins and host can assign teams via drag/drop.
+- [ ] Manual: overview -> rules modal -> trivia runtime messaging flow.
+- [ ] Manual: trivia completion -> winner celebration -> next game CTA.
+- [x] Live smoke script still passes.
+
+## Validation Evidence
+1. `npm run lint` completed with warnings only (no errors).
+2. `npm run build` completed successfully with `/host/login` and updated `/host` route output.
+3. Live deploy completed to `https://hroof-app.k-matar.workers.dev` with version `4c65a4ae-bcc5-496d-bc6b-2644c5b2a77a`.
+4. `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh` passed full host/join/trivia/reconnect/end flow.
+
+## Rollback Plan
+1. Revert `/host` and `/host/login` UI refactor to prior host control page.
+2. Remove `host.assignPlayerTeam` action from protocol/store and restore prior team-start behavior.
+3. Restore landing CTA behavior.
+4. Redeploy last stable version.
+
+## Notes / Risks
+1. Drag/drop interactions need a touch-friendly fallback for tablets/phones.
+2. Team assignment and start sequencing must remain server-authoritative to avoid client drift.
+3. Current "next game" CTA may cycle to another trivia session until additional game engines are implemented.

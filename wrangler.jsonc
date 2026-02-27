@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hroof-app",
+  "main": ".open-next/worker.js",
+  "account_id": "03c1fb8346ff14e6d1215e0f0a3ad3a5",
+  "compatibility_date": "2026-02-21",
+  "compatibility_flags": ["nodejs_compat"],
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "hroof-app"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "HROOF_DB",
+      "database_name": "hroof-main-db",
+      "database_id": "4ac4dd8c-1535-45f7-8691-6756b11b2ed2",
+      "preview_database_id": "4ac4dd8c-1535-45f7-8691-6756b11b2ed2"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "HROOF_EVENTS_QUEUE",
+        "queue": "hroof-events"
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOMS_DO",
+        "class_name": "RoomDurableObject",
+        "script_name": "hroof-room-do"
+      }
+    ]
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // R2 is currently disabled on this account.
+  // After enabling R2 in dashboard, create buckets and uncomment bindings below.
+  // "r2_buckets": [
+  //   {
+  //     "binding": "NEXT_INC_CACHE_R2_BUCKET",
+  //     "bucket_name": "hroof-next-inc-cache"
+  //   },
+  //   {
+  //     "binding": "HROOF_AVATARS_BUCKET",
+  //     "bucket_name": "hroof-avatars"
+  //   }
+  // ],
+  "observability": {
+    "enabled": true
+  }
+}

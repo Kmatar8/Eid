@@ -1,0 +1,28 @@
+import type { TriviaQuestion } from "@/lib/server/types"
+
+export const TRIVIA_QUESTION_BANK: TriviaQuestion[] = [
+  { id: "q1", prompt: "Which planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Mercury"], correctOption: "B" },
+  { id: "q2", prompt: "What is the capital of Saudi Arabia?", options: ["Jeddah", "Riyadh", "Dammam", "Mecca"], correctOption: "B" },
+  { id: "q3", prompt: "How many days are in a leap year?", options: ["364", "365", "366", "367"], correctOption: "C" },
+  { id: "q4", prompt: "What is H2O commonly called?", options: ["Hydrogen", "Salt", "Water", "Oxygen"], correctOption: "C" },
+  { id: "q5", prompt: "Which animal is known as the king of the jungle?", options: ["Tiger", "Lion", "Cheetah", "Wolf"], correctOption: "B" },
+  { id: "q6", prompt: "How many continents are there?", options: ["5", "6", "7", "8"], correctOption: "C" },
+  { id: "q7", prompt: "Which language is primarily used by web browsers for styling?", options: ["HTML", "JavaScript", "Python", "CSS"], correctOption: "D" },
+  { id: "q8", prompt: "Which month comes after April?", options: ["June", "May", "March", "July"], correctOption: "B" },
+  { id: "q9", prompt: "What is 9 x 7?", options: ["63", "56", "72", "49"], correctOption: "A" },
+  { id: "q10", prompt: "Which sea separates Africa and Arabia?", options: ["Red Sea", "Black Sea", "Dead Sea", "Caspian Sea"], correctOption: "A" },
+  { id: "q11", prompt: "Which device is used to take photos?", options: ["Speaker", "Camera", "Keyboard", "Router"], correctOption: "B" },
+  { id: "q12", prompt: "What gas do plants absorb from the air?", options: ["Oxygen", "Nitrogen", "Carbon Dioxide", "Helium"], correctOption: "C" },
+  { id: "q13", prompt: "Which shape has three sides?", options: ["Square", "Triangle", "Circle", "Rectangle"], correctOption: "B" },
+  { id: "q14", prompt: "What is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Arctic", "Pacific"], correctOption: "D" },
+  { id: "q15", prompt: "Which weekday comes after Friday?", options: ["Sunday", "Saturday", "Thursday", "Monday"], correctOption: "B" },
+  { id: "q16", prompt: "How many minutes are in one hour?", options: ["30", "45", "60", "90"], correctOption: "C" },
+  { id: "q17", prompt: "Which country hosts the city of Paris?", options: ["Italy", "France", "Spain", "Germany"], correctOption: "B" },
+  { id: "q18", prompt: "What is the freezing point of water in Celsius?", options: ["-10", "0", "10", "32"], correctOption: "B" },
+  { id: "q19", prompt: "Which fruit is typically yellow and curved?", options: ["Apple", "Pear", "Banana", "Orange"], correctOption: "C" },
+  { id: "q20", prompt: "Which instrument has black and white keys?", options: ["Guitar", "Drum", "Violin", "Piano"], correctOption: "D" },
+  { id: "q21", prompt: "Which is the smallest prime number?", options: ["0", "1", "2", "3"], correctOption: "C" },
+  { id: "q22", prompt: "What is the opposite of 'north'?", options: ["South", "East", "West", "Up"], correctOption: "A" },
+  { id: "q23", prompt: "Which body part is used for hearing?", options: ["Eye", "Ear", "Nose", "Hand"], correctOption: "B" },
+  { id: "q24", prompt: "How many letters are in the English alphabet?", options: ["24", "25", "26", "27"], correctOption: "C" },
+]
