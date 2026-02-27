@@ -90,6 +90,7 @@ Convert the current linear trivia flow into a Jeopardy-style board game with buz
 5. Countdown refinement: question prompt/options hidden during `countdown` phase on host and controller, with large animated countdown rendering.
 6. Live deployment completed to `https://hroof-app.k-matar.workers.dev` with version `8a82c540-404f-4382-aa91-f332c5b63bab`.
 7. Live smoke test passed on deployed environment using `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh`.
+8. CI/Cloudflare compatibility fix: `package.json` includes `build:worker` script (`opennextjs-cloudflare build`) and was validated with `npm run build:worker`.
 
 ## Rollback Plan
 1. Revert trivia engine/session model changes in `lib/server/store.ts` and related types.
