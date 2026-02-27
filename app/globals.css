@@ -73,6 +73,8 @@
   --glass-bg: rgba(255, 255, 255, 0.94);
   --glass-border: rgba(255, 255, 255, 0.6);
   --festive-glow: rgba(245, 158, 11, 0.35);
+  --festive-glow-secondary: rgba(14, 165, 233, 0.3);
+  --panel-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
   --grid-line: rgba(0, 0, 0, 0.08);
 }
 
@@ -98,6 +100,8 @@
   --glass-bg: rgba(0, 0, 0, 0.9);
   --glass-border: rgba(255, 255, 255, 0.2);
   --festive-glow: rgba(245, 158, 11, 0.15);
+  --festive-glow-secondary: rgba(14, 165, 233, 0.22);
+  --panel-shadow: 0 24px 64px rgba(2, 6, 23, 0.65);
   --grid-line: rgba(255, 255, 255, 0.12);
 }
 
@@ -197,5 +201,60 @@
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  .party-stage-bg {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 12%, var(--festive-glow), transparent 36%),
+      radial-gradient(circle at 88% 10%, var(--festive-glow-secondary), transparent 34%),
+      linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%);
+  }
+
+  .party-stage-grid {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.58;
+    background-size: 56px 56px;
+    background-image:
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  }
+
+  .party-surface {
+    border: 1px solid color-mix(in srgb, var(--glass-border) 75%, transparent);
+    background: color-mix(in srgb, var(--glass-bg) 88%, transparent);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--panel-shadow);
+  }
+
+  .party-surface-strong {
+    border: 1px solid color-mix(in srgb, var(--glass-border) 82%, transparent);
+    background: color-mix(in srgb, var(--glass-bg) 96%, transparent);
+    backdrop-filter: blur(20px);
+    box-shadow: var(--panel-shadow);
+  }
+
+  .party-status-error {
+    border: 1px solid rgba(239, 68, 68, 0.32);
+    background: rgba(239, 68, 68, 0.17);
+    color: rgb(254 226 226);
+  }
+
+  .party-status-success {
+    border: 1px solid rgba(16, 185, 129, 0.32);
+    background: rgba(16, 185, 129, 0.17);
+    color: rgb(209 250 229);
+  }
+
+  .party-chip {
+    border-radius: 9999px;
+    border: 1px solid color-mix(in srgb, var(--glass-border) 85%, transparent);
+    background: color-mix(in srgb, var(--glass-bg) 80%, transparent);
   }
 }

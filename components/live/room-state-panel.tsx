@@ -45,18 +45,18 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
   return (
     <div className="space-y-4">
       <section className="grid gap-3 sm:grid-cols-3">
-        <article className="rounded-xl border border-white/15 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-300">State</p>
+        <article className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">State</p>
           <p className="mt-1 text-lg font-semibold">{stateLabel(room.state)}</p>
           <p className="mt-2 text-xs text-slate-400">Version: {room.version}</p>
         </article>
-        <article className="rounded-xl border border-white/15 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-300">Players</p>
+        <article className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Players</p>
           <p className="mt-1 text-lg font-semibold">{room.playerCount}</p>
           <p className="mt-2 text-xs text-slate-400">Updated: {formatMs(room.updatedAt)}</p>
         </article>
-        <article className="rounded-xl border border-white/15 bg-white/5 p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-300">Trivia</p>
+        <article className="rounded-xl border border-white/20 bg-white/10 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Trivia</p>
           <p className="mt-1 text-lg font-semibold">{room.trivia.status}</p>
           <p className="mt-2 text-xs text-slate-400">Phase: {room.trivia.phase ?? "-"}</p>
         </article>
@@ -64,8 +64,8 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
 
       <section className="grid gap-3 sm:grid-cols-2">
         {room.teams.map((team) => (
-          <article key={team.teamId} className="rounded-xl border border-white/20 bg-white/10 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-300">{team.name}</p>
+          <article key={team.teamId} className="rounded-xl border border-white/25 bg-white/12 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-300">{team.name}</p>
             <p className="mt-1 text-4xl font-bold text-amber-300">{team.score}</p>
             <p className="mt-2 text-xs text-slate-300">Players: {team.playerCount}</p>
           </article>
@@ -73,14 +73,14 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
       </section>
 
       {room.trivia.selectedClue ? (
-        <section className="rounded-xl border border-cyan-300/25 bg-cyan-950/20 p-4">
-          <p className="text-xs uppercase tracking-wide text-cyan-200">Current Question</p>
+        <section className="rounded-xl border border-cyan-300/35 bg-cyan-500/15 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-100">Current Question</p>
           <p className="mt-2 text-base font-semibold leading-relaxed text-cyan-50">{room.trivia.selectedClue.prompt}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {room.trivia.selectedClue.options.map((option, index) => (
               <div
                 key={`${room.trivia.selectedClue?.questionId}-${index}`}
-                className="rounded-lg border border-cyan-200/25 bg-black/20 p-2 text-sm text-cyan-100"
+                className="rounded-lg border border-cyan-100/30 bg-black/25 p-2 text-sm text-cyan-100"
               >
                 <span className="font-semibold">{optionLabel(index)}.</span> {option}
               </div>
@@ -92,8 +92,8 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
         </section>
       ) : null}
 
-      <section className="rounded-xl border border-white/15 bg-black/20 p-4">
-        <p className="text-xs uppercase tracking-wide text-slate-300">Players</p>
+      <section className="rounded-xl border border-white/20 bg-black/25 p-4">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Players</p>
         <div className="mt-2 max-h-64 space-y-2 overflow-auto pr-1">
           {room.players.length === 0 ? <p className="text-sm text-slate-400">No players joined yet.</p> : null}
           {room.players.map((player) => {

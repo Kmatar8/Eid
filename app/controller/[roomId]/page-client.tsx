@@ -28,12 +28,12 @@ const TEAM_TONES: Record<string, TeamTone> = {
   team_a: {
     border: "border-pink-300/50",
     text: "text-pink-100",
-    bg: "bg-pink-500/40",
+    bg: "bg-pink-500/18",
   },
   team_b: {
     border: "border-cyan-300/50",
     text: "text-cyan-100",
-    bg: "bg-cyan-500/40",
+    bg: "bg-cyan-500/18",
   },
 }
 
@@ -377,53 +377,87 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     setNotice(null)
   }
 
+  const phaseLabel = (() => {
+    const phase = room?.trivia.phase
+    if (!phase || room?.trivia.status !== "in_progress") {
+      return "Waiting"
+    }
+    if (phase === "board_turn") return "Board Turn"
+    if (phase === "countdown") return "Countdown"
+    if (phase === "buzzer_open") return "Buzzer"
+    if (phase === "answer_active") return "Answer"
+    if (phase === "answer_reveal") return "Reveal"
+    return phase
+  })()
+
+  const phaseToneClass =
+    phaseLabel === "Buzzer"
+      ? "border-rose-300/50 bg-rose-500/20 text-rose-100"
+      : phaseLabel === "Answer"
+        ? "border-cyan-300/50 bg-cyan-500/20 text-cyan-100"
+        : "border-white/25 bg-white/10 text-slate-100"
+
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)] z-[-2]" />
-      <div className="pointer-events-none fixed inset-0 bg-[size:56px_56px] z-[-1] opacity-60" style={{ backgroundImage: 'linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)' }} />
+      <div className="party-stage-bg" />
+      <div className="party-stage-grid" />
+      <div className="pointer-events-none fixed -left-24 top-16 h-64 w-64 rounded-full bg-pink-400/30 blur-3xl" />
+      <div className="pointer-events-none fixed -right-20 top-56 h-72 w-72 rounded-full bg-cyan-400/25 blur-3xl" />
       <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
 
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-xl px-4 py-7">
-        <div className="flex justify-end mb-4">
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-2xl px-4 py-7 sm:py-9">
+        <div className="mb-4 flex items-center justify-between">
+          <p className="party-chip px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-100/90">
+            Controller
+          </p>
           <ThemeToggle />
         </div>
 
         {!session ? (
-          <section className="rounded-2xl border border-glass-border bg-glass-bg p-5 backdrop-blur-md">
-            <p className="text-sm text-slate-200">No local player session found for this room.</p>
-            <p className="mt-2 text-sm text-slate-300">
+          <section className="party-surface-strong rounded-3xl p-6">
+            <h1 className="text-2xl font-black">لا يوجد اتصال لاعب محفوظ</h1>
+            <p className="mt-2 text-sm text-slate-200">ابدأ الانضمام أولًا ثم ارجع لوحدة التحكم.</p>
+            <p className="mt-3 text-sm text-slate-300">
               Join first via{" "}
-              <Link className="text-cyan-300 underline" href={`/join/${roomId}`}>
+              <Link className="font-semibold text-cyan-300 underline" href={`/join/${roomId}`}>
                 /join/{roomId}
               </Link>
               .
             </p>
-            {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
+            {error ? <p className="party-status-error mt-4 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
           </section>
         ) : (
-          <article className={`rounded-3xl border p-5 ${activeTone.border} ${activeTone.bg} backdrop-blur-xl shadow-lg`}>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Controller</p>
-            <h1 className="mt-2 text-2xl font-bold">{session.playerName}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{myTeam ? `Team: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
+          <article className={`party-surface-strong rounded-4xl border p-6 sm:p-7 ${activeTone.border} ${activeTone.bg}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="text-3xl font-black">{session.playerName}</h1>
+                <p className="mt-1 text-sm text-slate-200">{myTeam ? `Team: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
+              </div>
+              <div className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${phaseToneClass}`}>
+                {phaseLabel}
+              </div>
+            </div>
 
-            <div className="mt-4 rounded-xl border border-glass-border bg-glass-bg px-4 py-3 shadow-inner">
-              <p className={`text-base font-semibold ${activeTone.text}`}>{statusText}</p>
+            <div className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-4 shadow-inner">
+              <p className={`text-base font-semibold leading-relaxed ${activeTone.text}`}>{statusText}</p>
             </div>
 
             {selectedClue ? (
-              <div className="mt-4 rounded-xl border border-glass-border bg-glass-bg p-4 shadow-sm">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   {selectedClue.categoryName} | {selectedClue.points} points
                 </p>
                 {isCountdownPhase ? (
-                  <div className="mt-3 rounded-xl border border-glass-border bg-background/50 p-4 text-center">
-                    <p className="text-sm text-muted-foreground">استعد للبازر</p>
-                    <p className="mt-1 text-7xl font-black leading-none text-primary animate-pulse">
+                  <div className="mt-3 rounded-2xl border border-amber-300/35 bg-amber-500/12 p-4 text-center">
+                    <p className="text-sm text-amber-100">استعد للبازر</p>
+                    <p className="mt-1 text-7xl font-black leading-none text-amber-300 animate-pulse">
                       {countdownSeconds}
                     </p>
                   </div>
                 ) : null}
-                {isQuestionRevealed ? <p className="mt-2 text-xl font-semibold leading-relaxed">{selectedClue.prompt}</p> : null}
+                {isQuestionRevealed ? (
+                  <p className="mt-3 text-xl font-semibold leading-relaxed text-white">{selectedClue.prompt}</p>
+                ) : null}
               </div>
             ) : null}
 
@@ -432,19 +466,21 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 type="button"
                 disabled={busy}
                 onClick={() => void submitBuzz()}
-                className="mt-5 h-24 w-full rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 text-2xl font-black text-white shadow-[0_0_40px_rgba(225,29,72,0.6)] hover:scale-105 active:scale-95 transition-all animate-pulse"
+                className="mt-6 h-24 w-full rounded-3xl border border-rose-200/40 bg-gradient-to-r from-rose-500 via-red-500 to-orange-500 text-2xl font-black text-white shadow-[0_0_45px_rgba(244,63,94,0.62)] transition-all hover:scale-[1.015] active:scale-95"
               >
                 🔔 اضغط البازر الآن!
               </Button>
             ) : null}
 
             {room?.trivia.phase === "answer_active" ? (
-              <div className="mt-4 space-y-2">
+              <div className="mt-5 space-y-3">
                 {canAnswer ? (
                   <>
-                    <p className={`text-sm font-semibold ${activeTone.text}`}>{session.playerName}, this question is for you.</p>
-                    <p className="text-sm text-slate-300">الوقت المتبقي للإجابة: {answerSeconds} ثانية</p>
-                    <div className="grid gap-2">
+                    <p className={`rounded-xl border px-4 py-2 text-sm font-semibold ${activeTone.border} ${activeTone.bg}`}>
+                      {session.playerName}, this question is for you.
+                    </p>
+                    <p className="text-sm text-slate-200">الوقت المتبقي للإجابة: {answerSeconds} ثانية</p>
+                    <div className="grid gap-2.5">
                       {(selectedClue?.options ?? []).map((optionText, index) => {
                         const option = optionLetter(index)
                         return (
@@ -454,17 +490,19 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                             variant="outline"
                             disabled={!canAnswer || busy}
                             onClick={() => void submitAnswer(option)}
-                            className={`h-auto min-h-14 justify-start whitespace-normal py-3 text-right text-base ${activeTone.border} ${activeTone.bg}`}
+                            className={`h-auto min-h-14 justify-start rounded-2xl border-2 px-4 py-3 text-right text-base font-semibold transition hover:scale-[1.01] ${activeTone.border} ${activeTone.bg}`}
                           >
-                            <span className="font-semibold">{option}.</span>
-                            <span className="mr-2">{optionText}</span>
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/25 text-sm font-black">
+                              {option}
+                            </span>
+                            <span className="mr-3">{optionText}</span>
                           </Button>
                         )
                       })}
                     </div>
                   </>
                 ) : (
-                  <p className="text-sm text-slate-200">
+                  <p className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-slate-100">
                     {responderName ?? "Player"} من {responderTeam?.name ?? "Team"} يجيب الآن.
                   </p>
                 )}
@@ -472,20 +510,33 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             ) : null}
 
             {room?.trivia.phase === "buzzer_open" ? (
-              <p className="mt-4 text-sm text-slate-300">الوقت المتبقي للبازر: {buzzSeconds} ثانية</p>
+              <p className="mt-4 rounded-xl border border-rose-300/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-100">
+                الوقت المتبقي للبازر: {buzzSeconds} ثانية
+              </p>
             ) : null}
 
-            {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
-            {notice ? <p className="mt-3 rounded-md bg-emerald-500/20 px-3 py-2 text-sm text-emerald-100">{notice}</p> : null}
+            {error ? <p className="party-status-error mt-4 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
+            {notice ? <p className="party-status-success mt-4 rounded-xl px-4 py-3 text-sm font-medium">{notice}</p> : null}
           </article>
         )}
 
         <div className="mt-4 flex gap-2">
-          <Button variant="outline" type="button" onClick={() => void hydrateState()} disabled={!session || busy} className="bg-glass-bg border-glass-border">
-            Refresh
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => void hydrateState()}
+            disabled={!session || busy}
+            className="h-11 rounded-xl border-white/30 bg-white/10 text-slate-100 hover:bg-white/20"
+          >
+            تحديث
           </Button>
-          <Button variant="ghost" type="button" onClick={clearSession} className="text-muted-foreground hover:bg-glass-bg hover:text-foreground">
-            Leave
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={clearSession}
+            className="h-11 rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
+          >
+            خروج
           </Button>
         </div>
       </main>
