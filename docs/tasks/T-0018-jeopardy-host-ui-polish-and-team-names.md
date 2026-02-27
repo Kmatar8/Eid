@@ -20,6 +20,9 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 9. Place host action rail in bottom-left corner.
 10. Keep Jeopardy board centered in TV viewport without vertical page scrolling.
 11. Render host room actions as icon-only controls positioned outside host shell with hover labels.
+12. Localize host action hover labels to Arabic.
+13. Tune host fireworks behavior to match landing style parameters, with Jeopardy-stage intensity reduced to roughly half.
+14. Set Jeopardy board shell visual to ~50% transparency.
 
 ### Out
 1. Trivia rules/timer/scoring logic changes.
@@ -51,7 +54,10 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 6. Action rail is fixed at bottom-left corner.
 7. Trivia board stays centered in viewport without page down-scrolling.
 8. Host action controls are icon-only and show hover labels (`Close Room`, `Sign Out`).
-9. Lint/build pass.
+9. Host action hover labels are Arabic.
+10. Fireworks styling follows landing-page pattern with reduced Jeopardy intensity.
+11. Jeopardy board shell appears at roughly 50% transparency.
+12. Lint/build pass.
 
 ## Validation Checklist
 - [x] Lint pass.
@@ -62,6 +68,9 @@ Refine host Jeopardy interface for TV readability and operator flow: simplify ac
 - [ ] Manual: action rail renders bottom-left.
 - [ ] Manual: trivia board fits TV viewport with no down-scroll.
 - [ ] Manual: icon controls stay outside shell and show hover label on pointer hover.
+- [ ] Manual: hover labels are Arabic.
+- [ ] Manual: Jeopardy board shell appears ~50% transparent.
+- [ ] Manual: fireworks behavior on host matches landing style pattern and appears reduced during Jeopardy.
 
 ## Validation Evidence
 1. `npm run lint` passed with warnings only (no errors).

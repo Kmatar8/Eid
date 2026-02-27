@@ -867,12 +867,19 @@ export default function HostStagePage() {
     return [...(room?.teams ?? [])].sort((a, b) => a.order - b.order)
   }, [room?.teams])
   const isTriviaStage = Boolean(room && stage === "trivia")
+  const fireworksBasePopulation = isTriviaStage ? 1 : 2
+  const fireworksDemoPopulation = isTriviaStage ? 1 : 2
 
   return (
     <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
       <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
-      <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-65" />
-      <FireworksBackgroundDemo population={2} />
+      <FireworksBackground
+        population={fireworksBasePopulation}
+        particleSpeed={4}
+        explosionHeight={{ min: 0, max: 0.15 }}
+        className="absolute inset-0 z-0 pointer-events-none opacity-80"
+      />
+      <FireworksBackgroundDemo population={fireworksDemoPopulation} />
       <div className="party-stage-bg" />
       <div className="party-stage-grid" />
       <div className="pointer-events-none absolute -left-28 top-12 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl" />
@@ -1191,7 +1198,7 @@ export default function HostStagePage() {
             </div>
 
             {/* Jeopardy Board - Now Full Width */}
-            <article className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl p-4 shadow-2xl">
+            <article className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl bg-black/50 p-4 shadow-2xl">
               <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div className="text-center lg:text-right">
                   <p className="text-xs uppercase tracking-[0.25em] text-pink-200">Jeopardy Board</p>
@@ -1442,14 +1449,14 @@ export default function HostStagePage() {
               <button
                 type="button"
                 onClick={() => void handleEndSession()}
-                aria-label="Close Room"
-                title="Close Room"
+                aria-label="إنهاء الفعالية"
+                title="إنهاء الفعالية"
                 className="flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95"
               >
                 <Power className="size-5" />
               </button>
               <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/20 bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                Close Room
+                إنهاء الفعالية
               </span>
             </div>
           ) : null}
@@ -1458,14 +1465,14 @@ export default function HostStagePage() {
             <button
               type="button"
               onClick={handleLogout}
-              aria-label="Sign Out"
-              title="Sign Out"
+              aria-label="تسجيل الخروج"
+              title="تسجيل الخروج"
               className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
             >
               <LogOut className="size-5" />
             </button>
             <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/20 bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-              Sign Out
+              تسجيل الخروج
             </span>
           </div>
         </div>
