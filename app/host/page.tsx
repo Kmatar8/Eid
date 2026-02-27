@@ -868,7 +868,8 @@ export default function HostStagePage() {
   }, [room?.teams])
   const isTriviaStage = Boolean(room && stage === "trivia")
   const fireworksBasePopulation = isTriviaStage ? 1 : 2
-  const fireworksDemoPopulation = isTriviaStage ? 1 : 2
+  const fireworksDemoPopulation = 2
+  const fireworksExplosionHeight = isTriviaStage ? { min: 0.08, max: 0.34 } : { min: 0, max: 0.15 }
 
   return (
     <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
@@ -876,8 +877,8 @@ export default function HostStagePage() {
       <FireworksBackground
         population={fireworksBasePopulation}
         particleSpeed={4}
-        explosionHeight={{ min: 0, max: 0.15 }}
-        className="absolute inset-0 z-0 pointer-events-none opacity-80"
+        explosionHeight={fireworksExplosionHeight}
+        className={`absolute inset-0 z-0 pointer-events-none ${isTriviaStage ? "opacity-90" : "opacity-80"}`}
       />
       <FireworksBackgroundDemo population={fireworksDemoPopulation} />
       <div className="party-stage-bg" />

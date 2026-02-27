@@ -200,6 +200,12 @@ function getColor(color: string | string[] | undefined): string {
     return color ?? randColor();
 }
 
+const DEFAULT_FIREWORK_SPEED = Object.freeze({ min: 4, max: 8 });
+const DEFAULT_FIREWORK_SIZE = Object.freeze({ min: 2, max: 5 });
+const DEFAULT_PARTICLE_SPEED = Object.freeze({ min: 2, max: 7 });
+const DEFAULT_PARTICLE_SIZE = Object.freeze({ min: 1, max: 5 });
+const DEFAULT_EXPLOSION_HEIGHT = Object.freeze({ min: 0.1, max: 0.4 });
+
 type FireworksBackgroundProps = Omit<React.ComponentProps<'div'>, 'color'> & {
     canvasProps?: React.ComponentProps<'canvas'>;
     population?: number;
@@ -217,15 +223,25 @@ function FireworksBackground({
     canvasProps,
     population = 1,
     color,
-    fireworkSpeed = { min: 4, max: 8 },
-    fireworkSize = { min: 2, max: 5 },
-    particleSpeed = { min: 2, max: 7 },
-    particleSize = { min: 1, max: 5 },
-    explosionHeight = { min: 0.1, max: 0.4 },
+    fireworkSpeed = DEFAULT_FIREWORK_SPEED,
+    fireworkSize = DEFAULT_FIREWORK_SIZE,
+    particleSpeed = DEFAULT_PARTICLE_SPEED,
+    particleSize = DEFAULT_PARTICLE_SIZE,
+    explosionHeight = DEFAULT_EXPLOSION_HEIGHT,
     ...props
 }: FireworksBackgroundProps) {
     const canvasRef = React.useRef<HTMLCanvasElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
+    const fireworkSpeedMin = typeof fireworkSpeed === 'number' ? fireworkSpeed : fireworkSpeed.min;
+    const fireworkSpeedMax = typeof fireworkSpeed === 'number' ? fireworkSpeed : fireworkSpeed.max;
+    const fireworkSizeMin = typeof fireworkSize === 'number' ? fireworkSize : fireworkSize.min;
+    const fireworkSizeMax = typeof fireworkSize === 'number' ? fireworkSize : fireworkSize.max;
+    const particleSpeedMin = typeof particleSpeed === 'number' ? particleSpeed : particleSpeed.min;
+    const particleSpeedMax = typeof particleSpeed === 'number' ? particleSpeed : particleSpeed.max;
+    const particleSizeMin = typeof particleSize === 'number' ? particleSize : particleSize.min;
+    const particleSizeMax = typeof particleSize === 'number' ? particleSize : particleSize.max;
+    const explosionHeightMin = explosionHeight.min;
+    const explosionHeightMax = explosionHeight.max;
 
     React.useEffect(() => {
         const canvas = canvasRef.current;
@@ -234,35 +250,62 @@ function FireworksBackground({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        let maxX = window.innerWidth;
-        let ratio = container.offsetHeight / container.offsetWidth;
-        let maxY = maxX * ratio;
-        canvas.width = maxX;
-        canvas.height = maxY;
+        let maxX = 0;
+        let maxY = 0;
+        const devicePixelRatio = window.devicePixelRatio || 1;
+
+        const resolvedFireworkSpeed =
+            fireworkSpeedMin === fireworkSpeedMax
+                ? fireworkSpeedMin
+                : { min: fireworkSpeedMin, max: fireworkSpeedMax };
+        const resolvedFireworkSize =
+            fireworkSizeMin === fireworkSizeMax
+                ? fireworkSizeMin
+                : { min: fireworkSizeMin, max: fireworkSizeMax };
+        const resolvedParticleSpeed =
+            particleSpeedMin === particleSpeedMax
+                ? particleSpeedMin
+                : { min: particleSpeedMin, max: particleSpeedMax };
+        const resolvedParticleSize =
+            particleSizeMin === particleSizeMax
+                ? particleSizeMin
+                : { min: particleSizeMin, max: particleSizeMax };
 
         const setCanvasSize = () => {
-            maxX = window.innerWidth;
-            ratio = container.offsetHeight / container.offsetWidth;
-            maxY = maxX * ratio;
-            canvas.width = maxX;
-            canvas.height = maxY;
+            const width = Math.max(1, Math.floor(container.clientWidth || window.innerWidth));
+            const height = Math.max(1, Math.floor(container.clientHeight || window.innerHeight));
+
+            maxX = width;
+            maxY = height;
+            canvas.width = Math.floor(width * devicePixelRatio);
+            canvas.height = Math.floor(height * devicePixelRatio);
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         };
+        setCanvasSize();
         window.addEventListener('resize', setCanvasSize);
 
         const explosions: ParticleType[] = [];
         const fireworks: FireworkType[] = [];
+        const effectivePopulation = Math.max(0.2, population);
+        let launchTimeoutId: number | null = null;
+        let disposed = false;
 
         const handleExplosion = (particles: ParticleType[]) => {
             explosions.push(...particles);
         };
 
         const launchFirework = () => {
+            if (disposed) {
+                return;
+            }
             const x = rand(maxX * 0.1, maxX * 0.9);
             const y = maxY;
-            const targetY = rand(maxY * explosionHeight.min, maxY * explosionHeight.max);
+            const targetY = rand(maxY * explosionHeightMin, maxY * explosionHeightMax);
             const fireworkColor = getColor(color);
-            const speed = getValueByRange(fireworkSpeed);
-            const size = getValueByRange(fireworkSize);
+            const speed = getValueByRange(resolvedFireworkSpeed);
+            const size = getValueByRange(resolvedFireworkSize);
             fireworks.push(
                 createFirework(
                     x,
@@ -271,19 +314,32 @@ function FireworksBackground({
                     fireworkColor,
                     speed,
                     size,
-                    particleSpeed,
-                    particleSize,
+                    resolvedParticleSpeed,
+                    resolvedParticleSize,
                     handleExplosion,
                 ),
             );
-            const timeout = rand(300, 800) / population;
-            setTimeout(launchFirework, timeout);
+        };
+
+        const scheduleNextLaunch = () => {
+            if (disposed) {
+                return;
+            }
+            const timeout = rand(300, 800) / effectivePopulation;
+            launchTimeoutId = window.setTimeout(() => {
+                launchFirework();
+                scheduleNextLaunch();
+            }, timeout);
         };
 
         launchFirework();
+        scheduleNextLaunch();
 
         let animationFrameId: number;
         const animate = () => {
+            if (disposed) {
+                return;
+            }
             ctx.clearRect(0, 0, maxX, maxY);
 
             for (let i = fireworks.length - 1; i >= 0; i--) {
@@ -311,12 +367,13 @@ function FireworksBackground({
         animate();
 
         const handleClick = (event: MouseEvent) => {
-            const x = event.clientX;
+            const rect = container.getBoundingClientRect();
+            const x = event.clientX - rect.left;
             const y = maxY;
-            const targetY = event.clientY;
+            const targetY = Math.max(0, Math.min(maxY, event.clientY - rect.top));
             const fireworkColor = getColor(color);
-            const speed = getValueByRange(fireworkSpeed);
-            const size = getValueByRange(fireworkSize);
+            const speed = getValueByRange(resolvedFireworkSpeed);
+            const size = getValueByRange(resolvedFireworkSize);
             fireworks.push(
                 createFirework(
                     x,
@@ -325,8 +382,8 @@ function FireworksBackground({
                     fireworkColor,
                     speed,
                     size,
-                    particleSpeed,
-                    particleSize,
+                    resolvedParticleSpeed,
+                    resolvedParticleSize,
                     handleExplosion,
                 ),
             );
@@ -335,18 +392,27 @@ function FireworksBackground({
         container.addEventListener('click', handleClick);
 
         return () => {
+            disposed = true;
             window.removeEventListener('resize', setCanvasSize);
             container.removeEventListener('click', handleClick);
+            if (launchTimeoutId !== null) {
+                window.clearTimeout(launchTimeoutId);
+            }
             cancelAnimationFrame(animationFrameId);
         };
     }, [
         population,
         color,
-        fireworkSpeed,
-        fireworkSize,
-        particleSpeed,
-        particleSize,
-        explosionHeight,
+        fireworkSpeedMin,
+        fireworkSpeedMax,
+        fireworkSizeMin,
+        fireworkSizeMax,
+        particleSpeedMin,
+        particleSpeedMax,
+        particleSizeMin,
+        particleSizeMax,
+        explosionHeightMin,
+        explosionHeightMax,
     ]);
 
     return (
