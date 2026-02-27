@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import { FeedbackOverlay } from "@/components/ui/feedback-animations"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction } from "@/lib/client/live-api"
 import { clearPlayerSession, getPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
@@ -66,17 +68,17 @@ function shouldRetrySubmit(error: unknown) {
 function getTeamTone(teamId: string | null | undefined): TeamTone {
   if (!teamId) {
     return {
-      border: "border-white/20",
-      text: "text-slate-100",
-      bg: "bg-white/5",
+      border: "border-glass-border",
+      text: "text-foreground",
+      bg: "bg-glass-bg",
     }
   }
 
   return (
     TEAM_TONES[teamId] ?? {
-      border: "border-white/20",
-      text: "text-slate-100",
-      bg: "bg-white/5",
+      border: "border-glass-border",
+      text: "text-foreground",
+      bg: "bg-glass-bg",
     }
   )
 }
@@ -96,6 +98,16 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
+
+  useEffect(() => {
+    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult) {
+      const { reason, wasCorrect } = room.trivia.lastResult
+      if (reason !== "no_buzz" && reason !== "host_skip") {
+        setFeedbackState(wasCorrect ? "correct" : "wrong")
+      }
+    }
+  }, [room?.trivia?.phase, room?.trivia?.lastResult])
 
   const hydrateState = useCallback(async () => {
     if (!session) {
@@ -349,107 +361,117 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-xl px-4 py-7 text-white">
-      {!session ? (
-        <section className="rounded-2xl border border-white/15 bg-white/5 p-5">
-          <p className="text-sm text-slate-200">No local player session found for this room.</p>
-          <p className="mt-2 text-sm text-slate-300">
-            Join first via{" "}
-            <Link className="text-cyan-300 underline" href={`/join/${roomId}`}>
-              /join/{roomId}
-            </Link>
-            .
-          </p>
-          {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
-        </section>
-      ) : (
-        <article className={`rounded-3xl border p-5 ${activeTone.border} ${activeTone.bg}`}>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Controller</p>
-          <h1 className="mt-2 text-2xl font-bold">{session.playerName}</h1>
-          <p className="mt-1 text-sm text-slate-300">{myTeam ? `Team: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
+    <div className="relative min-h-screen overflow-hidden text-foreground">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)] z-[-2]" />
+      <div className="pointer-events-none fixed inset-0 bg-[size:56px_56px] z-[-1] opacity-60" style={{ backgroundImage: 'linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)' }} />
+      <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
 
-          <div className="mt-4 rounded-xl border border-white/20 bg-black/35 px-4 py-3">
-            <p className={`text-base font-semibold ${activeTone.text}`}>{statusText}</p>
-          </div>
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-xl px-4 py-7">
+        <div className="flex justify-end mb-4">
+          <ThemeToggle />
+        </div>
 
-          {selectedClue ? (
-            <div className="mt-4 rounded-xl border border-white/20 bg-black/35 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-300">
-                {selectedClue.categoryName} | {selectedClue.points} points
-              </p>
-              {isCountdownPhase ? (
-                <div className="mt-3 rounded-xl border border-white/20 bg-black/30 p-4 text-center">
-                  <p className="text-sm text-slate-200">استعد للبازر</p>
-                  <p className="mt-1 text-7xl font-black leading-none text-amber-200 animate-pulse">
-                    {countdownSeconds}
-                  </p>
-                </div>
-              ) : null}
-              {isQuestionRevealed ? <p className="mt-2 text-xl font-semibold leading-relaxed">{selectedClue.prompt}</p> : null}
+        {!session ? (
+          <section className="rounded-2xl border border-glass-border bg-glass-bg p-5 backdrop-blur-md">
+            <p className="text-sm text-slate-200">No local player session found for this room.</p>
+            <p className="mt-2 text-sm text-slate-300">
+              Join first via{" "}
+              <Link className="text-cyan-300 underline" href={`/join/${roomId}`}>
+                /join/{roomId}
+              </Link>
+              .
+            </p>
+            {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
+          </section>
+        ) : (
+          <article className={`rounded-3xl border p-5 ${activeTone.border} ${activeTone.bg} backdrop-blur-xl shadow-lg`}>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Controller</p>
+            <h1 className="mt-2 text-2xl font-bold">{session.playerName}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{myTeam ? `Team: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
+
+            <div className="mt-4 rounded-xl border border-glass-border bg-glass-bg px-4 py-3 shadow-inner">
+              <p className={`text-base font-semibold ${activeTone.text}`}>{statusText}</p>
             </div>
-          ) : null}
 
-          {canBuzz ? (
-            <Button
-              type="button"
-              disabled={busy}
-              onClick={() => void submitBuzz()}
-              className="mt-5 h-20 w-full rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 text-xl font-black text-slate-950"
-            >
-              🔔 اضغط البازر الآن
-            </Button>
-          ) : null}
-
-          {room?.trivia.phase === "answer_active" ? (
-            <div className="mt-4 space-y-2">
-              {canAnswer ? (
-                <>
-                  <p className={`text-sm font-semibold ${activeTone.text}`}>{session.playerName}, this question is for you.</p>
-                  <p className="text-sm text-slate-300">الوقت المتبقي للإجابة: {answerSeconds} ثانية</p>
-                  <div className="grid gap-2">
-                    {(selectedClue?.options ?? []).map((optionText, index) => {
-                      const option = optionLetter(index)
-                      return (
-                        <Button
-                          key={option}
-                          type="button"
-                          variant="outline"
-                          disabled={!canAnswer || busy}
-                          onClick={() => void submitAnswer(option)}
-                          className={`h-auto min-h-14 justify-start whitespace-normal py-3 text-right text-base ${activeTone.border} ${activeTone.bg}`}
-                        >
-                          <span className="font-semibold">{option}.</span>
-                          <span className="mr-2">{optionText}</span>
-                        </Button>
-                      )
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-200">
-                  {responderName ?? "Player"} من {responderTeam?.name ?? "Team"} يجيب الآن.
+            {selectedClue ? (
+              <div className="mt-4 rounded-xl border border-glass-border bg-glass-bg p-4 shadow-sm">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  {selectedClue.categoryName} | {selectedClue.points} points
                 </p>
-              )}
-            </div>
-          ) : null}
+                {isCountdownPhase ? (
+                  <div className="mt-3 rounded-xl border border-glass-border bg-background/50 p-4 text-center">
+                    <p className="text-sm text-muted-foreground">استعد للبازر</p>
+                    <p className="mt-1 text-7xl font-black leading-none text-primary animate-pulse">
+                      {countdownSeconds}
+                    </p>
+                  </div>
+                ) : null}
+                {isQuestionRevealed ? <p className="mt-2 text-xl font-semibold leading-relaxed">{selectedClue.prompt}</p> : null}
+              </div>
+            ) : null}
 
-          {room?.trivia.phase === "buzzer_open" ? (
-            <p className="mt-4 text-sm text-slate-300">الوقت المتبقي للبازر: {buzzSeconds} ثانية</p>
-          ) : null}
+            {canBuzz ? (
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => void submitBuzz()}
+                className="mt-5 h-24 w-full rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 text-2xl font-black text-white shadow-[0_0_40px_rgba(225,29,72,0.6)] hover:scale-105 active:scale-95 transition-all animate-pulse"
+              >
+                🔔 اضغط البازر الآن!
+              </Button>
+            ) : null}
 
-          {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
-          {notice ? <p className="mt-3 rounded-md bg-emerald-500/20 px-3 py-2 text-sm text-emerald-100">{notice}</p> : null}
-        </article>
-      )}
+            {room?.trivia.phase === "answer_active" ? (
+              <div className="mt-4 space-y-2">
+                {canAnswer ? (
+                  <>
+                    <p className={`text-sm font-semibold ${activeTone.text}`}>{session.playerName}, this question is for you.</p>
+                    <p className="text-sm text-slate-300">الوقت المتبقي للإجابة: {answerSeconds} ثانية</p>
+                    <div className="grid gap-2">
+                      {(selectedClue?.options ?? []).map((optionText, index) => {
+                        const option = optionLetter(index)
+                        return (
+                          <Button
+                            key={option}
+                            type="button"
+                            variant="outline"
+                            disabled={!canAnswer || busy}
+                            onClick={() => void submitAnswer(option)}
+                            className={`h-auto min-h-14 justify-start whitespace-normal py-3 text-right text-base ${activeTone.border} ${activeTone.bg}`}
+                          >
+                            <span className="font-semibold">{option}.</span>
+                            <span className="mr-2">{optionText}</span>
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-200">
+                    {responderName ?? "Player"} من {responderTeam?.name ?? "Team"} يجيب الآن.
+                  </p>
+                )}
+              </div>
+            ) : null}
 
-      <div className="mt-4 flex gap-2">
-        <Button variant="outline" type="button" onClick={() => void hydrateState()} disabled={!session || busy}>
-          Refresh
-        </Button>
-        <Button variant="ghost" type="button" onClick={clearSession} className="text-slate-300">
-          Leave
-        </Button>
-      </div>
-    </main>
+            {room?.trivia.phase === "buzzer_open" ? (
+              <p className="mt-4 text-sm text-slate-300">الوقت المتبقي للبازر: {buzzSeconds} ثانية</p>
+            ) : null}
+
+            {error ? <p className="mt-3 rounded-md bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
+            {notice ? <p className="mt-3 rounded-md bg-emerald-500/20 px-3 py-2 text-sm text-emerald-100">{notice}</p> : null}
+          </article>
+        )}
+
+        <div className="mt-4 flex gap-2">
+          <Button variant="outline" type="button" onClick={() => void hydrateState()} disabled={!session || busy} className="bg-glass-bg border-glass-border">
+            Refresh
+          </Button>
+          <Button variant="ghost" type="button" onClick={clearSession} className="text-muted-foreground hover:bg-glass-bg hover:text-foreground">
+            Leave
+          </Button>
+        </div>
+      </main>
+    </div>
   )
 }

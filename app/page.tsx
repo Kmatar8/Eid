@@ -21,6 +21,7 @@ import {
 
 import { FireworksBackground } from "@/components/ui/fireworks"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -220,12 +221,17 @@ export default function Home() {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-white"
+      className="relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-foreground"
       style={{
-        background: `radial-gradient(circle_at_top, rgba(139, 92, 246, 0.1), transparent 50%), linear-gradient(160deg, #0c0a1f 0%, #1e1b4b 46%, #0c0a1f 100%)`
+        background: `radial-gradient(circle at top, var(--festive-glow), transparent 50%), linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%)`
       }}
     >
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:54px_54px] opacity:20" />
+      <div
+        className="pointer-events-none absolute inset-0 bg-[size:54px_54px] opacity-20"
+        style={{
+          backgroundImage: `linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)`
+        }}
+      />
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -246,7 +252,7 @@ export default function Home() {
       {festiveSymbols.map((item) => (
         <motion.span
           key={item.id}
-          className="pointer-events-none absolute text-xl text-amber-100/70 drop-shadow-[0_0_20px_rgba(251,191,36,0.65)]"
+          className="pointer-events-none absolute text-xl text-primary/70 drop-shadow-[0_0_20px_var(--festive-glow)]"
           style={{ left: item.left, top: item.top }}
           initial={{ opacity: 0.15, y: 0, rotate: 0 }}
           animate={{ opacity: [0.2, 0.7, 0.2], y: [0, -18, 0], rotate: [0, 10, 0] }}
@@ -275,14 +281,15 @@ export default function Home() {
           </div>
 
           <div className="absolute left-6 top-6 z-50 flex items-center gap-3">
+            <ThemeToggle />
             <Button
               variant="outline"
               size="icon"
               className={cn(
-                "rounded-full border-white/20 text-white transition-all",
+                "rounded-full border-glass-border text-foreground transition-all backdrop-blur-md",
                 isTVMode
-                  ? "border-amber-500/50 bg-amber-500/20 text-amber-300"
-                  : "bg-white/10 hover:bg-white/20"
+                  ? "border-primary/50 bg-primary/20 text-primary"
+                  : "bg-glass-bg hover:bg-glass-border"
               )}
               onClick={() => setIsTVMode(!isTVMode)}
             >
@@ -292,7 +299,7 @@ export default function Home() {
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full border-white/20 bg-white/10 text-white hover:bg-white/20"
+              className="rounded-full border-glass-border bg-glass-bg text-foreground hover:bg-glass-border backdrop-blur-md"
               onClick={toggleFullscreen}
             >
               <Maximize2 className="h-5 w-5" />
@@ -300,7 +307,7 @@ export default function Home() {
           </div>
 
           <h1 className={cn(
-            "text-balance font-extrabold tracking-tight text-white drop-shadow-[0_12px_30px_rgba(0,0,0,0.45)] font-cairo transition-all duration-500",
+            "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
             isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
           )}>
             اختر لعبة الليلة
@@ -347,15 +354,14 @@ export default function Home() {
                 >
                   <Card
                     className={cn(
-                      "relative h-[30rem] overflow-hidden border-white/20 bg-black/10 py-0 text-white backdrop-blur-xl",
+                      "relative h-[30rem] overflow-hidden border-glass-border bg-glass-bg py-0 text-foreground backdrop-blur-xl shadow-xl",
                       isSelected
-                        ? "border-white/60 bg-white/5"
+                        ? "border-primary/60 ring-2 ring-primary/20 bg-glass-bg"
                         : ""
                     )}
-                    style={{ backgroundColor: "rgba(0, 0, 0, 0.1)" }}
                   >
                     <div className="h-[42%] overflow-hidden relative">
-                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/90 to-orange-500/90 text-2xl font-black text-slate-950 backdrop-blur-md border border-white/40 shadow-lg">
+                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-orange-500 text-2xl font-black text-white backdrop-blur-md border border-glass-border shadow-lg">
                         {index + 1}
                       </div>
 
@@ -373,7 +379,7 @@ export default function Home() {
                       <div
                         className="pointer-events-none absolute inset-0"
                         style={{
-                          backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0) 20%, rgba(15,23,42,0.4) 70%, rgba(15,23,42,0.7) 100%)`,
+                          backgroundImage: `linear-gradient(to bottom, transparent 20%, var(--glass-bg) 70%, var(--card) 100%)`,
                         }}
                       />
                     </div>
@@ -392,25 +398,25 @@ export default function Home() {
                     </CardHeader>
 
                     <CardContent className={cn(
-                      "pb-8 text-white/90 font-cairo transition-all duration-300 leading-relaxed",
+                      "pb-8 text-foreground/90 font-cairo transition-all duration-300 leading-relaxed",
                       isTVMode ? "text-lg" : "text-base"
                     )}>
                       <p className="line-clamp-2 opacity-80">{game.description}</p>
 
                       <div className="mt-8 grid grid-cols-2 gap-4">
-                        <div className="rounded-xl bg-white/5 p-3 border border-white/10 backdrop-blur-md">
+                        <div className="rounded-xl bg-glass-bg p-3 border border-glass-border backdrop-blur-md">
                           <div className="flex items-center gap-2 mb-1">
-                            <Users className="size-4 text-amber-400" />
+                            <Users className="size-4 text-primary" />
                             <p className="text-xs opacity-60">اللاعبين</p>
                           </div>
-                          <p className="text-lg font-bold text-white">{game.players}</p>
+                          <p className="text-lg font-bold text-foreground">{game.players}</p>
                         </div>
-                        <div className="rounded-xl bg-white/5 p-3 border border-white/10 backdrop-blur-md">
+                        <div className="rounded-xl bg-glass-bg p-3 border border-glass-border backdrop-blur-md">
                           <div className="flex items-center gap-2 mb-1">
-                            <Timer className="size-4 text-cyan-400" />
+                            <Timer className="size-4 text-cyan-500" />
                             <p className="text-xs opacity-60">المدة</p>
                           </div>
-                          <p className="text-lg font-bold text-white">{game.duration}</p>
+                          <p className="text-lg font-bold text-foreground">{game.duration}</p>
                         </div>
                       </div>
                     </CardContent>

@@ -32,7 +32,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl">
-      <body className={`${cairo.className} antialiased bg-[#0c0a1f] text-slate-50 selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden`}>
+      <body className={`${cairo.className} antialiased bg-background text-foreground selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden transition-colors duration-500`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

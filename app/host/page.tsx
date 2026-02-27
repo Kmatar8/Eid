@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
+import { FeedbackOverlay } from "@/components/ui/feedback-animations"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
 import {
   clearHostRoomId,
@@ -117,6 +118,7 @@ export default function HostStagePage() {
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
 
   useEffect(() => {
     if (!hostToken) {
@@ -130,6 +132,15 @@ export default function HostStagePage() {
     }, CLOCK_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult) {
+      const { reason, wasCorrect } = room.trivia.lastResult
+      if (reason !== "no_buzz" && reason !== "host_skip") {
+        setFeedbackState(wasCorrect ? "correct" : "wrong")
+      }
+    }
+  }, [room?.trivia?.phase, room?.trivia?.lastResult])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
@@ -540,11 +551,12 @@ export default function HostStagePage() {
   }, [room])
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-white">
+    <div className="relative min-h-screen overflow-hidden text-foreground">
+      <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
       <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-65" />
       <FireworksBackgroundDemo population={2} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.14),transparent_52%),linear-gradient(160deg,#090f1e_0%,#1a2052_48%,#090f1e_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:56px_56px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,var(--festive-glow),transparent_52%),linear-gradient(160deg,var(--background)_0%,var(--secondary)_48%,var(--background)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[size:56px_56px]" style={{ backgroundImage: 'linear-gradient(to right, var(--glass-border) 1px, transparent 1px), linear-gradient(to bottom, var(--glass-border) 1px, transparent 1px)' }} />
 
       <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1700px] px-4 pb-28 pt-5 sm:px-8">
         {error ? <p className="mb-3 rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-100">{error}</p> : null}
@@ -675,9 +687,8 @@ export default function HostStagePage() {
                       }}
                       onDragLeave={() => setDropTargetTeamId(null)}
                       onDrop={(event) => void handleDropOnTeam(team.teamId, event)}
-                      className={`min-h-52 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg} ${
-                        isDropActive ? "ring-2 ring-white/30" : ""
-                      }`}
+                      className={`min-h-52 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg} ${isDropActive ? "ring-2 ring-white/30" : ""
+                        }`}
                     >
                       <div className="mb-3 flex items-center justify-between">
                         <p className={`text-xl font-bold ${tone.text}`}>{team.name}</p>
@@ -817,11 +828,10 @@ export default function HostStagePage() {
                           type="button"
                           disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                           onClick={() => void handleSelectTriviaClue(clue.questionId)}
-                          className={`h-16 rounded-xl border text-lg font-black transition ${
-                            isUsed
-                              ? "border-white/10 bg-black/30 text-slate-500"
-                              : "border-amber-300/45 bg-amber-500/15 text-amber-100 hover:bg-amber-500/30"
-                          } ${isSelected ? "ring-2 ring-white/60" : ""}`}
+                          className={`h-16 rounded-xl border text-lg font-black transition ${isUsed
+                            ? "border-white/10 bg-black/30 text-slate-500"
+                            : "border-amber-300/45 bg-amber-500/15 text-amber-100 hover:bg-amber-500/30"
+                            } ${isSelected ? "ring-2 ring-white/60" : ""}`}
                         >
                           {isUsed ? "تم" : clue.points}
                         </button>
@@ -969,7 +979,7 @@ export default function HostStagePage() {
       <div className="fixed bottom-3 left-0 right-0 z-30 px-4">
         <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/65 px-4 py-3 backdrop-blur-xl">
           <p className="text-xs text-slate-200 sm:text-sm">
-            {hostUsername} | الغرفة: {roomId ?? "..." }
+            {hostUsername} | الغرفة: {roomId ?? "..."}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/" className="text-sm text-amber-200 underline-offset-2 hover:underline">
@@ -985,35 +995,37 @@ export default function HostStagePage() {
         </div>
       </div>
 
-      {showTriviaRulesModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-slate-950/95 p-6 text-white shadow-2xl">
-            <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Jeopardy Rules</p>
-            <h3 className="mt-2 text-3xl font-bold">قواعد لعبة الجيوباردي</h3>
-            <ul className="mt-4 space-y-2 text-base text-slate-200">
-              <li>1. لديك 6 فئات وكل فئة فيها 5 أسئلة بقيم 10 إلى 50.</li>
-              <li>2. الدور يتناوب بين الفريقين لاختيار الفئة والقيمة.</li>
-              <li>3. بعد الاختيار يبدأ عدّاد 5 ثوانٍ ثم يفتح البازر 20 ثانية.</li>
-              <li>4. أول لاعب يضغط البازر هو الوحيد الذي يجيب من جهازه.</li>
-              <li>5. الإجابة الصحيحة تضيف النقاط، والخاطئة تخصم نفس القيمة.</li>
-            </ul>
+      {
+        showTriviaRulesModal ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
+            <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-slate-950/95 p-6 text-white shadow-2xl">
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Jeopardy Rules</p>
+              <h3 className="mt-2 text-3xl font-bold">قواعد لعبة الجيوباردي</h3>
+              <ul className="mt-4 space-y-2 text-base text-slate-200">
+                <li>1. لديك 6 فئات وكل فئة فيها 5 أسئلة بقيم 10 إلى 50.</li>
+                <li>2. الدور يتناوب بين الفريقين لاختيار الفئة والقيمة.</li>
+                <li>3. بعد الاختيار يبدأ عدّاد 5 ثوانٍ ثم يفتح البازر 20 ثانية.</li>
+                <li>4. أول لاعب يضغط البازر هو الوحيد الذي يجيب من جهازه.</li>
+                <li>5. الإجابة الصحيحة تضيف النقاط، والخاطئة تخصم نفس القيمة.</li>
+              </ul>
 
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setShowTriviaRulesModal(false)}>
-                إلغاء
-              </Button>
-              <Button
-                type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 font-bold text-slate-950"
-                disabled={Boolean(busyAction)}
-                onClick={() => void handleStartTriviaFromModal()}
-              >
-                إغلاق وبدء اللعبة
-              </Button>
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <Button type="button" variant="outline" onClick={() => setShowTriviaRulesModal(false)}>
+                  إلغاء
+                </Button>
+                <Button
+                  type="button"
+                  className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 font-bold text-slate-950"
+                  disabled={Boolean(busyAction)}
+                  onClick={() => void handleStartTriviaFromModal()}
+                >
+                  إغلاق وبدء اللعبة
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null
+      }
+    </div >
   )
 }
