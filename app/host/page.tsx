@@ -866,9 +866,10 @@ export default function HostStagePage() {
   const orderedTeams = useMemo(() => {
     return [...(room?.teams ?? [])].sort((a, b) => a.order - b.order)
   }, [room?.teams])
+  const isTriviaStage = Boolean(room && stage === "trivia")
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-foreground">
+    <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
       <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
       <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-65" />
       <FireworksBackgroundDemo population={2} />
@@ -877,7 +878,10 @@ export default function HostStagePage() {
       <div className="pointer-events-none absolute -left-28 top-12 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
 
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1820px] px-4 pb-28 pt-5 sm:px-8">
+      <main
+        className={`relative z-10 mx-auto w-full max-w-[1820px] px-4 sm:px-8 ${isTriviaStage ? "h-full overflow-hidden pb-4 pt-4" : "min-h-screen pb-28 pt-5"
+          }`}
+      >
         {error ? <p className="party-status-error mb-3 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
 
         {!room ? (
@@ -1147,8 +1151,8 @@ export default function HostStagePage() {
         ) : null}
 
         {room && stage === "trivia" ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 lg:grid-cols-3">
+          <div className="flex h-full min-h-0 flex-col gap-3">
+            <div className="grid shrink-0 gap-3 lg:grid-cols-3">
               {orderedTeams[0] ? (
                 <article
                   key={orderedTeams[0].teamId}
@@ -1187,14 +1191,14 @@ export default function HostStagePage() {
             </div>
 
             {/* Jeopardy Board - Now Full Width */}
-            <article className="party-surface-strong rounded-3xl p-6 shadow-2xl">
-              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-                <div>
+            <article className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl p-4 shadow-2xl">
+              <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+                <div className="text-center lg:text-right">
                   <p className="text-xs uppercase tracking-[0.25em] text-pink-200">Jeopardy Board</p>
-                  <h3 className="mt-1 text-4xl font-black">اختر فئة وقيمة النقاط</h3>
+                  <h3 className="mt-1 text-2xl font-black lg:text-3xl">اختر فئة وقيمة النقاط</h3>
                 </div>
                 <div className="flex items-center gap-3">
-                  <p className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold">
+                  <p className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-base font-bold lg:text-lg">
                     المتبقي: {trivia?.remainingQuestions ?? 0}
                   </p>
                   {selectedClue && (
@@ -1208,11 +1212,11 @@ export default function HostStagePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-6 gap-3">
+              <div className="grid min-h-0 flex-1 grid-cols-6 grid-rows-[auto_repeat(5,minmax(0,1fr))] gap-2 lg:gap-3">
                 {(trivia?.board ?? []).map((category) => (
                   <div
                     key={`header-${category.categoryId}`}
-                    className="rounded-2xl border border-white/15 bg-white/10 px-2 py-4 text-center text-lg font-black leading-tight text-white shadow-inner"
+                    className="flex min-h-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center text-base font-black leading-tight text-white shadow-inner lg:text-lg"
                   >
                     {category.name}
                   </div>
@@ -1222,7 +1226,7 @@ export default function HostStagePage() {
                   (trivia?.board ?? []).map((category) => {
                     const clue = category.clues[rowIndex]
                     if (!clue) {
-                      return <div key={`empty-${category.categoryId}-${rowIndex}`} className="h-24" />
+                      return <div key={`empty-${category.categoryId}-${rowIndex}`} className="h-full min-h-0" />
                     }
 
                     const isSelected = clue.questionId === trivia?.selectedClue?.questionId
@@ -1233,7 +1237,7 @@ export default function HostStagePage() {
                         type="button"
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
-                        className={`h-24 rounded-2xl border text-3xl font-black transition-all ${isUsed
+                        className={`h-full min-h-0 rounded-2xl border text-2xl font-black transition-all lg:text-3xl ${isUsed
                           ? "border-white/5 bg-glass-bg/30 text-slate-500 opacity-50"
                           : "border-pink-300/45 bg-pink-500/18 text-pink-100 shadow-lg hover:scale-[1.02] hover:bg-pink-500/30 hover:shadow-pink-500/20 active:scale-95"
                           } ${isSelected ? "ring-4 ring-violet-500/60 ring-offset-4 ring-offset-background" : ""}`}
@@ -1431,7 +1435,7 @@ export default function HostStagePage() {
         ) : null}
       </main>
 
-      <div className="fixed left-3 top-1/2 z-30 -translate-y-1/2">
+      <div className="fixed bottom-4 left-4 z-30">
         <div className="party-surface flex flex-col gap-2 rounded-2xl p-2.5">
           {room ? (
             <Button
