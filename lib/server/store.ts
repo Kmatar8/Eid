@@ -1237,6 +1237,7 @@ type ApplyRoomActionResult =
         | "PLAYER_NOT_FOUND"
         | "INVALID_STATE_TRANSITION"
         | "INVALID_TEAM_ASSIGNMENT"
+        | "INVALID_TEAM_NAME"
         | "TEAM_NOT_FOUND"
         | "INVALID_DELTA"
         | "TRIVIA_NOT_ACTIVE"
@@ -1393,6 +1394,33 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         hostId: input.actorId,
         playerId,
         teamId,
+      })
+    } else if (input.actionType === "host.renameTeam") {
+      if (room.state !== "lobby_open" && room.state !== "lobby_locked" && room.state !== "teams_ready") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const teamId = typeof input.payload?.teamId === "string" ? input.payload.teamId : ""
+      const requestedName = typeof input.payload?.name === "string" ? input.payload.name : ""
+      const normalizedName = requestedName
+        .trim()
+        .replace(/\s+/g, " ")
+
+      if (!teamId || normalizedName.length < 2 || normalizedName.length > 24) {
+        return { ok: false, code: "INVALID_TEAM_NAME" }
+      }
+
+      ensureTeamsSeeded(store, room.id)
+      const team = store.teamsByRoom.get(room.id)?.find((entry) => entry.id === teamId)
+      if (!team) {
+        return { ok: false, code: "TEAM_NOT_FOUND" }
+      }
+
+      team.name = normalizedName
+      recordRoomEvent(store, room.id, "room.team_renamed", {
+        hostId: input.actorId,
+        teamId,
+        name: normalizedName,
       })
     } else if (input.actionType === "host.startTeams") {
       if (room.state !== "lobby_locked") {

@@ -73,6 +73,10 @@ export async function POST(request: Request, context: RouteContext) {
         return errorResponse(400, "INVALID_TEAM_ASSIGNMENT", "playerId and teamId are required")
       }
 
+      if (applied.code === "INVALID_TEAM_NAME") {
+        return errorResponse(400, "INVALID_TEAM_NAME", "Team name must be between 2 and 24 characters")
+      }
+
       if (applied.code === "INVALID_DELTA") {
         return errorResponse(400, "INVALID_DELTA", "Score delta must be a non-zero number")
       }

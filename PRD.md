@@ -53,6 +53,7 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
    - Large join QR code and join URL.
    - Live list of joined players.
    - Two team columns with host-controlled assignment interactions.
+   - Editable team names before game start.
 4. Host starts the session from lobby and then sees:
    - Games overview and general rules.
    - CTA to start first game.
@@ -183,6 +184,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 ## 12.1 Host actions
 - `host.lockLobby`
 - `host.assignPlayerTeam`
+- `host.renameTeam`
 - `host.heartbeat`
 - `host.resumeSession`
 - `host.selectAnotherResponder`

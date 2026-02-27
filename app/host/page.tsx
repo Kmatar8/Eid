@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 
@@ -17,7 +16,6 @@ import {
   clearHostSession,
   getHostRoomId,
   getHostToken,
-  getHostUsername,
   setHostRoomId,
 } from "@/lib/client/live-session"
 import type { ClientActionType } from "@/lib/server/protocol-v1"
@@ -167,7 +165,6 @@ export default function HostStagePage() {
   const router = useRouter()
 
   const [hostToken, setHostTokenState] = useState<string | null>(() => getHostToken())
-  const [hostUsername] = useState(() => getHostUsername() ?? "Host")
   const [roomId, setRoomId] = useState<string | null>(() => getHostRoomId())
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
   const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
@@ -179,6 +176,8 @@ export default function HostStagePage() {
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
+  const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
@@ -223,6 +222,20 @@ export default function HostStagePage() {
       document.removeEventListener("visibilitychange", handleVisibility)
     }
   }, [])
+
+  useEffect(() => {
+    if (!notice) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setNotice(null)
+    }, 3200)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [notice])
 
   useEffect(() => {
     const currentQId = room?.trivia?.selectedClue?.questionId ?? null
@@ -329,6 +342,21 @@ export default function HostStagePage() {
 
     return grouped
   }, [assignmentByPlayer, room])
+
+  useEffect(() => {
+    if (!room) {
+      return
+    }
+
+    setTeamNameDrafts((previous) => {
+      const next: Record<string, string> = {}
+      for (const team of room.teams) {
+        const preserved = previous[team.teamId]
+        next[team.teamId] = preserved && preserved.trim().length > 0 ? preserved : team.name
+      }
+      return next
+    })
+  }, [room])
 
   const refreshState = useCallback(async () => {
     if (!hostToken || !roomId) {
@@ -542,6 +570,30 @@ export default function HostStagePage() {
     [runAction]
   )
 
+  const handleRenameTeam = useCallback(
+    async (teamId: string) => {
+      const draft = teamNameDrafts[teamId] ?? ""
+      const name = draft
+        .trim()
+        .replace(/\s+/g, " ")
+      if (name.length < 2 || name.length > 24) {
+        setError("اسم الفريق يجب أن يكون بين حرفين و24 حرفًا.")
+        return
+      }
+
+      try {
+        setRenamingTeamId(teamId)
+        await runAction("host.renameTeam", { teamId, name })
+        setNotice(`تم تحديث اسم الفريق إلى: ${name}`)
+      } catch (requestError) {
+        setError(toErrorMessage(requestError))
+      } finally {
+        setRenamingTeamId(null)
+      }
+    },
+    [runAction, teamNameDrafts]
+  )
+
   const handleDropOnTeam = useCallback(
     async (teamId: string, event: DragEvent<HTMLDivElement>) => {
       event.preventDefault()
@@ -693,9 +745,26 @@ export default function HostStagePage() {
     trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
 
   const canSelectClue = trivia?.status === "in_progress" && trivia.phase === "board_turn"
+  const canAdvanceFromQuestionModal =
+    trivia?.status === "in_progress" &&
+    (trivia.phase === "answer_reveal" ||
+      trivia.phase === "countdown" ||
+      trivia.phase === "buzzer_open" ||
+      trivia.phase === "answer_active")
   const isCountdownPhase = trivia?.phase === "countdown"
   const isQuestionRevealed =
     trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active" || trivia?.phase === "answer_reveal"
+
+  const handleQuestionModalExit = useCallback(async () => {
+    setFeedbackState(null)
+
+    if (!canAdvanceFromQuestionModal) {
+      setShowQuestionModal(false)
+      return
+    }
+
+    await handleAdvanceTurn()
+  }, [canAdvanceFromQuestionModal, handleAdvanceTurn])
 
   const boardRowIndexes = useMemo(() => {
     const maxRows = Math.max(...(trivia?.board ?? []).map((category) => category.clues.length), 0)
@@ -754,6 +823,27 @@ export default function HostStagePage() {
     buzzSeconds,
   ])
 
+  const liveStatusCommandText = useMemo(() => {
+    const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
+    const pickerName = currentPicker?.displayName ?? "لاعب الفريق"
+
+    if (trivia?.phase === "board_turn") {
+      return `${pickerName} من ${teamName} اختر سؤال`
+    }
+
+    if (trivia?.phase === "countdown" || trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active") {
+      const responderName = responderPlayer?.displayName ?? pickerName
+      const responderTeamName = responderTeam?.name ?? teamName
+      return `${responderName} من ${responderTeamName} يجيب الآن`
+    }
+
+    if (trivia?.phase === "answer_reveal") {
+      return "تم كشف النتيجة. العودة للوحة لاختيار سؤال جديد."
+    }
+
+    return `${pickerName} من ${teamName} اختر سؤال`
+  }, [currentPicker?.displayName, currentTurnTeam?.name, responderPlayer?.displayName, responderTeam?.name, trivia?.phase])
+
   const winningSummary = useMemo(() => {
     if (!room) {
       return null
@@ -773,6 +863,10 @@ export default function HostStagePage() {
     }
   }, [room])
 
+  const orderedTeams = useMemo(() => {
+    return [...(room?.teams ?? [])].sort((a, b) => a.order - b.order)
+  }, [room?.teams])
+
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
       <FeedbackOverlay currentStatus={feedbackState} onComplete={() => setFeedbackState(null)} />
@@ -785,7 +879,6 @@ export default function HostStagePage() {
 
       <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1820px] px-4 pb-28 pt-5 sm:px-8">
         {error ? <p className="party-status-error mb-3 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
-        {notice ? <p className="party-status-success mb-3 rounded-xl px-4 py-3 text-sm font-medium">{notice}</p> : null}
 
         {!room ? (
           <section className="party-surface-strong rounded-3xl p-10 text-center">
@@ -823,6 +916,41 @@ export default function HostStagePage() {
                 ) : (
                   <p className="text-slate-400">غير متاح</p>
                 )}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-3">
+                <p className="text-sm font-semibold text-slate-100">أسماء الفرق</p>
+                <div className="mt-3 space-y-3">
+                  {room.teams.map((team) => {
+                    const tone = getTeamTone(team.teamId)
+                    const isSaving = renamingTeamId === team.teamId
+                    return (
+                      <div key={`name-editor-${team.teamId}`} className="rounded-xl border border-white/15 bg-black/20 p-2.5">
+                        <label className="mb-1 block text-xs text-slate-300">{team.teamId === "team_a" ? "الفريق الأول" : "الفريق الثاني"}</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={teamNameDrafts[team.teamId] ?? ""}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setTeamNameDrafts((previous) => ({ ...previous, [team.teamId]: value }))
+                            }}
+                            className={`h-10 flex-1 rounded-lg border bg-black/30 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-400/50 ${tone.border}`}
+                            maxLength={24}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={Boolean(busyAction) || isSaving}
+                            onClick={() => void handleRenameTeam(team.teamId)}
+                            className="h-10 rounded-lg bg-white/15 px-3 text-xs font-bold hover:bg-white/25"
+                          >
+                            {isSaving ? "جارٍ الحفظ..." : "حفظ"}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
 
               <Button
@@ -1020,25 +1148,43 @@ export default function HostStagePage() {
 
         {room && stage === "trivia" ? (
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              {room.teams.map((team) => {
-                const tone = getTeamTone(team.teamId)
-                return (
-                  <article key={team.teamId} className={`rounded-2xl border p-4 shadow-xl ${tone.border} ${tone.bg}`}>
-                    <p className={`text-xl font-semibold ${tone.text}`}>{team.name}</p>
-                    <p className="mt-1 text-6xl font-black leading-none">{team.score}</p>
-                  </article>
-                )
-              })}
-            </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              {orderedTeams[0] ? (
+                <article
+                  key={orderedTeams[0].teamId}
+                  className={`rounded-2xl border p-4 text-center shadow-xl ${getTeamTone(orderedTeams[0].teamId).border} ${getTeamTone(orderedTeams[0].teamId).bg}`}
+                >
+                  <p className={`text-xl font-semibold ${getTeamTone(orderedTeams[0].teamId).text}`}>{orderedTeams[0].name}</p>
+                  <p className="mt-1 text-6xl font-black leading-none">{orderedTeams[0].score}</p>
+                </article>
+              ) : null}
 
-            <article className={`party-surface rounded-3xl border p-5 ${currentTone.border} ${currentTone.bg}`}>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-200">Live Status</p>
-              <h2 className="mt-2 text-3xl font-bold leading-tight">{liveHeadline}</h2>
-              <p className="mt-2 text-base text-slate-200">
-                تم استخدام {trivia?.questionIndex ?? 0} من {trivia?.totalQuestions ?? 0} سؤال.
-              </p>
-            </article>
+              <article className={`party-surface relative overflow-hidden rounded-2xl border p-4 text-center shadow-xl ${currentTone.border} ${currentTone.bg}`}>
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+                  <motion.div
+                    className="absolute -left-20 top-0 h-full w-16 bg-gradient-to-r from-transparent via-cyan-300/65 to-transparent blur-md"
+                    animate={{ x: ["0%", "210%"] }}
+                    transition={{ duration: 1.6, ease: "linear", repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.25 }}
+                  />
+                </div>
+                <p className="relative text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Live Status</p>
+                <h2 className="relative mt-2 text-2xl font-extrabold leading-tight text-white">{liveStatusCommandText}</h2>
+                <p className="relative mt-2 text-sm text-slate-200">{liveHeadline}</p>
+                <p className="relative mt-1 text-sm text-slate-300">
+                  تم استخدام {trivia?.questionIndex ?? 0} من {trivia?.totalQuestions ?? 0} سؤال.
+                </p>
+              </article>
+
+              {orderedTeams[1] ? (
+                <article
+                  key={orderedTeams[1].teamId}
+                  className={`rounded-2xl border p-4 text-center shadow-xl ${getTeamTone(orderedTeams[1].teamId).border} ${getTeamTone(orderedTeams[1].teamId).bg}`}
+                >
+                  <p className={`text-xl font-semibold ${getTeamTone(orderedTeams[1].teamId).text}`}>{orderedTeams[1].name}</p>
+                  <p className="mt-1 text-6xl font-black leading-none">{orderedTeams[1].score}</p>
+                </article>
+              ) : null}
+            </div>
 
             {/* Jeopardy Board - Now Full Width */}
             <article className="party-surface-strong rounded-3xl p-6 shadow-2xl">
@@ -1115,7 +1261,7 @@ export default function HostStagePage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setShowQuestionModal(false)}
+                        onClick={() => void handleQuestionModalExit()}
                         className="rounded-full bg-white/5 hover:bg-white/10"
                       >
                         <X className="size-6" />
@@ -1226,15 +1372,8 @@ export default function HostStagePage() {
                           <Button
                             type="button"
                             className="h-20 w-full rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-2xl font-bold shadow-xl hover:scale-[1.01] transition-all"
-                            disabled={
-                              Boolean(busyAction) ||
-                              trivia?.status !== "in_progress" ||
-                              (trivia?.phase !== "answer_reveal" &&
-                                trivia?.phase !== "countdown" &&
-                                trivia?.phase !== "buzzer_open" &&
-                                trivia?.phase !== "answer_active")
-                            }
-                            onClick={() => void handleAdvanceTurn()}
+                            disabled={Boolean(busyAction) || !canAdvanceFromQuestionModal}
+                            onClick={() => void handleQuestionModalExit()}
                           >
                             {trivia?.phase === "answer_reveal" ? "العودة للوحة (السؤال التالي)" : "تخطي السؤال الحالي"}
                           </Button>
@@ -1292,29 +1431,40 @@ export default function HostStagePage() {
         ) : null}
       </main>
 
-      <div className="fixed bottom-3 left-0 right-0 z-30 px-4">
-        <div className="party-surface mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
-          <p className="text-xs text-slate-200 sm:text-sm">
-            {hostUsername} | الغرفة: {roomId ?? "..."}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/" className="text-sm text-amber-200 underline-offset-2 hover:underline">
-              العودة للهبوط
-            </Link>
-            <Button type="button" variant="outline" onClick={() => void refreshState()} disabled={!roomId}>
-              تحديث
+      <div className="fixed left-3 top-1/2 z-30 -translate-y-1/2">
+        <div className="party-surface flex flex-col gap-2 rounded-2xl p-2.5">
+          {room ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-11 rounded-xl bg-red-500/20 text-red-100 hover:bg-red-500/40"
+              onClick={() => void handleEndSession()}
+            >
+              إنهاء الفعالية
             </Button>
-            {room ? (
-              <Button type="button" variant="destructive" className="bg-red-500/20 text-red-100 hover:bg-red-500/40" onClick={() => void handleEndSession()}>
-                إنهاء الفعالية
-              </Button>
-            ) : null}
-            <Button type="button" variant="destructive" onClick={handleLogout}>
-              تسجيل خروج
-            </Button>
-          </div>
+          ) : null}
+          <Button type="button" variant="destructive" className="h-11 rounded-xl" onClick={handleLogout}>
+            تسجيل خروج
+          </Button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {notice ? (
+          <motion.div
+            key={notice}
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className="party-status-success fixed bottom-4 right-4 z-40 max-w-md rounded-xl px-4 py-3 text-sm font-medium shadow-2xl"
+            role="status"
+            aria-live="polite"
+          >
+            {notice}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {
         showTriviaRulesModal ? (

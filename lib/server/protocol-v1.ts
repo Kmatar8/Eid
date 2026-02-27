@@ -6,6 +6,7 @@ export type HostActionType =
   | "host.resumeSession"
   | "host.lockLobby"
   | "host.assignPlayerTeam"
+  | "host.renameTeam"
   | "host.selectAnotherResponder"
   | "host.startTeams"
   | "host.startGame"
@@ -42,6 +43,7 @@ const HOST_ACTIONS = new Set<HostActionType>([
   "host.resumeSession",
   "host.lockLobby",
   "host.assignPlayerTeam",
+  "host.renameTeam",
   "host.selectAnotherResponder",
   "host.startTeams",
   "host.startGame",
