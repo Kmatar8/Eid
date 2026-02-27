@@ -95,6 +95,8 @@ Room becomes inactive when:
 ## 7.3 Timeouts (recommended)
 1. `lobby_open` idle timeout: `45 minutes`.
 2. `paused_wait_host` grace: `20 minutes`.
+   - Triggered after host inactivity detection while room is in active non-lobby game/setup states.
+   - Host can resume session before grace expiry.
 3. Hard cap: `4 hours` from room creation.
 
 ## 8. Trivia v1 Functional Spec (Jeopardy Style)
@@ -181,6 +183,8 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 ## 12.1 Host actions
 - `host.lockLobby`
 - `host.assignPlayerTeam`
+- `host.heartbeat`
+- `host.resumeSession`
 - `host.selectAnotherResponder`
 - `host.startTeams`
 - `host.startGame`

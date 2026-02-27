@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react"
 
+import { AnimatePresence, motion } from "framer-motion"
+import { Check, X } from "lucide-react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
@@ -22,8 +24,10 @@ import type { RoomSnapshot } from "@/lib/server/types"
 
 const POLL_MS = 1500
 const CLOCK_TICK_MS = 300
+const HOST_HEARTBEAT_MS = 10000
 
-type HostStage = "lobby" | "overview" | "trivia" | "celebration"
+type FeedbackType = "correct" | "wrong" | null
+type HostStage = "lobby" | "overview" | "trivia" | "celebration" | "paused"
 
 type TeamTone = {
   border: string
@@ -36,13 +40,13 @@ const TEAM_TONES: Record<string, TeamTone> = {
   team_a: {
     border: "border-pink-300/50",
     text: "text-pink-100",
-    bg: "bg-pink-500/10",
+    bg: "bg-pink-500/40",
     chip: "bg-pink-500/20 text-pink-100 border-pink-300/40",
   },
   team_b: {
     border: "border-cyan-300/50",
     text: "text-cyan-100",
-    bg: "bg-cyan-500/10",
+    bg: "bg-cyan-500/40",
     chip: "bg-cyan-500/20 text-cyan-100 border-cyan-300/40",
   },
 }
@@ -118,7 +122,9 @@ export default function HostStagePage() {
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
+  const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
+  const [showQuestionModal, setShowQuestionModal] = useState(false)
+  const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!hostToken) {
@@ -133,14 +139,23 @@ export default function HostStagePage() {
     return () => window.clearInterval(timer)
   }, [])
 
+  const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
+
   useEffect(() => {
-    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult) {
+    const qId = room?.trivia?.selectedClue?.questionId
+    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
         setFeedbackState(wasCorrect ? "correct" : "wrong")
+        setProcessedFeedbackQuestionId(qId)
       }
     }
-  }, [room?.trivia?.phase, room?.trivia?.lastResult])
+    // Reset tracker when return to board
+    if (room?.trivia?.phase === "board_turn") {
+      setProcessedFeedbackQuestionId(null)
+      setFeedbackState(null)
+    }
+  }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
@@ -161,6 +176,10 @@ export default function HostStagePage() {
   const stage: HostStage = useMemo(() => {
     if (!room) {
       return "lobby"
+    }
+
+    if (room.state === "paused_wait_host") {
+      return "paused"
     }
 
     if (room.state === "between_games" && room.trivia.status === "completed") {
@@ -301,6 +320,22 @@ export default function HostStagePage() {
     }
   }, [hostToken, refreshState, roomId])
 
+  useEffect(() => {
+    if (!hostToken || !roomId) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void sendAction(roomId, hostToken, "host.heartbeat").catch(() => {
+        // Ignore transient heartbeat failures; polling path handles visible errors.
+      })
+    }, HOST_HEARTBEAT_MS)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [hostToken, roomId])
+
   const runAction = useCallback(
     async (type: ClientActionType, payload?: Record<string, unknown>) => {
       if (!hostToken || !roomId) {
@@ -391,6 +426,15 @@ export default function HostStagePage() {
     try {
       await runAction("host.startTrivia")
       setNotice("بدأت لوحة الجيوباردي. الفريق الحالي يختار الفئة والنقاط.")
+    } catch (requestError) {
+      setError(toErrorMessage(requestError))
+    }
+  }, [runAction])
+
+  const handleResumeSession = useCallback(async () => {
+    try {
+      await runAction("host.resumeSession")
+      setNotice("تم استئناف الجلسة.")
     } catch (requestError) {
       setError(toErrorMessage(requestError))
     }
@@ -769,8 +813,32 @@ export default function HostStagePage() {
           </section>
         ) : null}
 
+        {room && stage === "paused" ? (
+          <section className="rounded-3xl border border-amber-300/40 bg-amber-500/10 p-8 text-center backdrop-blur-xl">
+            <p className="text-xs uppercase tracking-[0.25em] text-amber-100/90">Paused</p>
+            <h2 className="mt-2 text-4xl font-black text-amber-100">الجلسة متوقفة بانتظار عودة المضيف</h2>
+            <p className="mx-auto mt-4 max-w-3xl text-lg text-slate-100">
+              تم إيقاف الفعالية مؤقتًا بسبب عدم نشاط المضيف. أمامك 20 دقيقة لاستئناف الجلسة قبل إنهائها تلقائيًا.
+            </p>
+
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Button
+                type="button"
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 text-lg font-bold text-slate-950"
+                disabled={Boolean(busyAction)}
+                onClick={() => void handleResumeSession()}
+              >
+                استئناف الجلسة الآن
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
+                إنهاء الجلسة
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
         {room && stage === "trivia" ? (
-          <section className="space-y-4">
+          <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
               {room.teams.map((team) => {
                 const tone = getTeamTone(team.teamId)
@@ -791,145 +859,221 @@ export default function HostStagePage() {
               </p>
             </article>
 
-            <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
-              <article className="rounded-3xl border border-white/20 bg-glass-bg p-4 backdrop-blur-xl">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Jeopardy Board</p>
-                    <h3 className="mt-1 text-2xl font-bold">اختر فئة وقيمة النقاط</h3>
-                  </div>
-                  <p className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-slate-100">
+            {/* Jeopardy Board - Now Full Width */}
+            <article className="rounded-3xl border border-white/20 bg-glass-bg p-6 backdrop-blur-xl shadow-2xl">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.25em] text-pink-200">Jeopardy Board</p>
+                  <h3 className="mt-1 text-4xl font-black">اختر فئة وقيمة النقاط</h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-lg font-bold">
                     المتبقي: {trivia?.remainingQuestions ?? 0}
                   </p>
-                </div>
-
-                <div className="grid grid-cols-6 gap-2">
-                  {(trivia?.board ?? []).map((category) => (
-                    <div
-                      key={`header-${category.categoryId}`}
-                      className="rounded-xl border border-white/20 bg-white/10 px-2 py-3 text-center text-sm font-semibold leading-tight text-slate-100"
+                  {selectedClue && (
+                    <Button
+                      onClick={() => setShowQuestionModal(true)}
+                      className="rounded-xl bg-violet-600 hover:bg-violet-700 font-bold"
                     >
-                      {category.name}
-                    </div>
-                  ))}
-
-                  {boardRowIndexes.map((rowIndex) =>
-                    (trivia?.board ?? []).map((category) => {
-                      const clue = category.clues[rowIndex]
-                      if (!clue) {
-                        return <div key={`empty-${category.categoryId}-${rowIndex}`} className="h-16" />
-                      }
-
-                      const isSelected = clue.questionId === trivia?.selectedClue?.questionId
-                      const isUsed = clue.used
-                      return (
-                        <button
-                          key={`${category.categoryId}-${clue.questionId}`}
-                          type="button"
-                          disabled={Boolean(busyAction) || !canSelectClue || isUsed}
-                          onClick={() => void handleSelectTriviaClue(clue.questionId)}
-                          className={`h-16 rounded-xl border text-lg font-black transition ${isUsed
-                            ? "border-white/10 bg-glass-bg text-slate-500"
-                            : "border-pink-300/45 bg-pink-500/15 text-pink-100 hover:bg-pink-500/30"
-                            } ${isSelected ? "ring-2 ring-white/60" : ""}`}
-                        >
-                          {isUsed ? "تم" : clue.points}
-                        </button>
-                      )
-                    })
+                      عرض السؤال الحالي
+                    </Button>
                   )}
                 </div>
-              </article>
+              </div>
 
-              <article className="space-y-4 rounded-3xl border border-white/20 bg-glass-bg p-4 backdrop-blur-xl">
-                <div className={`rounded-2xl border p-4 ${currentTone.border} ${currentTone.bg}`}>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Turn Context</p>
-                  <p className="mt-2 text-lg font-semibold">الفريق صاحب الدور: {currentTurnTeam?.name ?? "غير محدد"}</p>
-                  <p className="mt-1 text-sm text-slate-200">لاعب الاختيار: {currentPicker?.displayName ?? "غير محدد"}</p>
-                  <p className="mt-1 text-sm text-slate-200">المجيب الحالي: {responderPlayer?.displayName ?? "لا يوجد بعد"}</p>
-                </div>
-
-                {selectedClue ? (
-                  <div className={`rounded-2xl border p-4 ${currentTone.border} ${currentTone.bg}`}>
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Question Window</p>
-                    <p className="mt-2 text-sm text-slate-200">
-                      {selectedClue.categoryName} | {selectedClue.points} نقطة
-                    </p>
-
-                    {isCountdownPhase ? (
-                      <div className="mt-4 rounded-2xl border border-white/30 bg-glass-bg p-5 text-center">
-                        <p className="text-sm text-slate-200">استعدوا... السؤال سيظهر حالًا</p>
-                        <p className="mt-2 text-8xl font-black leading-none text-violet-200 animate-pulse">
-                          {countdownSeconds}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {isQuestionRevealed ? (
-                      <>
-                        <p className="mt-2 text-lg font-semibold leading-relaxed">{selectedClue.prompt}</p>
-                        <div className="mt-3 grid gap-2">
-                          {selectedClue.options.map((option, index) => (
-                            <div
-                              key={`${selectedClue.questionId}-${index}`}
-                              className="rounded-lg border border-white/20 bg-glass-bg px-3 py-2 text-sm"
-                            >
-                              <span className="font-bold">{["A", "B", "C", "D"][index]}.</span> {option}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                    لم يتم اختيار سؤال بعد.
-                  </p>
-                )}
-
-                {trivia?.lastResult ? (
-                  <div className="rounded-2xl border border-white/20 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Result</p>
-                    <p className="mt-2 text-sm text-slate-100">
-                      الإجابة الصحيحة: {trivia.lastResult.correctOption}
-                      {trivia.lastResult.answeredOption ? ` | إجابة اللاعب: ${trivia.lastResult.answeredOption}` : ""}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-100">
-                      التغيير: {scoreBadge(trivia.lastResult.awardedPoints)} ({trivia.lastResult.reason})
-                    </p>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={Boolean(busyAction) || !canSelectAnotherResponder}
-                    onClick={() => void handleSelectAnotherResponder()}
+              <div className="grid grid-cols-6 gap-3">
+                {(trivia?.board ?? []).map((category) => (
+                  <div
+                    key={`header-${category.categoryId}`}
+                    className="rounded-2xl border border-white/10 bg-white/5 px-2 py-4 text-center text-lg font-black leading-tight text-white shadow-inner"
                   >
-                    {trivia?.phase === "board_turn" ? "اختيار لاعب آخر للدور" : "اختيار مجيب آخر"}
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={
-                      Boolean(busyAction) ||
-                      trivia?.status !== "in_progress" ||
-                      (trivia?.phase !== "answer_reveal" &&
-                        trivia?.phase !== "countdown" &&
-                        trivia?.phase !== "buzzer_open" &&
-                        trivia?.phase !== "answer_active")
+                    {category.name}
+                  </div>
+                ))}
+
+                {boardRowIndexes.map((rowIndex) =>
+                  (trivia?.board ?? []).map((category) => {
+                    const clue = category.clues[rowIndex]
+                    if (!clue) {
+                      return <div key={`empty-${category.categoryId}-${rowIndex}`} className="h-24" />
                     }
-                    onClick={() => void handleAdvanceTurn()}
+
+                    const isSelected = clue.questionId === trivia?.selectedClue?.questionId
+                    const isUsed = clue.used
+                    return (
+                      <button
+                        key={`${category.categoryId}-${clue.questionId}`}
+                        type="button"
+                        disabled={Boolean(busyAction) || !canSelectClue || isUsed}
+                        onClick={() => void handleSelectTriviaClue(clue.questionId)}
+                        className={`h-24 rounded-2xl border text-3xl font-black transition-all ${isUsed
+                          ? "border-white/5 bg-glass-bg/30 text-slate-500 opacity-50"
+                          : "border-pink-300/40 bg-pink-500/10 text-pink-100 shadow-lg hover:scale-[1.02] hover:bg-pink-500/25 hover:shadow-pink-500/20 active:scale-95"
+                          } ${isSelected ? "ring-4 ring-violet-500/60 ring-offset-4 ring-offset-background" : ""}`}
+                      >
+                        {isUsed ? "✓" : clue.points}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </article>
+
+            {/* Question & Status Modal Overlay */}
+            <AnimatePresence>
+              {showQuestionModal && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] border border-white/20 bg-slate-950 p-8 shadow-[0_0_100px_rgba(139,92,246,0.3)] scrollbar-hide"
                   >
-                    {trivia?.phase === "answer_reveal" ? "الدور التالي" : "تخطي السؤال"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
-                    إنهاء الجلسة
-                  </Button>
+                    {/* Modal Header/Close */}
+                    <div className="absolute right-6 top-6 flex gap-3">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowQuestionModal(false)}
+                        className="rounded-full bg-white/5 hover:bg-white/10"
+                      >
+                        <X className="size-6" />
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-8 lg:grid-cols-[1fr_2fr]">
+                      {/* Left Side: Status & Context */}
+                      <div className="space-y-6">
+                        <article className={`rounded-3xl border p-6 ${currentTone.border} ${currentTone.bg} shadow-lg`}>
+                          <p className="text-xs uppercase tracking-[0.25em] text-slate-300">Live Status</p>
+                          <h2 className="mt-3 text-3xl font-black leading-tight">{liveHeadline}</h2>
+                          <div className="mt-4 space-y-2 text-sm text-slate-300">
+                            <p>الدور: {currentTurnTeam?.name ?? "غير محدد"}</p>
+                            <p>المجيب: {responderPlayer?.displayName ?? "بانتظار البازر..."}</p>
+                          </div>
+                        </article>
+
+                        <div className="flex flex-wrap gap-3">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="flex-1 rounded-xl h-14 font-bold"
+                            disabled={Boolean(busyAction) || !canSelectAnotherResponder}
+                            onClick={() => void handleSelectAnotherResponder()}
+                          >
+                            تغيير اللاعب
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            className="flex-1 rounded-xl h-14 font-bold"
+                            onClick={() => void handleEndSession()}
+                          >
+                            إنهاء الجلسة
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Right Side: Question Display */}
+                      <div className="space-y-6">
+                        {selectedClue ? (
+                          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-inner">
+                            <div className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
+                              <div>
+                                <p className="text-xs uppercase tracking-[0.2em] text-violet-300">{selectedClue.categoryName}</p>
+                                <h3 className="mt-1 text-2xl font-bold">{selectedClue.points} نقطة</h3>
+                              </div>
+                              <p className="text-sm opacity-60">السؤال رقم {trivia?.questionIndex} من {trivia?.totalQuestions}</p>
+                            </div>
+
+                            {isCountdownPhase ? (
+                              <div className="flex flex-col items-center justify-center py-10">
+                                <p className="mb-6 text-xl font-medium text-slate-200">استعدوا... السؤال سيظهر حالاً</p>
+                                <motion.p
+                                  key={countdownSeconds}
+                                  initial={{ scale: 1.5, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  className="text-[10rem] font-black leading-none text-violet-400 drop-shadow-[0_0_30px_rgba(167,139,250,0.5)]"
+                                >
+                                  {countdownSeconds}
+                                </motion.p>
+                              </div>
+                            ) : null}
+
+                            {isQuestionRevealed ? (
+                              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+                                <p className="text-4xl font-black leading-tight text-white mb-8">
+                                  {selectedClue.prompt}
+                                </p>
+
+                                <div className="grid gap-4 sm:grid-cols-2">
+                                  {selectedClue.options.map((option, index) => (
+                                    <div
+                                      key={`${selectedClue.questionId}-${index}`}
+                                      className="group relative rounded-2xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-colors"
+                                    >
+                                      <span className="absolute left-6 top-6 text-2xl font-black text-violet-500 opacity-50">
+                                        {["A", "B", "C", "D"][index]}
+                                      </span>
+                                      <p className="pr-10 text-xl font-bold">{option}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <div className="flex h-full items-center justify-center rounded-3xl bg-white/5 border border-dashed border-white/10 p-20">
+                            <p className="text-slate-400 text-xl">اختر سؤالاً من اللوحة للبدء</p>
+                          </div>
+                        )}
+
+                        {trivia?.lastResult && (
+                          <motion.div
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            className="rounded-3xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-6"
+                          >
+                            <p className="text-xs uppercase tracking-[0.2em] text-fuchsia-300">Result Summary</p>
+                            <div className="mt-3 flex items-center justify-between">
+                              <div>
+                                <p className="text-lg font-bold">الإجابة الصحيحة: {trivia.lastResult.correctOption}</p>
+                                <p className="text-sm opacity-80">{trivia.lastResult.reason}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-black text-fuchsia-400">
+                                  {trivia.lastResult.awardedPoints > 0 ? "+" : ""}{trivia.lastResult.awardedPoints}
+                                </p>
+                                <p className="text-xs opacity-50">نقاط</p>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        <div className="pt-4">
+                          <Button
+                            type="button"
+                            className="h-16 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xl font-bold shadow-xl hover:scale-[1.01] transition-all"
+                            disabled={
+                              Boolean(busyAction) ||
+                              trivia?.status !== "in_progress" ||
+                              (trivia?.phase !== "answer_reveal" &&
+                                trivia?.phase !== "countdown" &&
+                                trivia?.phase !== "buzzer_open" &&
+                                trivia?.phase !== "answer_active")
+                            }
+                            onClick={() => void handleAdvanceTurn()}
+                          >
+                            {trivia?.phase === "answer_reveal" ? "العودة للوحة (السؤال التالي)" : "تخطي السؤال الحالي"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
                 </div>
-              </article>
-            </div>
-          </section>
+              )}
+            </AnimatePresence>
+          </div>
         ) : null}
 
         {room && stage === "celebration" ? (

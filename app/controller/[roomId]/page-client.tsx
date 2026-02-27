@@ -28,12 +28,12 @@ const TEAM_TONES: Record<string, TeamTone> = {
   team_a: {
     border: "border-pink-300/50",
     text: "text-pink-100",
-    bg: "bg-pink-500/10",
+    bg: "bg-pink-500/40",
   },
   team_b: {
     border: "border-cyan-300/50",
     text: "text-cyan-100",
-    bg: "bg-cyan-500/10",
+    bg: "bg-cyan-500/40",
   },
 }
 
@@ -99,15 +99,23 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
+  const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult) {
+    const qId = room?.trivia?.selectedClue?.questionId
+    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
         setFeedbackState(wasCorrect ? "correct" : "wrong")
+        setProcessedFeedbackQuestionId(qId)
       }
     }
-  }, [room?.trivia?.phase, room?.trivia?.lastResult])
+    // Reset tracker when return to board
+    if (room?.trivia?.phase === "board_turn") {
+      setProcessedFeedbackQuestionId(null)
+      setFeedbackState(null)
+    }
+  }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
 
   const hydrateState = useCallback(async () => {
     if (!session) {
@@ -233,14 +241,19 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     if (!room || !session) {
       return false
     }
-    return room.trivia.status === "in_progress" && room.trivia.phase === "buzzer_open" && !room.trivia.currentResponderPlayerId
+    return (
+      room.state === "game_live" &&
+      room.trivia.status === "in_progress" &&
+      room.trivia.phase === "buzzer_open" &&
+      !room.trivia.currentResponderPlayerId
+    )
   }, [room, session])
 
   const canAnswer = useMemo(() => {
     if (!room || !session || !selectedQuestionId) {
       return false
     }
-    if (room.trivia.status !== "in_progress" || room.trivia.phase !== "answer_active") {
+    if (room.state !== "game_live" || room.trivia.status !== "in_progress" || room.trivia.phase !== "answer_active") {
       return false
     }
     if (room.trivia.currentResponderPlayerId !== session.playerId) {
@@ -260,6 +273,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const statusText = useMemo(() => {
     if (!room || !session || room.trivia.status !== "in_progress") {
       return "بانتظار بدء اللعبة من شاشة المضيف."
+    }
+
+    if (room.state === "paused_wait_host") {
+      return "تم إيقاف الجلسة مؤقتًا بسبب عدم نشاط المضيف. انتظر استئناف الجلسة."
     }
 
     if (room.trivia.phase === "board_turn") {

@@ -2,6 +2,8 @@ export type ProtocolVersion = "v1"
 export type ClientRole = "host" | "player"
 
 export type HostActionType =
+  | "host.heartbeat"
+  | "host.resumeSession"
   | "host.lockLobby"
   | "host.assignPlayerTeam"
   | "host.selectAnotherResponder"
@@ -36,6 +38,8 @@ export type ServerEnvelope = {
 }
 
 const HOST_ACTIONS = new Set<HostActionType>([
+  "host.heartbeat",
+  "host.resumeSession",
   "host.lockLobby",
   "host.assignPlayerTeam",
   "host.selectAnotherResponder",

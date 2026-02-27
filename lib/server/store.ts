@@ -21,6 +21,7 @@ import type {
 const LOBBY_OPEN_TIMEOUT_MS = 45 * 60 * 1000
 const HOST_PAUSE_GRACE_MS = 20 * 60 * 1000
 const HARD_ROOM_CAP_MS = 4 * 60 * 60 * 1000
+const HOST_INACTIVITY_MS = 60 * 1000
 const TRIVIA_COUNTDOWN_MS = 5 * 1000
 const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
@@ -35,6 +36,8 @@ type InMemoryStore = {
   teamsByRoom: Map<string, TeamRecord[]>
   playerTeamsByRoom: Map<string, Map<string, string>>
   triviaByRoom: Map<string, TriviaSession>
+  hostLastSeenByRoom: Map<string, number>
+  pausedFromStateByRoom: Map<string, RoomState>
   processedHostCommandsByRoom: Map<string, Set<string>>
   processedPlayerSubmitByRoom: Map<string, Map<string, RoomEventRecord>>
   roomEvents: RoomEventRecord[]
@@ -105,6 +108,8 @@ function getStore(): InMemoryStore {
       teamsByRoom: new Map(),
       playerTeamsByRoom: new Map(),
       triviaByRoom: new Map(),
+      hostLastSeenByRoom: new Map(),
+      pausedFromStateByRoom: new Map(),
       processedHostCommandsByRoom: new Map(),
       processedPlayerSubmitByRoom: new Map(),
       roomEvents: [],
@@ -181,6 +186,8 @@ function isStoreLike(value: unknown): value is InMemoryStore {
     candidate.teamsByRoom instanceof Map &&
     candidate.playerTeamsByRoom instanceof Map &&
     candidate.triviaByRoom instanceof Map &&
+    candidate.hostLastSeenByRoom instanceof Map &&
+    candidate.pausedFromStateByRoom instanceof Map &&
     candidate.processedHostCommandsByRoom instanceof Map &&
     candidate.processedPlayerSubmitByRoom instanceof Map &&
     Array.isArray(candidate.roomEvents)
@@ -203,6 +210,12 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
       const candidate = restored as Partial<InMemoryStore> & Record<string, unknown>
       if (!(candidate.processedPlayerSubmitByRoom instanceof Map)) {
         candidate.processedPlayerSubmitByRoom = new Map()
+      }
+      if (!(candidate.hostLastSeenByRoom instanceof Map)) {
+        candidate.hostLastSeenByRoom = new Map()
+      }
+      if (!(candidate.pausedFromStateByRoom instanceof Map)) {
+        candidate.pausedFromStateByRoom = new Map()
       }
     }
 
@@ -319,6 +332,64 @@ function isPastHardCap(room: RoomRecord) {
   return ACTIVE_ROOM_STATES.has(room.state) && nowMs() > room.createdAt + HARD_ROOM_CAP_MS
 }
 
+function shouldPauseForHostInactivity(state: RoomState) {
+  return state === "lobby_locked" || state === "teams_ready" || state === "game_live" || state === "between_games"
+}
+
+function touchHostPresence(store: InMemoryStore, roomId: string) {
+  store.hostLastSeenByRoom.set(roomId, nowMs())
+}
+
+function pauseRoomForHostInactivity(store: InMemoryStore, room: RoomRecord) {
+  if (!shouldPauseForHostInactivity(room.state)) {
+    return
+  }
+
+  const previousState = room.state
+  room.state = "paused_wait_host"
+  room.pausedAt = nowMs()
+  store.pausedFromStateByRoom.set(room.id, previousState)
+  recordRoomEvent(store, room.id, "room.paused_wait_host", {
+    reason: "host_inactive",
+    previousState,
+    inactiveForMs: HOST_INACTIVITY_MS,
+  })
+}
+
+function maybePauseForHostInactivity(store: InMemoryStore, room: RoomRecord) {
+  if (!shouldPauseForHostInactivity(room.state)) {
+    return
+  }
+
+  const lastSeenAt = store.hostLastSeenByRoom.get(room.id)
+  if (!lastSeenAt) {
+    touchHostPresence(store, room.id)
+    return
+  }
+
+  if (nowMs() - lastSeenAt > HOST_INACTIVITY_MS) {
+    pauseRoomForHostInactivity(store, room)
+  }
+}
+
+function resolveResumeState(store: InMemoryStore, room: RoomRecord): RoomState {
+  const stored = store.pausedFromStateByRoom.get(room.id)
+  if (stored && stored !== "paused_wait_host" && stored !== "expired" && stored !== "session_completed") {
+    return stored
+  }
+
+  const trivia = store.triviaByRoom.get(room.id)
+  if (trivia && trivia.status === "in_progress") {
+    return "game_live"
+  }
+
+  if (trivia && trivia.status === "completed") {
+    return "between_games"
+  }
+
+  return "teams_ready"
+}
+
 function expireRoom(store: InMemoryStore, room: RoomRecord, reason: string) {
   if (room.state === "expired" || room.state === "session_completed") {
     return
@@ -332,11 +403,15 @@ function expireRoom(store: InMemoryStore, room: RoomRecord, reason: string) {
   if (host?.activeRoomId === room.id) {
     host.activeRoomId = null
   }
+  store.hostLastSeenByRoom.delete(room.id)
+  store.pausedFromStateByRoom.delete(room.id)
 
   recordRoomEvent(store, room.id, "room.expired", { reason })
 }
 
 function applyTimeouts(store: InMemoryStore, room: RoomRecord) {
+  maybePauseForHostInactivity(store, room)
+
   if (isPastLobbyTimeout(room)) {
     expireRoom(store, room, "lobby_timeout")
     return
@@ -959,6 +1034,8 @@ export function createRoomForHost(hostId: string):
 
   store.rooms.set(room.id, room)
   ensureTeamsSeeded(store, room.id)
+  store.hostLastSeenByRoom.set(room.id, timestamp)
+  store.pausedFromStateByRoom.delete(room.id)
   store.processedHostCommandsByRoom.set(room.id, new Set())
   store.processedPlayerSubmitByRoom.set(room.id, new Map())
   host.activeRoomId = room.id
@@ -1046,6 +1123,8 @@ export function completeRoomForHost(
   }
 
   store.triviaByRoom.delete(room.id)
+  store.hostLastSeenByRoom.delete(room.id)
+  store.pausedFromStateByRoom.delete(room.id)
   store.processedHostCommandsByRoom.delete(room.id)
   store.processedPlayerSubmitByRoom.delete(room.id)
 
@@ -1164,6 +1243,8 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "HOST_ROOM_MISMATCH" }
     }
 
+    touchHostPresence(store, room.id)
+
     if (input.requestId) {
       const processed = store.processedHostCommandsByRoom.get(room.id) ?? new Set<string>()
       store.processedHostCommandsByRoom.set(room.id, processed)
@@ -1174,6 +1255,51 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         }
         return { ok: true, room, event: latestEvent }
       }
+    }
+
+    if (input.actionType === "host.heartbeat") {
+      recordRoomEvent(store, room.id, "host.heartbeat", { hostId: input.actorId }, { bumpVersion: false })
+
+      const event = getLatestRoomEvent(store, input.roomId)
+      if (!event) {
+        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+      }
+
+      if (input.requestId) {
+        const processed = store.processedHostCommandsByRoom.get(room.id) ?? new Set<string>()
+        processed.add(input.requestId)
+        store.processedHostCommandsByRoom.set(room.id, processed)
+      }
+
+      return { ok: true, room, event }
+    }
+
+    if (input.actionType === "host.resumeSession") {
+      if (room.state !== "paused_wait_host") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const nextState = resolveResumeState(store, room)
+      room.state = nextState
+      room.pausedAt = null
+      store.pausedFromStateByRoom.delete(room.id)
+      recordRoomEvent(store, room.id, "room.resumed_from_pause", {
+        hostId: input.actorId,
+        nextState,
+      })
+
+      const event = getLatestRoomEvent(store, input.roomId)
+      if (!event) {
+        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+      }
+
+      if (input.requestId) {
+        const processed = store.processedHostCommandsByRoom.get(room.id) ?? new Set<string>()
+        processed.add(input.requestId)
+        store.processedHostCommandsByRoom.set(room.id, processed)
+      }
+
+      return { ok: true, room, event }
     }
 
     if (input.actionType === "host.endSession") {
@@ -1194,6 +1320,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       }
 
       return { ok: true, room: completed.room, event }
+    }
+
+    if (room.state === "paused_wait_host") {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
     }
 
     if (input.actionType === "host.lockLobby") {
