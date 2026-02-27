@@ -163,7 +163,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
-  const streamConnectedRef = useRef(false)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -307,21 +306,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
   useEffect(() => {
     if (!session || !isPageVisible) {
-      streamConnectedRef.current = false
       return
     }
 
     const unsubscribe = subscribeRoomStateStream({
       roomId,
       token: session.token,
-      onOpen: () => {
-        streamConnectedRef.current = true
-      },
-      onClose: () => {
-        streamConnectedRef.current = false
-      },
       onError: (streamError) => {
-        streamConnectedRef.current = false
         if (isTerminalControllerSessionError(streamError)) {
           terminateControllerSession(streamError, "تم إنهاء الغرفة الحالية. يرجى الانضمام إلى غرفة جديدة.")
           return
@@ -343,7 +334,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     })
 
     return () => {
-      streamConnectedRef.current = false
       unsubscribe()
     }
   }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
@@ -362,7 +352,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           return
         }
 
-        if (!busy && isPageVisible && !streamConnectedRef.current) {
+        if (!busy && isPageVisible) {
           await refreshState()
         }
 
@@ -575,15 +565,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
   }
 
-  const clearSession = () => {
-    clearPlayerSession(roomId)
-    setSession(null)
-    setRoom(null)
-    setSubmittedQuestionId(null)
-    setError(null)
-    setNotice(null)
-  }
-
   const phaseLabel = (() => {
     const phase = room?.trivia.phase
     if (!phase || room?.trivia.status !== "in_progress") {
@@ -736,14 +717,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             className="h-11 rounded-xl border-white/30 bg-white/10 text-slate-100 hover:bg-white/20"
           >
             تحديث
-          </Button>
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={clearSession}
-            className="h-11 rounded-xl text-slate-300 hover:bg-white/10 hover:text-white"
-          >
-            خروج
           </Button>
         </div>
       </main>

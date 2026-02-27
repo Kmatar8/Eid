@@ -14,9 +14,12 @@ type RequestOptions = {
   token?: string
   body?: unknown
   signal?: AbortSignal
+  timeoutMs?: number
 }
 
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
+const DEFAULT_GET_TIMEOUT_MS = 5500
+const DEFAULT_MUTATION_TIMEOUT_MS = 12000
 
 export class LiveApiError extends Error {
   status: number
@@ -50,6 +53,45 @@ function sleep(ms: number) {
   })
 }
 
+function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return {
+      signal,
+      didTimeout: () => false,
+      cleanup: () => undefined,
+    }
+  }
+
+  const timeoutController = new AbortController()
+  let timedOut = false
+
+  const handleParentAbort = () => {
+    timeoutController.abort()
+  }
+
+  if (signal?.aborted) {
+    timeoutController.abort()
+  } else if (signal) {
+    signal.addEventListener("abort", handleParentAbort, { once: true })
+  }
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    timeoutController.abort()
+  }, timeoutMs)
+
+  return {
+    signal: timeoutController.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timeoutId)
+      if (signal) {
+        signal.removeEventListener("abort", handleParentAbort)
+      }
+    },
+  }
+}
+
 async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: HeadersInit = {
     "content-type": "application/json",
@@ -61,28 +103,39 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
 
   const method = options.method ?? "GET"
   const isRetryableMethod = method === "GET"
+  const timeoutMs = options.timeoutMs ?? (isRetryableMethod ? DEFAULT_GET_TIMEOUT_MS : DEFAULT_MUTATION_TIMEOUT_MS)
   const maxAttempts = isRetryableMethod ? 3 : 1
 
   let response: Response | null = null
   let lastFetchError: unknown = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const timedSignal = createTimeoutSignal(options.signal, timeoutMs)
     try {
       response = await fetch(path, {
         method,
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
-        signal: options.signal,
+        signal: timedSignal.signal,
       })
 
       if (!RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
         break
       }
     } catch (error) {
-      lastFetchError = error
-      if (!isRetryableMethod || attempt === maxAttempts) {
+      lastFetchError = timedSignal.didTimeout()
+        ? new LiveApiError(408, "REQUEST_TIMEOUT", "Live API request timed out")
+        : error
+
+      if (options.signal?.aborted) {
         throw error
       }
+
+      if (!isRetryableMethod || attempt === maxAttempts) {
+        throw lastFetchError
+      }
+    } finally {
+      timedSignal.cleanup()
     }
 
     const backoffMs = 140 * 2 ** (attempt - 1) + Math.floor(Math.random() * 80)
