@@ -75,6 +75,18 @@ export async function POST(request: Request, context: RouteContext) {
         return errorResponse(409, "TRIVIA_NOT_ACTIVE", "Trivia session is not active")
       }
 
+      if (applied.code === "TRIVIA_INVALID_CLUE") {
+        return errorResponse(400, "TRIVIA_INVALID_CLUE", "Selected clue is invalid or already used")
+      }
+
+      if (applied.code === "TRIVIA_NO_ALTERNATE_RESPONDER") {
+        return errorResponse(
+          409,
+          "TRIVIA_NO_ALTERNATE_RESPONDER",
+          "No alternate responder is available in the active team"
+        )
+      }
+
       if (applied.code === "TRIVIA_INVALID_RESPONDER") {
         return errorResponse(403, "TRIVIA_INVALID_RESPONDER", "Only the selected responder can answer")
       }

@@ -4,9 +4,11 @@ export type ClientRole = "host" | "player"
 export type HostActionType =
   | "host.lockLobby"
   | "host.assignPlayerTeam"
+  | "host.selectAnotherResponder"
   | "host.startTeams"
   | "host.startGame"
   | "host.startTrivia"
+  | "host.selectTriviaClue"
   | "host.nextQuestion"
   | "host.addTeamScore"
   | "host.endSession"
@@ -36,9 +38,11 @@ export type ServerEnvelope = {
 const HOST_ACTIONS = new Set<HostActionType>([
   "host.lockLobby",
   "host.assignPlayerTeam",
+  "host.selectAnotherResponder",
   "host.startTeams",
   "host.startGame",
   "host.startTrivia",
+  "host.selectTriviaClue",
   "host.nextQuestion",
   "host.addTeamScore",
   "host.endSession",

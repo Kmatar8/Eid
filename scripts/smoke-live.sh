@@ -136,9 +136,18 @@ host_action "$HOST_TOKEN" "$ROOM_ID" "host.lockLobby"
 host_action "$HOST_TOKEN" "$ROOM_ID" "host.startTeams"
 host_action "$HOST_TOKEN" "$ROOM_ID" "host.startTrivia"
 
-printf "\n== Resolve active responder and submit answer ==\n"
+printf "\n== Select first clue ==\n"
 api_call GET "/api/rooms/$ROOM_ID/state" "$HOST_TOKEN"
 expect_status 200 "rooms.state"
+CLUE_ID="$(echo "$BODY" | jq -er '.payload.room.trivia.board[0].clues[0].questionId')"
+host_action "$HOST_TOKEN" "$ROOM_ID" "host.selectTriviaClue" "{\"questionId\":\"$CLUE_ID\"}"
+
+printf "\n== Buzz and submit answer ==\n"
+sleep 6
+player_action "$P1_TOKEN" "$ROOM_ID" "player.input" '{"intent":"buzz"}'
+
+api_call GET "/api/rooms/$ROOM_ID/state" "$HOST_TOKEN"
+expect_status 200 "rooms.state.after_buzz"
 RESPONDER_ID="$(echo "$BODY" | jq -er '.payload.room.trivia.currentResponderPlayerId')"
 if [[ "$RESPONDER_ID" == "$P1_ID" ]]; then
   RESPONDER_TOKEN="$P1_TOKEN"

@@ -22,6 +22,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
    - End-of-trivia winner celebration view with next-game CTA.
 5. Add trivia pre-start rules modal on host screen; start questions only after host confirm.
 6. Extend host action contract for server-authoritative manual team assignment.
+7. Improve trivia controller clarity with team color coding and explicit responder text.
+8. Add host fallback action to randomly select another responder from the same active team.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -37,8 +39,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 ## API / Contract Impact
 1. Existing host/player routes remain in use.
 2. Add host action: `host.assignPlayerTeam` with payload `{ playerId, teamId }`.
-3. Update protocol role authorization to permit the new host action.
-4. Preserve existing scoring and trivia action contracts.
+3. Add host action: `host.selectAnotherResponder` with empty payload.
+4. Update protocol role authorization to permit the new host actions.
+5. Preserve existing scoring and trivia action contracts.
 
 ## Data Model Impact
 1. D1: no schema change.
@@ -51,8 +54,10 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 3. Refactor `/host` into stage-based mirrored UI (lobby -> overview -> trivia -> celebration).
 4. Implement host drag/drop team assignment UX.
 5. Add `host.assignPlayerTeam` protocol/store handling and preserve manual assignments when starting teams.
-6. Add trivia rules modal and runtime team-context messaging with team-color cues.
-7. Validate with lint/build + live smoke flow and capture evidence.
+6. Add `host.selectAnotherResponder` protocol/store handling for in-question responder fallback.
+7. Add trivia rules modal and runtime team-context messaging with team-color cues.
+8. Update controller question card to show explicit responder text and team cue styling.
+9. Validate with lint/build + live smoke flow and capture evidence.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -61,7 +66,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 4. Host can start session and see games overview and rules before starting trivia.
 5. Trivia start is gated behind host confirmation modal.
 6. Trivia runtime view clearly indicates active responder/team and steal-state messaging.
-7. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
+7. Host can trigger random responder reselection within the same active team when trivia question is active.
+8. Controller clearly shows "this question is for you" for active responder and team/player context for others.
+9. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -69,13 +76,15 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: landing -> login -> host lobby flow.
 - [ ] Manual: player joins and host can assign teams via drag/drop.
 - [ ] Manual: overview -> rules modal -> trivia runtime messaging flow.
+- [ ] Manual: host can select another responder from same team during active question.
+- [ ] Manual: controller shows clear responder/team context with team color cues.
 - [ ] Manual: trivia completion -> winner celebration -> next game CTA.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
 1. `npm run lint` completed with warnings only (no errors).
 2. `npm run build` completed successfully with `/host/login` and updated `/host` route output.
-3. Live deploy completed to `https://hroof-app.k-matar.workers.dev` with version `4c65a4ae-bcc5-496d-bc6b-2644c5b2a77a`.
+3. Live deploy completed to `https://hroof-app.k-matar.workers.dev` with version `83f5ed74-acf4-407c-983f-bf25cf357722`.
 4. `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh` passed full host/join/trivia/reconnect/end flow.
 
 ## Rollback Plan

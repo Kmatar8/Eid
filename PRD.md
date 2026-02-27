@@ -9,7 +9,7 @@
 ## 2. Product Summary
 Hroof is a TV-first multiplayer party game platform where a host mirrors their phone to a TV and runs games in real time. Players join by scanning a QR code and use their phones as controllers.
 
-Primary launch game is Trivia (4 multiple choices) with team-based scoring.
+Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-based scoring.
 
 ## 3. Goals
 1. Deliver reliable real-time gameplay for live gatherings.
@@ -42,7 +42,7 @@ Primary launch game is Trivia (4 multiple choices) with team-based scoring.
 3. Players scan QR and join room.
 4. Host locks lobby and starts team assignment.
 5. Host starts first game.
-6. During gameplay, selected players receive controller UI and actions are sent in real time.
+6. During gameplay, controllers switch between buzzer and answer modes and actions are sent in real time.
 7. Host screen always shows live team scores.
 8. Host advances through games and ends session.
 
@@ -59,9 +59,17 @@ Primary launch game is Trivia (4 multiple choices) with team-based scoring.
 5. Before Trivia starts, host sees a rules modal; questions are pushed to controllers only after host confirms/close.
 6. During Trivia, host always sees:
    - Horizontal team scoreboard.
-   - Active responder context (player + team).
-   - Clear steal-state messaging when applicable.
+   - Turn context (which team picks category/points next).
+   - Active responder context (player + team) after buzzer lock.
+   - Manual fallback control to randomly select another responder from the same team.
 7. When Trivia ends, host sees a celebration/winner screen with scores and a CTA to move to the next game.
+
+### 6.2 Controller Clarity Requirements (Trivia)
+1. Controller view must clearly indicate whether the current question is for the current player or another player.
+2. Controller must use team color cues consistent with host screen for active team context.
+3. For active responder, controller shows explicit prompt like: `"X player, this question is for you."`
+4. For non-active players, controller shows who should answer and from which team.
+5. During buzzer phase, all players see a buzzer control and no answer choices until responder lock.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states
@@ -89,34 +97,46 @@ Room becomes inactive when:
 2. `paused_wait_host` grace: `20 minutes`.
 3. Hard cap: `4 hours` from room creation.
 
-## 8. Trivia v1 Functional Spec
-## 8.1 Round structure
-Per question:
-1. Choose starting team (`Team A` or `Team B`) using fairness rules.
-2. Select one eligible random player from that team.
-3. Push 4 options to selected player controller.
-4. If correct -> award primary points.
-5. If incorrect -> offer steal chance to opposite team with one selected player.
-6. Commit score and reveal result.
-7. Move to next question.
+## 8. Trivia v1 Functional Spec (Jeopardy Style)
+## 8.1 Board structure
+1. Board contains `6` categories.
+2. Each category contains `5` clues.
+3. Point values per category row are `10`, `20`, `30`, `40`, `50`.
+4. Total clues per game: `30`.
 
-## 8.2 Trivia game phases
-1. `question_prepare`
-2. `question_active_primary_team`
-3. `question_active_steal_team`
-4. `answer_reveal`
-5. `score_commit`
+## 8.2 Turn structure
+Per turn:
+1. Team turns alternate strictly (`Team A`, then `Team B`, then repeat).
+2. A random player from the active turn team is shown as picker for that turn.
+3. Host selects one available category/point clue.
+4. All controllers switch to buzzer mode.
+5. A `5` second countdown runs before question reveal.
+6. A `20` second buzzer window runs after reveal.
+7. First player to buzz becomes the locked responder.
+8. Only locked responder sees answer choices on their controller.
+9. Correct answer gives responder team `+clue points`.
+10. Wrong answer subtracts `-clue points` from responder team.
+11. No steal mechanic in this mode.
+12. Host can select another responder from the same team if locked responder is absent/inactive.
+13. Host advances to the next team turn until board completion.
+
+## 8.3 Trivia game phases
+1. `board_turn`
+2. `countdown`
+3. `buzzer_open`
+4. `answer_active`
+5. `answer_reveal`
 6. `next_question_or_end`
 
-## 8.3 Scoring (team only)
-- Primary correct: `+10`
-- Steal correct: `+6`
-- Wrong: `0`
+## 8.4 Scoring (team only)
+- Correct answer: `+points`
+- Wrong answer: `-points`
+- No buzz in buzzer window: `0`
 
-## 8.4 Fairness
-- Each team uses responder rotation weighted by `timesAnswered` ascending.
-- Random tie-break between players with equal `timesAnswered`.
-- Note: `20 questions` does not guarantee each player answers if room has up to 30 players; question count should be configured accordingly.
+## 8.5 Fairness
+- Team turn ownership alternates by rule, independent of scoring outcome.
+- Picker selection inside a team is randomized with usage balancing.
+- Buzzer eligibility is open to all players.
 
 ## 9. Reconnect Behavior
 1. Player gets signed `playerSessionToken` after successful join.
@@ -161,9 +181,11 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 ## 12.1 Host actions
 - `host.lockLobby`
 - `host.assignPlayerTeam`
+- `host.selectAnotherResponder`
 - `host.startTeams`
 - `host.startGame`
 - `host.startTrivia`
+- `host.selectTriviaClue`
 - `host.nextQuestion`
 - `host.addTeamScore`
 - `host.endSession`
@@ -171,6 +193,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 ## 12.2 Player actions
 - `player.join`
 - `player.reconnect`
+- `player.input`
 - `player.submitAnswer`
 - `player.heartbeat`
 
@@ -205,7 +228,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - Team assignment, team-only scoring model, persistent snapshots.
 
 ## M4: Trivia v1
-- Question flow, primary/steal logic, responder fairness, live score commits.
+- Jeopardy board flow, buzzer lock, responder fairness, live score commits.
 
 ## M5: Reliability + Scale Hardening
 - Timeout enforcement, load tests for target concurrency, observability + alerts.
@@ -218,7 +241,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 5. Session completion rate.
 
 ## 17. Open Decisions
-1. Final scoring values for Trivia (confirm or tune defaults).
+1. Whether to tune point ladder/timers beyond current defaults (`10-50`, `5s` countdown, `20s` buzz window).
 2. Question source and authoring workflow (seeded DB vs external CMS).
 3. Whether to support mid-game late join for players.
 4. Required minimum question count per room based on player count policy.

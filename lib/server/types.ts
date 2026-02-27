@@ -64,18 +64,33 @@ export type TeamRecord = {
 export type TriviaOption = "A" | "B" | "C" | "D"
 
 export type TriviaPhase =
-  | "question_prepare"
-  | "question_active_primary_team"
-  | "question_active_steal_team"
+  | "board_turn"
+  | "countdown"
+  | "buzzer_open"
+  | "answer_active"
   | "answer_reveal"
-  | "score_commit"
   | "next_question_or_end"
 
 export type TriviaQuestion = {
   id: string
+  categoryId: string
+  categoryName: string
+  points: number
   prompt: string
   options: [string, string, string, string]
   correctOption: TriviaOption
+}
+
+export type TriviaBoardClueSnapshot = {
+  questionId: string
+  points: number
+  used: boolean
+}
+
+export type TriviaBoardCategorySnapshot = {
+  categoryId: string
+  name: string
+  clues: TriviaBoardClueSnapshot[]
 }
 
 export type TriviaSnapshot = {
@@ -83,19 +98,31 @@ export type TriviaSnapshot = {
   phase: TriviaPhase | null
   questionIndex: number
   totalQuestions: number
+  remainingQuestions: number
   currentTeamId: string | null
+  currentPickerPlayerId: string | null
   currentResponderPlayerId: string | null
-  currentQuestion: {
-    id: string
+  currentResponderTeamId: string | null
+  countdownEndsAt: number | null
+  buzzEndsAt: number | null
+  answerEndsAt: number | null
+  board: TriviaBoardCategorySnapshot[]
+  selectedClue: {
+    questionId: string
+    categoryId: string
+    categoryName: string
+    points: number
     prompt: string
     options: [string, string, string, string]
   } | null
   lastResult: {
+    questionId: string
     correctOption: TriviaOption
-    answeredOption: TriviaOption
+    answeredOption: TriviaOption | null
     wasCorrect: boolean
     awardedTeamId: string | null
     awardedPoints: number
+    reason: "correct" | "wrong" | "timeout" | "no_buzz" | "host_skip"
   } | null
 }
 

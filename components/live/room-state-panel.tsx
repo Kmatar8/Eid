@@ -72,19 +72,22 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
         ))}
       </section>
 
-      {room.trivia.currentQuestion ? (
+      {room.trivia.selectedClue ? (
         <section className="rounded-xl border border-cyan-300/25 bg-cyan-950/20 p-4">
           <p className="text-xs uppercase tracking-wide text-cyan-200">Current Question</p>
-          <p className="mt-2 text-base font-semibold leading-relaxed text-cyan-50">{room.trivia.currentQuestion.prompt}</p>
+          <p className="mt-2 text-base font-semibold leading-relaxed text-cyan-50">{room.trivia.selectedClue.prompt}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {room.trivia.currentQuestion.options.map((option, index) => (
-              <div key={`${room.trivia.currentQuestion?.id}-${index}`} className="rounded-lg border border-cyan-200/25 bg-black/20 p-2 text-sm text-cyan-100">
+            {room.trivia.selectedClue.options.map((option, index) => (
+              <div
+                key={`${room.trivia.selectedClue?.questionId}-${index}`}
+                className="rounded-lg border border-cyan-200/25 bg-black/20 p-2 text-sm text-cyan-100"
+              >
                 <span className="font-semibold">{optionLabel(index)}.</span> {option}
               </div>
             ))}
           </div>
           <p className="mt-3 text-xs text-cyan-100/80">
-            Responder: {room.trivia.currentResponderPlayerId ?? "-"} | Team: {room.trivia.currentTeamId ?? "-"}
+            Responder: {room.trivia.currentResponderPlayerId ?? "-"} | Team: {room.trivia.currentResponderTeamId ?? "-"}
           </p>
         </section>
       ) : null}

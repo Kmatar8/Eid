@@ -2,7 +2,7 @@ import { randomUUID } from "crypto"
 
 import { hashPassword, verifyPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
-import { TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
+import { TRIVIA_CATEGORY_ORDER, TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
 import type {
   AvatarType,
   HostRecord,
@@ -21,6 +21,9 @@ import type {
 const LOBBY_OPEN_TIMEOUT_MS = 45 * 60 * 1000
 const HOST_PAUSE_GRACE_MS = 20 * 60 * 1000
 const HARD_ROOM_CAP_MS = 4 * 60 * 60 * 1000
+const TRIVIA_COUNTDOWN_MS = 5 * 1000
+const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
+const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 
 type InMemoryStore = {
   seeded: boolean
@@ -43,16 +46,32 @@ type HostSeedInput = {
   password?: string
 }
 
+type TriviaClueState = {
+  question: TriviaQuestion
+  used: boolean
+}
+
 type TriviaSession = {
   status: "in_progress" | "completed"
   phase: TriviaPhase
+  board: Array<{
+    categoryId: string
+    name: string
+    clues: TriviaClueState[]
+  }>
   questionIndex: number
-  questions: TriviaQuestion[]
+  totalQuestions: number
   currentTeamId: string | null
+  currentPickerPlayerId: string | null
   currentResponderPlayerId: string | null
+  currentResponderTeamId: string | null
+  selectedQuestionId: string | null
+  countdownEndsAt: number | null
+  buzzEndsAt: number | null
+  answerEndsAt: number | null
   lastResult: TriviaSnapshot["lastResult"]
-  turnsByTeam: Record<string, number>
   answersByPlayer: Map<string, number>
+  picksByPlayer: Map<string, number>
   rngSeed: number
 }
 
@@ -523,57 +542,278 @@ function getTeamPlayerIds(store: InMemoryStore, roomId: string, teamId: string):
     .map(([playerId]) => playerId)
 }
 
-function selectTeamForQuestion(store: InMemoryStore, roomId: string, session: TriviaSession): string | null {
-  const teams = store.teamsByRoom.get(roomId) ?? []
-  const eligibleTeamIds = teams
+function getTeamIdsInOrder(store: InMemoryStore, roomId: string): string[] {
+  return (store.teamsByRoom.get(roomId) ?? [])
+    .slice()
+    .sort((a, b) => a.order - b.order)
     .map((team) => team.id)
-    .filter((teamId) => getTeamPlayerIds(store, roomId, teamId).length > 0)
-
-  if (eligibleTeamIds.length === 0) {
-    return null
-  }
-
-  const turnCounts = eligibleTeamIds.map((teamId) => ({
-    teamId,
-    turns: session.turnsByTeam[teamId] ?? 0,
-  }))
-  const minTurns = Math.min(...turnCounts.map((entry) => entry.turns))
-  const leastUsedTeams = turnCounts.filter((entry) => entry.turns === minTurns).map((entry) => entry.teamId)
-  const chosen = pickRandom(leastUsedTeams, session)
-  if (!chosen) {
-    return null
-  }
-
-  session.turnsByTeam[chosen] = (session.turnsByTeam[chosen] ?? 0) + 1
-  return chosen
 }
 
-function selectResponderForTeam(
+function getRemainingQuestionCount(session: TriviaSession) {
+  let remaining = 0
+  for (const category of session.board) {
+    for (const clue of category.clues) {
+      if (!clue.used) {
+        remaining += 1
+      }
+    }
+  }
+  return remaining
+}
+
+function getQuestionById(session: TriviaSession, questionId: string | null): TriviaQuestion | null {
+  if (!questionId) {
+    return null
+  }
+
+  for (const category of session.board) {
+    for (const clue of category.clues) {
+      if (clue.question.id === questionId) {
+        return clue.question
+      }
+    }
+  }
+  return null
+}
+
+function getCurrentTriviaQuestion(session: TriviaSession): TriviaQuestion | null {
+  return getQuestionById(session, session.selectedQuestionId)
+}
+
+function markQuestionUsed(session: TriviaSession, questionId: string): boolean {
+  for (const category of session.board) {
+    for (const clue of category.clues) {
+      if (clue.question.id === questionId) {
+        if (clue.used) {
+          return false
+        }
+        clue.used = true
+        return true
+      }
+    }
+  }
+  return false
+}
+
+function pickTeamMemberForRole(
   store: InMemoryStore,
   roomId: string,
   teamId: string,
-  session: TriviaSession
+  session: TriviaSession,
+  role: "picker" | "responder",
+  excludePlayerId?: string | null
 ): string | null {
-  const teamPlayerIds = getTeamPlayerIds(store, roomId, teamId)
+  const teamPlayerIds = getTeamPlayerIds(store, roomId, teamId).filter((playerId) => playerId !== excludePlayerId)
   if (teamPlayerIds.length === 0) {
     return null
   }
 
-  const usage = teamPlayerIds.map((playerId) => ({
+  const activeSince = nowMs() - 45_000
+  const activePlayers = teamPlayerIds.filter((playerId) => {
+    const player = store.players.get(playerId)
+    return Boolean(player && player.lastSeenAt >= activeSince)
+  })
+  const candidatePool = activePlayers.length > 0 ? activePlayers : teamPlayerIds
+
+  const usageMap = role === "picker" ? session.picksByPlayer : session.answersByPlayer
+  const usage = candidatePool.map((playerId) => ({
     playerId,
-    answered: session.answersByPlayer.get(playerId) ?? 0,
+    usage: usageMap.get(playerId) ?? 0,
   }))
-  const minAnswered = Math.min(...usage.map((entry) => entry.answered))
-  const candidates = usage.filter((entry) => entry.answered === minAnswered).map((entry) => entry.playerId)
-  return pickRandom(candidates, session)
+  const minUsage = Math.min(...usage.map((entry) => entry.usage))
+  const leastUsed = usage.filter((entry) => entry.usage === minUsage).map((entry) => entry.playerId)
+  return pickRandom(leastUsed, session)
 }
 
-function currentTriviaQuestion(session: TriviaSession): TriviaQuestion | null {
-  if (session.questionIndex < 0 || session.questionIndex >= session.questions.length) {
+function getNextTurnTeamId(store: InMemoryStore, roomId: string, currentTeamId: string | null): string | null {
+  const teamIds = getTeamIdsInOrder(store, roomId)
+  if (teamIds.length === 0) {
     return null
   }
 
-  return session.questions[session.questionIndex] ?? null
+  const teamsWithPlayers = teamIds.filter((teamId) => getTeamPlayerIds(store, roomId, teamId).length > 0)
+  if (teamsWithPlayers.length === 0) {
+    return null
+  }
+
+  if (!currentTeamId) {
+    return teamsWithPlayers[0] ?? null
+  }
+
+  const currentIndex = teamIds.indexOf(currentTeamId)
+  if (currentIndex < 0) {
+    return teamsWithPlayers[0] ?? null
+  }
+
+  for (let offset = 1; offset <= teamIds.length; offset += 1) {
+    const candidate = teamIds[(currentIndex + offset) % teamIds.length]
+    if (candidate && getTeamPlayerIds(store, roomId, candidate).length > 0) {
+      return candidate
+    }
+  }
+
+  return teamsWithPlayers[0] ?? null
+}
+
+function setTurnTeam(
+  store: InMemoryStore,
+  roomId: string,
+  session: TriviaSession,
+  teamId: string | null,
+  options?: { clearResult?: boolean }
+) {
+  session.currentTeamId = teamId
+  session.currentPickerPlayerId = teamId ? pickTeamMemberForRole(store, roomId, teamId, session, "picker") : null
+  if (session.currentPickerPlayerId) {
+    session.picksByPlayer.set(
+      session.currentPickerPlayerId,
+      (session.picksByPlayer.get(session.currentPickerPlayerId) ?? 0) + 1
+    )
+  }
+
+  session.currentResponderPlayerId = null
+  session.currentResponderTeamId = null
+  session.selectedQuestionId = null
+  session.countdownEndsAt = null
+  session.buzzEndsAt = null
+  session.answerEndsAt = null
+  session.phase = "board_turn"
+  if (options?.clearResult ?? true) {
+    session.lastResult = null
+  }
+}
+
+function completeTriviaSession(store: InMemoryStore, room: RoomRecord, session: TriviaSession, reason: string) {
+  session.status = "completed"
+  session.phase = "next_question_or_end"
+  session.currentTeamId = null
+  session.currentPickerPlayerId = null
+  session.currentResponderPlayerId = null
+  session.currentResponderTeamId = null
+  session.selectedQuestionId = null
+  session.countdownEndsAt = null
+  session.buzzEndsAt = null
+  session.answerEndsAt = null
+  room.state = "between_games"
+  recordRoomEvent(store, room.id, "trivia.completed", { reason })
+}
+
+function moveToNextTurn(store: InMemoryStore, room: RoomRecord, session: TriviaSession): boolean {
+  if (getRemainingQuestionCount(session) === 0) {
+    completeTriviaSession(store, room, session, "board_exhausted")
+    return false
+  }
+
+  const nextTeamId = getNextTurnTeamId(store, room.id, session.currentTeamId)
+  if (!nextTeamId) {
+    completeTriviaSession(store, room, session, "no_eligible_teams")
+    return false
+  }
+
+  setTurnTeam(store, room.id, session, nextTeamId)
+  recordRoomEvent(store, room.id, "trivia.turn_started", {
+    teamId: session.currentTeamId,
+    pickerPlayerId: session.currentPickerPlayerId,
+    remainingQuestions: getRemainingQuestionCount(session),
+  })
+  return true
+}
+
+function setAnswerReveal(
+  store: InMemoryStore,
+  roomId: string,
+  session: TriviaSession,
+  payload: {
+    answeredOption: TriviaOption | null
+    correctOption: TriviaOption
+    awardedTeamId: string | null
+    awardedPoints: number
+    wasCorrect: boolean
+    questionId: string
+    reason: "correct" | "wrong" | "timeout" | "no_buzz" | "host_skip"
+  }
+) {
+  session.lastResult = {
+    questionId: payload.questionId,
+    answeredOption: payload.answeredOption,
+    correctOption: payload.correctOption,
+    awardedPoints: payload.awardedPoints,
+    awardedTeamId: payload.awardedTeamId,
+    wasCorrect: payload.wasCorrect,
+    reason: payload.reason,
+  }
+  session.phase = "answer_reveal"
+  session.countdownEndsAt = null
+  session.buzzEndsAt = null
+  session.answerEndsAt = null
+
+  recordRoomEvent(store, roomId, "trivia.answer_reveal", {
+    questionId: payload.questionId,
+    answeredOption: payload.answeredOption,
+    correctOption: payload.correctOption,
+    awardedTeamId: payload.awardedTeamId,
+    awardedPoints: payload.awardedPoints,
+    wasCorrect: payload.wasCorrect,
+    reason: payload.reason,
+    responderPlayerId: session.currentResponderPlayerId,
+    responderTeamId: session.currentResponderTeamId,
+  })
+}
+
+function applyTriviaTimedTransitions(store: InMemoryStore, room: RoomRecord, session: TriviaSession) {
+  if (session.status !== "in_progress") {
+    return
+  }
+
+  const now = nowMs()
+  const question = getCurrentTriviaQuestion(session)
+  if (!question) {
+    return
+  }
+
+  if (session.phase === "countdown" && session.countdownEndsAt && now >= session.countdownEndsAt) {
+    session.phase = "buzzer_open"
+    session.countdownEndsAt = null
+    session.buzzEndsAt = now + TRIVIA_BUZZ_WINDOW_MS
+    recordRoomEvent(store, room.id, "trivia.question_revealed", {
+      questionId: question.id,
+      teamId: session.currentTeamId,
+      buzzEndsAt: session.buzzEndsAt,
+    })
+    return
+  }
+
+  if (session.phase === "buzzer_open" && session.buzzEndsAt && now >= session.buzzEndsAt) {
+    setAnswerReveal(store, room.id, session, {
+      answeredOption: null,
+      correctOption: question.correctOption,
+      awardedTeamId: null,
+      awardedPoints: 0,
+      wasCorrect: false,
+      questionId: question.id,
+      reason: "no_buzz",
+    })
+    return
+  }
+
+  if (
+    session.phase === "answer_active" &&
+    session.answerEndsAt &&
+    now >= session.answerEndsAt &&
+    session.currentResponderTeamId
+  ) {
+    const scoreResult = addTeamScore(store, room.id, session.currentResponderTeamId, -question.points)
+    const awardedPoints = scoreResult.ok ? -question.points : 0
+    setAnswerReveal(store, room.id, session, {
+      answeredOption: null,
+      correctOption: question.correctOption,
+      awardedTeamId: session.currentResponderTeamId,
+      awardedPoints,
+      wasCorrect: false,
+      questionId: question.id,
+      reason: "timeout",
+    })
+  }
 }
 
 function toTriviaSnapshot(session: TriviaSession | null): TriviaSnapshot {
@@ -583,66 +823,55 @@ function toTriviaSnapshot(session: TriviaSession | null): TriviaSnapshot {
       phase: null,
       questionIndex: -1,
       totalQuestions: 0,
+      remainingQuestions: 0,
       currentTeamId: null,
+      currentPickerPlayerId: null,
       currentResponderPlayerId: null,
-      currentQuestion: null,
+      currentResponderTeamId: null,
+      countdownEndsAt: null,
+      buzzEndsAt: null,
+      answerEndsAt: null,
+      board: [],
+      selectedClue: null,
       lastResult: null,
     }
   }
 
-  const question = currentTriviaQuestion(session)
+  const selected = getCurrentTriviaQuestion(session)
   return {
     status: session.status,
     phase: session.phase,
     questionIndex: session.questionIndex,
-    totalQuestions: session.questions.length,
+    totalQuestions: session.totalQuestions,
+    remainingQuestions: getRemainingQuestionCount(session),
     currentTeamId: session.currentTeamId,
+    currentPickerPlayerId: session.currentPickerPlayerId,
     currentResponderPlayerId: session.currentResponderPlayerId,
-    currentQuestion: question
+    currentResponderTeamId: session.currentResponderTeamId,
+    countdownEndsAt: session.countdownEndsAt,
+    buzzEndsAt: session.buzzEndsAt,
+    answerEndsAt: session.answerEndsAt,
+    board: session.board.map((category) => ({
+      categoryId: category.categoryId,
+      name: category.name,
+      clues: category.clues.map((clue) => ({
+        questionId: clue.question.id,
+        points: clue.question.points,
+        used: clue.used,
+      })),
+    })),
+    selectedClue: selected
       ? {
-          id: question.id,
-          prompt: question.prompt,
-          options: question.options,
+          questionId: selected.id,
+          categoryId: selected.categoryId,
+          categoryName: selected.categoryName,
+          points: selected.points,
+          prompt: selected.prompt,
+          options: selected.options,
         }
       : null,
     lastResult: session.lastResult,
   }
-}
-
-function setNextTriviaQuestion(store: InMemoryStore, roomId: string, session: TriviaSession): boolean {
-  const nextIndex = session.questionIndex + 1
-  if (nextIndex >= session.questions.length) {
-    session.status = "completed"
-    session.phase = "next_question_or_end"
-    session.currentTeamId = null
-    session.currentResponderPlayerId = null
-    return false
-  }
-
-  session.questionIndex = nextIndex
-  session.lastResult = null
-  const teamId = selectTeamForQuestion(store, roomId, session)
-  if (!teamId) {
-    session.status = "completed"
-    session.phase = "next_question_or_end"
-    session.currentTeamId = null
-    session.currentResponderPlayerId = null
-    return false
-  }
-
-  const responder = selectResponderForTeam(store, roomId, teamId, session)
-  if (!responder) {
-    session.status = "completed"
-    session.phase = "next_question_or_end"
-    session.currentTeamId = null
-    session.currentResponderPlayerId = null
-    return false
-  }
-
-  session.currentTeamId = teamId
-  session.currentResponderPlayerId = responder
-  session.phase = "question_active_primary_team"
-  return true
 }
 
 function parseTriviaOption(value: unknown): TriviaOption | null {
@@ -653,10 +882,9 @@ function parseTriviaOption(value: unknown): TriviaOption | null {
   return null
 }
 
-function getOppositeTeamId(store: InMemoryStore, roomId: string, teamId: string): string | null {
-  const teams = store.teamsByRoom.get(roomId) ?? []
-  const opposite = teams.find((team) => team.id !== teamId)
-  return opposite?.id ?? null
+function getPlayerTeamId(store: InMemoryStore, roomId: string, playerId: string): string | null {
+  const teamMap = store.playerTeamsByRoom.get(roomId) ?? new Map<string, string>()
+  return teamMap.get(playerId) ?? null
 }
 
 export function isRoomActiveState(state: RoomState) {
@@ -837,6 +1065,48 @@ export function getRoomEventsSince(roomId: string, sinceVersion = 0, limit = 100
     .slice(0, Math.max(1, limit))
 }
 
+function createTriviaSession(store: InMemoryStore, roomId: string): TriviaSession | null {
+  const board = TRIVIA_CATEGORY_ORDER.map((category) => {
+    const clues = TRIVIA_QUESTION_BANK.filter((question) => question.categoryId === category.id).sort(
+      (a, b) => a.points - b.points
+    )
+    return {
+      categoryId: category.id,
+      name: category.name,
+      clues: clues.map((question) => ({ question, used: false })),
+    }
+  })
+
+  if (board.some((category) => category.clues.length !== 5)) {
+    return null
+  }
+
+  const totalQuestions = board.reduce((acc, category) => acc + category.clues.length, 0)
+  if (totalQuestions === 0) {
+    return null
+  }
+
+  return {
+    status: "in_progress",
+    phase: "board_turn",
+    board,
+    questionIndex: 0,
+    totalQuestions,
+    currentTeamId: null,
+    currentPickerPlayerId: null,
+    currentResponderPlayerId: null,
+    currentResponderTeamId: null,
+    selectedQuestionId: null,
+    countdownEndsAt: null,
+    buzzEndsAt: null,
+    answerEndsAt: null,
+    lastResult: null,
+    answersByPlayer: new Map(),
+    picksByPlayer: new Map(),
+    rngSeed: hashSeed(`${roomId}:trivia`),
+  }
+}
+
 type ApplyRoomActionInput = {
   roomId: string
   actorRole: ClientRole
@@ -859,6 +1129,8 @@ type ApplyRoomActionResult =
         | "TEAM_NOT_FOUND"
         | "INVALID_DELTA"
         | "TRIVIA_NOT_ACTIVE"
+        | "TRIVIA_INVALID_CLUE"
+        | "TRIVIA_NO_ALTERNATE_RESPONDER"
         | "TRIVIA_INVALID_RESPONDER"
         | "INVALID_OPTION"
         | "ACTION_NOT_SUPPORTED"
@@ -880,6 +1152,11 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
   const room = getRoom(input.roomId)
   if (!room) {
     return { ok: false, code: "ROOM_NOT_FOUND" }
+  }
+
+  const sessionTick = store.triviaByRoom.get(room.id)
+  if (sessionTick) {
+    applyTriviaTimedTransitions(store, room, sessionTick)
   }
 
   if (input.actorRole === "host") {
@@ -974,71 +1251,144 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
-      const questionIds = deterministicShuffle(
-        TRIVIA_QUESTION_BANK.map((question) => question.id),
-        `${room.id}:questions`
-      )
-      const questions = questionIds
-        .map((questionId) => TRIVIA_QUESTION_BANK.find((question) => question.id === questionId))
-        .filter((question): question is TriviaQuestion => Boolean(question))
-
-      if (questions.length === 0) {
+      const session = createTriviaSession(store, room.id)
+      if (!session) {
         return { ok: false, code: "ACTION_NOT_SUPPORTED" }
       }
 
-      const session: TriviaSession = {
-        status: "in_progress",
-        phase: "question_prepare",
-        questionIndex: -1,
-        questions,
-        currentTeamId: null,
-        currentResponderPlayerId: null,
-        lastResult: null,
-        turnsByTeam: {},
-        answersByPlayer: new Map(),
-        rngSeed: hashSeed(`${room.id}:trivia`),
+      const startingTeamId = getTeamIdsInOrder(store, room.id).find(
+        (teamId) => getTeamPlayerIds(store, room.id, teamId).length > 0
+      )
+      if (!startingTeamId) {
+        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
       }
 
+      setTurnTeam(store, room.id, session, startingTeamId)
       store.triviaByRoom.set(room.id, session)
       room.state = "game_live"
       room.pausedAt = null
 
-      const started = setNextTriviaQuestion(store, room.id, session)
-      if (!started) {
-        session.status = "completed"
-        session.phase = "next_question_or_end"
-        room.state = "between_games"
-        recordRoomEvent(store, room.id, "trivia.completed", { reason: "no_eligible_players" })
-      } else {
-        const question = currentTriviaQuestion(session)
-        recordRoomEvent(store, room.id, "trivia.question_started", {
-          questionId: question?.id ?? null,
-          questionIndex: session.questionIndex,
-          teamId: session.currentTeamId,
-          responderPlayerId: session.currentResponderPlayerId,
-        })
+      recordRoomEvent(store, room.id, "trivia.started", {
+        hostId: input.actorId,
+        totalQuestions: session.totalQuestions,
+      })
+      recordRoomEvent(store, room.id, "trivia.turn_started", {
+        teamId: session.currentTeamId,
+        pickerPlayerId: session.currentPickerPlayerId,
+        remainingQuestions: getRemainingQuestionCount(session),
+      })
+    } else if (input.actionType === "host.selectTriviaClue") {
+      const session = store.triviaByRoom.get(room.id)
+      if (!session || session.status !== "in_progress") {
+        return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
       }
+
+      if (session.phase !== "board_turn" || !session.currentTeamId) {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const questionId = typeof input.payload?.questionId === "string" ? input.payload.questionId : ""
+      const selectedQuestion = getQuestionById(session, questionId)
+      if (!questionId || !selectedQuestion) {
+        return { ok: false, code: "TRIVIA_INVALID_CLUE" }
+      }
+
+      const marked = markQuestionUsed(session, questionId)
+      if (!marked) {
+        return { ok: false, code: "TRIVIA_INVALID_CLUE" }
+      }
+
+      session.selectedQuestionId = questionId
+      session.questionIndex = session.totalQuestions - getRemainingQuestionCount(session)
+      session.currentResponderPlayerId = null
+      session.currentResponderTeamId = null
+      session.phase = "countdown"
+      session.countdownEndsAt = nowMs() + TRIVIA_COUNTDOWN_MS
+      session.buzzEndsAt = null
+      session.answerEndsAt = null
+      session.lastResult = null
+
+      recordRoomEvent(store, room.id, "trivia.clue_selected", {
+        hostId: input.actorId,
+        questionId: selectedQuestion.id,
+        categoryId: selectedQuestion.categoryId,
+        categoryName: selectedQuestion.categoryName,
+        points: selectedQuestion.points,
+        teamId: session.currentTeamId,
+        pickerPlayerId: session.currentPickerPlayerId,
+        countdownEndsAt: session.countdownEndsAt,
+      })
     } else if (input.actionType === "host.nextQuestion") {
       const session = store.triviaByRoom.get(room.id)
       if (!session || session.status !== "in_progress") {
         return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
       }
 
-      const hasNext = setNextTriviaQuestion(store, room.id, session)
-      if (!hasNext) {
-        session.status = "completed"
-        session.phase = "next_question_or_end"
-        room.state = "between_games"
-        recordRoomEvent(store, room.id, "trivia.completed", { reason: "questions_exhausted" })
-      } else {
-        const question = currentTriviaQuestion(session)
-        recordRoomEvent(store, room.id, "trivia.question_started", {
-          questionId: question?.id ?? null,
-          questionIndex: session.questionIndex,
-          teamId: session.currentTeamId,
-          responderPlayerId: session.currentResponderPlayerId,
+      if (session.phase === "answer_reveal") {
+        moveToNextTurn(store, room, session)
+      } else if (
+        session.phase === "countdown" ||
+        session.phase === "buzzer_open" ||
+        session.phase === "answer_active"
+      ) {
+        const question = getCurrentTriviaQuestion(session)
+        if (!question) {
+          return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
+        }
+
+        setAnswerReveal(store, room.id, session, {
+          answeredOption: null,
+          correctOption: question.correctOption,
+          awardedTeamId: null,
+          awardedPoints: 0,
+          wasCorrect: false,
+          questionId: question.id,
+          reason: "host_skip",
         })
+      } else {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
+    } else if (input.actionType === "host.selectAnotherResponder") {
+      const session = store.triviaByRoom.get(room.id)
+      if (!session || session.status !== "in_progress") {
+        return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
+      }
+
+      if (session.phase !== "board_turn" && session.phase !== "answer_active") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const role = session.phase === "board_turn" ? "picker" : "responder"
+      const teamId = role === "picker" ? session.currentTeamId : session.currentResponderTeamId
+      const previousPlayerId =
+        role === "picker" ? session.currentPickerPlayerId : session.currentResponderPlayerId
+      if (!teamId) {
+        return { ok: false, code: "TRIVIA_NO_ALTERNATE_RESPONDER" }
+      }
+
+      const nextPlayerId = pickTeamMemberForRole(store, room.id, teamId, session, role, previousPlayerId)
+      if (!nextPlayerId) {
+        return { ok: false, code: "TRIVIA_NO_ALTERNATE_RESPONDER" }
+      }
+
+      if (role === "picker") {
+        session.currentPickerPlayerId = nextPlayerId
+        session.picksByPlayer.set(nextPlayerId, (session.picksByPlayer.get(nextPlayerId) ?? 0) + 1)
+      } else {
+        session.currentResponderPlayerId = nextPlayerId
+        session.answerEndsAt = nowMs() + TRIVIA_ANSWER_WINDOW_MS
+      }
+
+      const question = getCurrentTriviaQuestion(session)
+      recordRoomEvent(store, room.id, "trivia.responder_reselected", {
+        hostId: input.actorId,
+        questionId: question?.id ?? null,
+        teamId,
+        phase: session.phase,
+        role,
+        previousPlayerId,
+        nextPlayerId,
+      })
     } else if (input.actionType === "host.addTeamScore") {
       if (room.state !== "game_live") {
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
@@ -1092,10 +1442,44 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     }
 
     touchPlayer(input.roomId, input.actorId)
-    recordRoomEvent(store, room.id, "player.input", {
-      playerId: input.actorId,
-      payload: input.payload ?? {},
-    })
+
+    const session = store.triviaByRoom.get(room.id)
+    const isBuzzIntent =
+      input.payload?.intent === "buzz" ||
+      input.payload?.kind === "buzz" ||
+      input.payload?.action === "buzz" ||
+      Object.keys(input.payload ?? {}).length === 0
+    if (
+      isBuzzIntent &&
+      session &&
+      session.status === "in_progress" &&
+      session.phase === "buzzer_open" &&
+      !session.currentResponderPlayerId
+    ) {
+      const responderTeamId = getPlayerTeamId(store, room.id, input.actorId)
+      if (!responderTeamId) {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      session.currentResponderPlayerId = input.actorId
+      session.currentResponderTeamId = responderTeamId
+      session.phase = "answer_active"
+      session.buzzEndsAt = null
+      session.answerEndsAt = nowMs() + TRIVIA_ANSWER_WINDOW_MS
+
+      const question = getCurrentTriviaQuestion(session)
+      recordRoomEvent(store, room.id, "trivia.buzzer_locked", {
+        questionId: question?.id ?? null,
+        responderPlayerId: input.actorId,
+        responderTeamId,
+        answerEndsAt: session.answerEndsAt,
+      })
+    } else {
+      recordRoomEvent(store, room.id, "player.input", {
+        playerId: input.actorId,
+        payload: input.payload ?? {},
+      })
+    }
   } else if (input.actionType === "player.submitAnswer") {
     if (input.requestId) {
       const processedSubmits = store.processedPlayerSubmitByRoom.get(room.id) ?? new Map<string, RoomEventRecord>()
@@ -1111,10 +1495,9 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
     }
 
-    if (
-      session.phase !== "question_active_primary_team" &&
-      session.phase !== "question_active_steal_team"
-    ) {
+    applyTriviaTimedTransitions(store, room, session)
+
+    if (session.phase !== "answer_active") {
       return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
     }
 
@@ -1127,8 +1510,8 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "INVALID_OPTION" }
     }
 
-    const question = currentTriviaQuestion(session)
-    if (!question || !session.currentTeamId) {
+    const question = getCurrentTriviaQuestion(session)
+    if (!question || !session.currentResponderTeamId) {
       return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
     }
 
@@ -1136,118 +1519,21 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     session.answersByPlayer.set(input.actorId, (session.answersByPlayer.get(input.actorId) ?? 0) + 1)
 
     const wasCorrect = selectedOption === question.correctOption
-    if (session.phase === "question_active_primary_team") {
-      if (wasCorrect) {
-        const scoreResult = addTeamScore(store, room.id, session.currentTeamId, 10)
-        if (!scoreResult.ok) {
-          return { ok: false, code: scoreResult.code }
-        }
-
-        session.lastResult = {
-          correctOption: question.correctOption,
-          answeredOption: selectedOption,
-          wasCorrect: true,
-          awardedTeamId: session.currentTeamId,
-          awardedPoints: 10,
-        }
-        session.phase = "answer_reveal"
-        recordRoomEvent(store, room.id, "trivia.answer_reveal", {
-          questionId: question.id,
-          playerId: input.actorId,
-          teamId: session.currentTeamId,
-          phase: "primary",
-          wasCorrect: true,
-          awardedPoints: 10,
-          awardedTeamId: session.currentTeamId,
-          selectedOption,
-          correctOption: question.correctOption,
-        })
-      } else {
-        const stealTeamId = getOppositeTeamId(store, room.id, session.currentTeamId)
-        if (!stealTeamId) {
-          session.lastResult = {
-            correctOption: question.correctOption,
-            answeredOption: selectedOption,
-            wasCorrect: false,
-            awardedTeamId: null,
-            awardedPoints: 0,
-          }
-          session.phase = "answer_reveal"
-          recordRoomEvent(store, room.id, "trivia.answer_reveal", {
-            questionId: question.id,
-            playerId: input.actorId,
-            teamId: session.currentTeamId,
-            phase: "primary",
-            wasCorrect: false,
-            awardedPoints: 0,
-            awardedTeamId: null,
-            selectedOption,
-            correctOption: question.correctOption,
-          })
-        } else {
-          const stealResponder = selectResponderForTeam(store, room.id, stealTeamId, session)
-          if (!stealResponder) {
-            session.lastResult = {
-              correctOption: question.correctOption,
-              answeredOption: selectedOption,
-              wasCorrect: false,
-              awardedTeamId: null,
-              awardedPoints: 0,
-            }
-            session.phase = "answer_reveal"
-            recordRoomEvent(store, room.id, "trivia.answer_reveal", {
-              questionId: question.id,
-              playerId: input.actorId,
-              teamId: session.currentTeamId,
-              phase: "primary",
-              wasCorrect: false,
-              awardedPoints: 0,
-              awardedTeamId: null,
-              selectedOption,
-              correctOption: question.correctOption,
-            })
-          } else {
-            session.currentTeamId = stealTeamId
-            session.currentResponderPlayerId = stealResponder
-            session.phase = "question_active_steal_team"
-            recordRoomEvent(store, room.id, "trivia.steal_ready", {
-              questionId: question.id,
-              fromTeamId: getOppositeTeamId(store, room.id, stealTeamId),
-              toTeamId: stealTeamId,
-              responderPlayerId: stealResponder,
-              selectedOption,
-            })
-          }
-        }
-      }
-    } else {
-      if (wasCorrect) {
-        const scoreResult = addTeamScore(store, room.id, session.currentTeamId, 6)
-        if (!scoreResult.ok) {
-          return { ok: false, code: scoreResult.code }
-        }
-      }
-
-      session.lastResult = {
-        correctOption: question.correctOption,
-        answeredOption: selectedOption,
-        wasCorrect,
-        awardedTeamId: wasCorrect ? session.currentTeamId : null,
-        awardedPoints: wasCorrect ? 6 : 0,
-      }
-      session.phase = "answer_reveal"
-      recordRoomEvent(store, room.id, "trivia.answer_reveal", {
-        questionId: question.id,
-        playerId: input.actorId,
-        teamId: session.currentTeamId,
-        phase: "steal",
-        wasCorrect,
-        awardedPoints: wasCorrect ? 6 : 0,
-        awardedTeamId: wasCorrect ? session.currentTeamId : null,
-        selectedOption,
-        correctOption: question.correctOption,
-      })
+    const scoreDelta = wasCorrect ? question.points : -question.points
+    const scoreResult = addTeamScore(store, room.id, session.currentResponderTeamId, scoreDelta)
+    if (!scoreResult.ok) {
+      return { ok: false, code: scoreResult.code }
     }
+
+    setAnswerReveal(store, room.id, session, {
+      answeredOption: selectedOption,
+      correctOption: question.correctOption,
+      awardedTeamId: session.currentResponderTeamId,
+      awardedPoints: scoreDelta,
+      wasCorrect,
+      questionId: question.id,
+      reason: wasCorrect ? "correct" : "wrong",
+    })
   } else {
     return { ok: false, code: "ACTION_NOT_SUPPORTED" }
   }
@@ -1303,6 +1589,11 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
     return null
   }
 
+  const triviaSession = store.triviaByRoom.get(roomId) ?? null
+  if (triviaSession) {
+    applyTriviaTimedTransitions(store, room, triviaSession)
+  }
+
   const playerIds = Array.from(store.playersByRoom.get(roomId) ?? [])
   const players = playerIds
     .map((playerId) => store.players.get(playerId))
@@ -1346,6 +1637,6 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
     players,
     teams,
     teamAssignments,
-    trivia: toTriviaSnapshot(store.triviaByRoom.get(roomId) ?? null),
+    trivia: toTriviaSnapshot(triviaSession),
   }
 }

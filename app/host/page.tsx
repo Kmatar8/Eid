@@ -20,6 +20,7 @@ import type { ClientActionType } from "@/lib/server/protocol-v1"
 import type { RoomSnapshot } from "@/lib/server/types"
 
 const POLL_MS = 1500
+const CLOCK_TICK_MS = 300
 
 type HostStage = "lobby" | "overview" | "trivia" | "celebration"
 
@@ -70,26 +71,35 @@ function isInvalidTransitionAt(error: unknown, allowedStates: string[]) {
   return state ? allowedStates.includes(state) : false
 }
 
-function getTeamTone(teamId: string | null | undefined) {
+function getTeamTone(teamId: string | null | undefined): TeamTone {
   if (!teamId) {
     return {
       border: "border-white/20",
       text: "text-slate-100",
       bg: "bg-white/5",
       chip: "bg-white/10 text-slate-100 border-white/20",
-    } satisfies TeamTone
+    }
   }
 
-  return TEAM_TONES[teamId] ?? {
-    border: "border-white/20",
-    text: "text-slate-100",
-    bg: "bg-white/5",
-    chip: "bg-white/10 text-slate-100 border-white/20",
-  }
+  return (
+    TEAM_TONES[teamId] ?? {
+      border: "border-white/20",
+      text: "text-slate-100",
+      bg: "bg-white/5",
+      chip: "bg-white/10 text-slate-100 border-white/20",
+    }
+  )
 }
 
 function scoreBadge(score: number) {
-  return score > 0 ? `+${score}` : `${score}`
+  return score >= 0 ? `+${score}` : `${score}`
+}
+
+function remainingSeconds(targetTs: number | null, nowTs: number) {
+  if (!targetTs) {
+    return 0
+  }
+  return Math.max(0, Math.ceil((targetTs - nowTs) / 1000))
 }
 
 export default function HostStagePage() {
@@ -104,6 +114,7 @@ export default function HostStagePage() {
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null)
   const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null)
   const [showTriviaRulesModal, setShowTriviaRulesModal] = useState(false)
+  const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -112,6 +123,13 @@ export default function HostStagePage() {
       router.replace("/host/login")
     }
   }, [hostToken, router])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowTs(Date.now())
+    }, CLOCK_TICK_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
@@ -126,7 +144,7 @@ export default function HostStagePage() {
       return null
     }
 
-    return `https://api.qrserver.com/v1/create-qr-code/?size=520x520&margin=18&data=${encodeURIComponent(joinUrl)}`
+    return `https://api.qrserver.com/v1/create-qr-code/?size=620x620&margin=16&data=${encodeURIComponent(joinUrl)}`
   }, [joinUrl])
 
   const stage: HostStage = useMemo(() => {
@@ -348,7 +366,7 @@ export default function HostStagePage() {
         }
       }
 
-      setNotice("تم تثبيت الفرق. اعرض صفحة نظرة الألعاب وابدأ اللعبة الأولى.")
+      setNotice("تم تثبيت الفرق. استعرض القواعد ثم ابدأ لوحة الجيوباردي.")
       await refreshState()
     } catch (requestError) {
       setError(toErrorMessage(requestError))
@@ -361,7 +379,45 @@ export default function HostStagePage() {
     setShowTriviaRulesModal(false)
     try {
       await runAction("host.startTrivia")
-      setNotice("بدأت لعبة المعلومات. الأسئلة الآن على أجهزة اللاعبين.")
+      setNotice("بدأت لوحة الجيوباردي. الفريق الحالي يختار الفئة والنقاط.")
+    } catch (requestError) {
+      setError(toErrorMessage(requestError))
+    }
+  }, [runAction])
+
+  const handleSelectTriviaClue = useCallback(
+    async (questionId: string) => {
+      try {
+        await runAction("host.selectTriviaClue", { questionId })
+      } catch (requestError) {
+        setError(toErrorMessage(requestError))
+      }
+    },
+    [runAction]
+  )
+
+  const handleSelectAnotherResponder = useCallback(async () => {
+    try {
+      const nextRoom = await runAction("host.selectAnotherResponder")
+      const nextResponder = nextRoom.players.find(
+        (player) => player.playerId === nextRoom.trivia.currentResponderPlayerId
+      )
+      const nextPicker = nextRoom.players.find((player) => player.playerId === nextRoom.trivia.currentPickerPlayerId)
+      if (nextRoom.trivia.phase === "answer_active" && nextResponder) {
+        setNotice(`تم اختيار ${nextResponder.displayName} للإجابة من نفس الفريق.`)
+      } else if (nextPicker) {
+        setNotice(`تم اختيار ${nextPicker.displayName} ليقوم بالاختيار لهذا الدور.`)
+      } else {
+        setNotice("تم اختيار لاعب بديل.")
+      }
+    } catch (requestError) {
+      setError(toErrorMessage(requestError))
+    }
+  }, [runAction])
+
+  const handleAdvanceTurn = useCallback(async () => {
+    try {
+      await runAction("host.nextQuestion")
     } catch (requestError) {
       setError(toErrorMessage(requestError))
     }
@@ -386,36 +442,80 @@ export default function HostStagePage() {
     router.replace("/host/login")
   }
 
-  const triviaTeam = room?.teams.find((team) => team.teamId === room?.trivia.currentTeamId) ?? null
-  const responder = room?.trivia.currentResponderPlayerId
-    ? playerById.get(room.trivia.currentResponderPlayerId) ?? null
+  const trivia = room?.trivia ?? null
+  const currentTurnTeam = room?.teams.find((team) => team.teamId === trivia?.currentTeamId) ?? null
+  const currentPicker = trivia?.currentPickerPlayerId ? playerById.get(trivia.currentPickerPlayerId) ?? null : null
+  const responderTeam = room?.teams.find((team) => team.teamId === trivia?.currentResponderTeamId) ?? null
+  const responderPlayer = trivia?.currentResponderPlayerId
+    ? playerById.get(trivia.currentResponderPlayerId) ?? null
     : null
-  const currentTone = getTeamTone(triviaTeam?.teamId ?? null)
+  const selectedClue = trivia?.selectedClue ?? null
+  const currentTone = getTeamTone(responderTeam?.teamId ?? currentTurnTeam?.teamId ?? null)
+  const countdownSeconds = remainingSeconds(trivia?.countdownEndsAt ?? null, nowTs)
+  const buzzSeconds = remainingSeconds(trivia?.buzzEndsAt ?? null, nowTs)
+  const answerSeconds = remainingSeconds(trivia?.answerEndsAt ?? null, nowTs)
 
-  const triviaBannerMessage = useMemo(() => {
-    if (!room || room.trivia.status !== "in_progress") {
-      return "في انتظار بدء لعبة المعلومات."
+  const canSelectAnotherResponder =
+    trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
+
+  const canSelectClue = trivia?.status === "in_progress" && trivia.phase === "board_turn"
+
+  const boardRowIndexes = useMemo(() => {
+    const maxRows = Math.max(...(trivia?.board ?? []).map((category) => category.clues.length), 0)
+    return Array.from({ length: maxRows }, (_, index) => index)
+  }, [trivia?.board])
+
+  const liveHeadline = useMemo(() => {
+    if (!trivia || trivia.status !== "in_progress") {
+      return "في انتظار بدء لوحة الجيوباردي."
     }
 
-    const teamName = triviaTeam?.name ?? "الفريق"
-    const responderName = responder?.displayName ?? "لاعب غير محدد"
-
-    if (room.trivia.phase === "question_active_primary_team") {
-      return `السؤال لـ ${responderName} من ${teamName}`
+    if (trivia.phase === "board_turn") {
+      const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
+      const pickerName = currentPicker?.displayName ?? "لاعب عشوائي"
+      return `${teamName} يختار الآن. اللاعب المحدد للدور: ${pickerName}`
     }
 
-    if (room.trivia.phase === "question_active_steal_team") {
-      return `${teamName} لديه فرصة سرقة النقاط. الدور الآن على ${responderName}`
+    if (trivia.phase === "countdown") {
+      return `سيتم كشف السؤال بعد ${countdownSeconds} ثوانٍ.`
     }
 
-    if (room.trivia.phase === "answer_reveal" && room.trivia.lastResult) {
-      return room.trivia.lastResult.wasCorrect
-        ? `إجابة صحيحة. ${teamName} كسب ${scoreBadge(room.trivia.lastResult.awardedPoints)} نقاط`
-        : "إجابة غير صحيحة. استعدوا للسؤال التالي."
+    if (trivia.phase === "buzzer_open") {
+      return `البازر مفتوح للجميع. أول ضغطة خلال ${buzzSeconds} ثانية تحسم الإجابة.`
     }
 
-    return "استعدوا للسؤال القادم."
-  }, [responder?.displayName, room, triviaTeam?.name])
+    if (trivia.phase === "answer_active") {
+      const playerName = responderPlayer?.displayName ?? "لاعب غير معروف"
+      const teamName = responderTeam?.name ?? "فريق غير معروف"
+      return `السؤال للاعب ${playerName} من ${teamName}. وقت الإجابة ${answerSeconds} ثانية.`
+    }
+
+    if (trivia.phase === "answer_reveal" && trivia.lastResult) {
+      const teamName = room?.teams.find((team) => team.teamId === trivia.lastResult?.awardedTeamId)?.name ?? "الفريق"
+      if (trivia.lastResult.reason === "no_buzz") {
+        return "لم يضغط أحد البازر. لا توجد نقاط لهذا السؤال."
+      }
+      if (trivia.lastResult.reason === "host_skip") {
+        return "تم تخطي السؤال بواسطة المضيف."
+      }
+      if (trivia.lastResult.wasCorrect) {
+        return `إجابة صحيحة. ${teamName} كسب ${scoreBadge(trivia.lastResult.awardedPoints)} نقاط.`
+      }
+      return `إجابة خاطئة. ${teamName} خسر ${Math.abs(trivia.lastResult.awardedPoints)} نقاط.`
+    }
+
+    return "استمروا في اللعب."
+  }, [
+    answerSeconds,
+    countdownSeconds,
+    currentPicker?.displayName,
+    currentTurnTeam?.name,
+    responderPlayer?.displayName,
+    responderTeam?.name,
+    room?.teams,
+    trivia,
+    buzzSeconds,
+  ])
 
   const winningSummary = useMemo(() => {
     if (!room) {
@@ -438,20 +538,20 @@ export default function HostStagePage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden text-white">
-      <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-70" />
+      <FireworksBackground population={2} particleSpeed={3} className="absolute inset-0 z-0 opacity-65" />
       <FireworksBackgroundDemo population={2} />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.12),transparent_52%),linear-gradient(160deg,#0b1120_0%,#1f1b4b_48%,#0b1120_100%)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:56px_56px]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.14),transparent_52%),linear-gradient(160deg,#090f1e_0%,#1a2052_48%,#090f1e_100%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:56px_56px]" />
 
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-8">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/35 p-4 backdrop-blur-xl">
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1700px] px-4 py-5 sm:px-8">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/35 px-5 py-4 backdrop-blur-xl">
           <div>
             <h1 className="text-2xl font-bold sm:text-3xl">وضع المضيف - شاشة الفعالية</h1>
             <p className="mt-1 text-sm text-slate-200">
               {hostUsername} | الغرفة: {roomId ?? "جاري التحضير..."}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link href="/" className="text-sm text-amber-200 underline-offset-2 hover:underline">
               العودة للهبوط
             </Link>
@@ -464,8 +564,8 @@ export default function HostStagePage() {
           </div>
         </header>
 
-        {error ? <p className="mb-4 rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-100">{error}</p> : null}
-        {notice ? <p className="mb-4 rounded-xl bg-emerald-500/20 px-4 py-3 text-sm text-emerald-100">{notice}</p> : null}
+        {error ? <p className="mb-3 rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-100">{error}</p> : null}
+        {notice ? <p className="mb-3 rounded-xl bg-emerald-500/20 px-4 py-3 text-sm text-emerald-100">{notice}</p> : null}
 
         {!room ? (
           <section className="rounded-3xl border border-white/20 bg-black/40 p-10 text-center backdrop-blur-xl">
@@ -476,12 +576,12 @@ export default function HostStagePage() {
         ) : null}
 
         {room && stage === "lobby" ? (
-          <section className="grid gap-4 lg:grid-cols-[420px_1fr]">
+          <section className="grid gap-4 xl:grid-cols-[37rem_1fr]">
             <article className="rounded-3xl border border-white/20 bg-black/40 p-5 backdrop-blur-xl">
               <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Join QR</p>
-              <h2 className="mt-2 text-2xl font-semibold">امسح الرمز للانضمام</h2>
-              <p className="mt-2 text-sm text-slate-200">
-                افتح الكاميرا على جوال اللاعب، امسح الرمز، ثم أدخل الاسم للدخول مباشرة.
+              <h2 className="mt-2 text-3xl font-bold">امسح الرمز للانضمام</h2>
+              <p className="mt-2 text-base text-slate-200">
+                امسح QR من جوال اللاعب ثم أدخل الاسم. استمر في توزيع اللاعبين بين الفريقين أثناء الانضمام.
               </p>
 
               <div className="mt-4 overflow-hidden rounded-2xl border border-white/20 bg-white p-3">
@@ -507,7 +607,7 @@ export default function HostStagePage() {
 
               <Button
                 type="button"
-                className="mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950"
+                className="mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction) || room.playerCount === 0}
                 onClick={() => void handleStartSession()}
               >
@@ -518,13 +618,11 @@ export default function HostStagePage() {
             <article className="space-y-4 rounded-3xl border border-white/20 bg-black/40 p-5 backdrop-blur-xl">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Players</p>
-                <h2 className="mt-2 text-2xl font-semibold">اللاعبون المنضمون</h2>
-                <p className="mt-2 text-sm text-slate-200">
-                  اسحب أي لاعب وضعه داخل عمود الفريق المناسب. أزرار الإسناد السريعة متاحة أيضًا.
-                </p>
+                <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
+                <p className="mt-2 text-base text-slate-200">اسحب اللاعبين إلى أعمدة الفرق أو استخدم أزرار الإسناد السريعة.</p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
                 {room.players.length === 0 ? (
                   <p className="col-span-full rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-slate-300">
                     لا يوجد لاعبين بعد. انتظر الانضمامات عبر QR.
@@ -534,8 +632,7 @@ export default function HostStagePage() {
                 {room.players.map((player) => {
                   const teamId = assignmentByPlayer.get(player.playerId) ?? null
                   const tone = getTeamTone(teamId)
-                  const teamLabel =
-                    teamId === "team_a" ? "Team A" : teamId === "team_b" ? "Team B" : "غير مخصص"
+                  const teamLabel = teamId === "team_a" ? "Team A" : teamId === "team_b" ? "Team B" : "غير مخصص"
 
                   return (
                     <article
@@ -549,9 +646,9 @@ export default function HostStagePage() {
                         setDraggingPlayerId(null)
                         setDropTargetTeamId(null)
                       }}
-                      className={`rounded-2xl border p-3 backdrop-blur-sm ${tone.border} ${tone.bg}`}
+                      className={`rounded-2xl border p-3 ${tone.border} ${tone.bg}`}
                     >
-                      <p className="font-semibold">{player.displayName}</p>
+                      <p className="text-lg font-semibold">{player.displayName}</p>
                       <p className="mt-1 text-xs text-slate-300">آخر نشاط: {new Date(player.lastSeenAt).toLocaleTimeString()}</p>
                       <p className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs ${tone.chip}`}>{teamLabel}</p>
 
@@ -576,7 +673,7 @@ export default function HostStagePage() {
                 })}
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 {room.teams.map((team) => {
                   const tone = getTeamTone(team.teamId)
                   const teamPlayers = team.teamId === "team_a" ? playersByTeam.team_a : playersByTeam.team_b
@@ -595,12 +692,12 @@ export default function HostStagePage() {
                       }}
                       onDragLeave={() => setDropTargetTeamId(null)}
                       onDrop={(event) => void handleDropOnTeam(team.teamId, event)}
-                      className={`min-h-48 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg} ${
+                      className={`min-h-52 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg} ${
                         isDropActive ? "ring-2 ring-white/30" : ""
                       }`}
                     >
                       <div className="mb-3 flex items-center justify-between">
-                        <p className={`text-lg font-semibold ${tone.text}`}>{team.name}</p>
+                        <p className={`text-xl font-bold ${tone.text}`}>{team.name}</p>
                         <p className="text-sm text-slate-200">{teamPlayers.length} لاعب</p>
                       </div>
 
@@ -640,32 +737,36 @@ export default function HostStagePage() {
         {room && stage === "overview" ? (
           <section className="rounded-3xl border border-white/20 bg-black/40 p-6 backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Game Overview</p>
-            <h2 className="mt-2 text-3xl font-bold">قواعد الفعالية قبل بداية اللعبة</h2>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <h2 className="mt-2 text-4xl font-bold">قواعد الجيوباردي قبل البداية</h2>
+            <div className="mt-5 grid gap-3 lg:grid-cols-2">
               <article className="rounded-2xl border border-white/20 bg-white/5 p-4">
-                <h3 className="text-xl font-semibold">القواعد العامة</h3>
-                <ul className="mt-3 space-y-2 text-sm text-slate-200">
-                  <li>1. اللاعب يجيب فقط عندما يظهر اسمه كالمجيب الحالي.</li>
-                  <li>2. كل إجابة تُحسب مباشرة على لوحة النقاط.</li>
-                  <li>3. الإجابة الخاطئة تفتح فرصة سرقة للفريق الآخر.</li>
+                <h3 className="text-2xl font-bold">آلية اللعب</h3>
+                <ul className="mt-3 space-y-2 text-base text-slate-200">
+                  <li>1. كل دور لفريق واحد لاختيار الفئة والنقاط.</li>
+                  <li>2. بعد الاختيار يبدأ عد تنازلي 5 ثوانٍ قبل كشف السؤال.</li>
+                  <li>3. البازر مفتوح للجميع لمدة 20 ثانية.</li>
+                  <li>4. أول لاعب يضغط البازر هو الوحيد الذي يرى الخيارات ويجيب.</li>
                 </ul>
               </article>
               <article className="rounded-2xl border border-white/20 bg-white/5 p-4">
-                <h3 className="text-xl font-semibold">بداية اللعبة الأولى</h3>
-                <p className="mt-3 text-sm text-slate-200">
-                  عند الضغط على البدء ستظهر نافذة قواعد لعبة المعلومات. بعد إغلاقها يبدأ إرسال الأسئلة إلى أجهزة اللاعبين.
-                </p>
+                <h3 className="text-2xl font-bold">النقاط</h3>
+                <ul className="mt-3 space-y-2 text-base text-slate-200">
+                  <li>1. إجابة صحيحة = إضافة قيمة السؤال.</li>
+                  <li>2. إجابة خاطئة = خصم قيمة السؤال.</li>
+                  <li>3. لا يوجد سرقة نقاط في هذا الوضع.</li>
+                  <li>4. يمكن للمضيف اختيار لاعب بديل من نفس الفريق عند الحاجة.</li>
+                </ul>
               </article>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950"
+                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction)}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
-                ابدأ اللعبة الأولى
+                ابدأ لعبة الجيوباردي
               </Button>
               <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
                 إنهاء الجلسة
@@ -676,66 +777,159 @@ export default function HostStagePage() {
 
         {room && stage === "trivia" ? (
           <section className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">
               {room.teams.map((team) => {
                 const tone = getTeamTone(team.teamId)
                 return (
                   <article key={team.teamId} className={`rounded-2xl border p-4 ${tone.border} ${tone.bg}`}>
-                    <p className={`text-sm ${tone.text}`}>{team.name}</p>
-                    <p className="mt-1 text-5xl font-bold">{team.score}</p>
+                    <p className={`text-xl font-semibold ${tone.text}`}>{team.name}</p>
+                    <p className="mt-1 text-6xl font-black leading-none">{team.score}</p>
                   </article>
                 )
               })}
             </div>
 
-            <article className={`rounded-3xl border p-6 backdrop-blur-xl ${currentTone.border} ${currentTone.bg}`}>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-200">Trivia</p>
-              <h2 className="mt-2 text-3xl font-bold">{triviaBannerMessage}</h2>
-              <p className="mt-2 text-sm text-slate-200">
-                السؤال {room.trivia.questionIndex + 1} من {room.trivia.totalQuestions}
+            <article className={`rounded-3xl border p-5 ${currentTone.border} ${currentTone.bg}`}>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-200">Live Status</p>
+              <h2 className="mt-2 text-3xl font-bold leading-tight">{liveHeadline}</h2>
+              <p className="mt-2 text-base text-slate-200">
+                تم استخدام {trivia?.questionIndex ?? 0} من {trivia?.totalQuestions ?? 0} سؤال.
               </p>
-
-              {room.trivia.currentQuestion ? (
-                <div className="mt-4 rounded-2xl border border-white/20 bg-black/35 p-4">
-                  <p className="text-xl font-semibold leading-relaxed">{room.trivia.currentQuestion.prompt}</p>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {room.trivia.currentQuestion.options.map((option, index) => (
-                      <div key={`${room.trivia.currentQuestion?.id}-${index}`} className="rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-sm">
-                        <span className="font-semibold">{["A", "B", "C", "D"][index]}.</span> {option}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-4 rounded-xl border border-white/20 bg-black/30 px-4 py-3 text-sm text-slate-200">
-                  في انتظار ظهور السؤال الحالي.
-                </p>
-              )}
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button
-                  type="button"
-                  disabled={Boolean(busyAction) || room.trivia.status !== "in_progress"}
-                  onClick={() => void runAction("host.nextQuestion").catch((requestError) => setError(toErrorMessage(requestError)))}
-                >
-                  السؤال التالي
-                </Button>
-                <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
-                  إنهاء الجلسة
-                </Button>
-              </div>
             </article>
+
+            <div className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
+              <article className="rounded-3xl border border-white/20 bg-black/40 p-4 backdrop-blur-xl">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Jeopardy Board</p>
+                    <h3 className="mt-1 text-2xl font-bold">اختر فئة وقيمة النقاط</h3>
+                  </div>
+                  <p className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-sm text-slate-100">
+                    المتبقي: {trivia?.remainingQuestions ?? 0}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-6 gap-2">
+                  {(trivia?.board ?? []).map((category) => (
+                    <div
+                      key={`header-${category.categoryId}`}
+                      className="rounded-xl border border-white/20 bg-white/10 px-2 py-3 text-center text-sm font-semibold leading-tight text-slate-100"
+                    >
+                      {category.name}
+                    </div>
+                  ))}
+
+                  {boardRowIndexes.map((rowIndex) =>
+                    (trivia?.board ?? []).map((category) => {
+                      const clue = category.clues[rowIndex]
+                      if (!clue) {
+                        return <div key={`empty-${category.categoryId}-${rowIndex}`} className="h-16" />
+                      }
+
+                      const isSelected = clue.questionId === trivia?.selectedClue?.questionId
+                      const isUsed = clue.used
+                      return (
+                        <button
+                          key={`${category.categoryId}-${clue.questionId}`}
+                          type="button"
+                          disabled={Boolean(busyAction) || !canSelectClue || isUsed}
+                          onClick={() => void handleSelectTriviaClue(clue.questionId)}
+                          className={`h-16 rounded-xl border text-lg font-black transition ${
+                            isUsed
+                              ? "border-white/10 bg-black/30 text-slate-500"
+                              : "border-amber-300/45 bg-amber-500/15 text-amber-100 hover:bg-amber-500/30"
+                          } ${isSelected ? "ring-2 ring-white/60" : ""}`}
+                        >
+                          {isUsed ? "تم" : clue.points}
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </article>
+
+              <article className="space-y-4 rounded-3xl border border-white/20 bg-black/40 p-4 backdrop-blur-xl">
+                <div className={`rounded-2xl border p-4 ${currentTone.border} ${currentTone.bg}`}>
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Turn Context</p>
+                  <p className="mt-2 text-lg font-semibold">الفريق صاحب الدور: {currentTurnTeam?.name ?? "غير محدد"}</p>
+                  <p className="mt-1 text-sm text-slate-200">لاعب الاختيار: {currentPicker?.displayName ?? "غير محدد"}</p>
+                  <p className="mt-1 text-sm text-slate-200">المجيب الحالي: {responderPlayer?.displayName ?? "لا يوجد بعد"}</p>
+                </div>
+
+                {selectedClue ? (
+                  <div className={`rounded-2xl border p-4 ${currentTone.border} ${currentTone.bg}`}>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Question Window</p>
+                    <p className="mt-2 text-sm text-slate-200">
+                      {selectedClue.categoryName} | {selectedClue.points} نقطة
+                    </p>
+                    <p className="mt-2 text-lg font-semibold leading-relaxed">{selectedClue.prompt}</p>
+                    <div className="mt-3 grid gap-2">
+                      {selectedClue.options.map((option, index) => (
+                        <div key={`${selectedClue.questionId}-${index}`} className="rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm">
+                          <span className="font-bold">{["A", "B", "C", "D"][index]}.</span> {option}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                    لم يتم اختيار سؤال بعد.
+                  </p>
+                )}
+
+                {trivia?.lastResult ? (
+                  <div className="rounded-2xl border border-white/20 bg-white/5 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Result</p>
+                    <p className="mt-2 text-sm text-slate-100">
+                      الإجابة الصحيحة: {trivia.lastResult.correctOption}
+                      {trivia.lastResult.answeredOption ? ` | إجابة اللاعب: ${trivia.lastResult.answeredOption}` : ""}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-100">
+                      التغيير: {scoreBadge(trivia.lastResult.awardedPoints)} ({trivia.lastResult.reason})
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={Boolean(busyAction) || !canSelectAnotherResponder}
+                    onClick={() => void handleSelectAnotherResponder()}
+                  >
+                    {trivia?.phase === "board_turn" ? "اختيار لاعب آخر للدور" : "اختيار مجيب آخر"}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={
+                      Boolean(busyAction) ||
+                      trivia?.status !== "in_progress" ||
+                      (trivia?.phase !== "answer_reveal" &&
+                        trivia?.phase !== "countdown" &&
+                        trivia?.phase !== "buzzer_open" &&
+                        trivia?.phase !== "answer_active")
+                    }
+                    onClick={() => void handleAdvanceTurn()}
+                  >
+                    {trivia?.phase === "answer_reveal" ? "الدور التالي" : "تخطي السؤال"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
+                    إنهاء الجلسة
+                  </Button>
+                </div>
+              </article>
+            </div>
           </section>
         ) : null}
 
         {room && stage === "celebration" ? (
           <section className="rounded-3xl border border-white/20 bg-black/40 p-6 text-center backdrop-blur-xl">
             <p className="text-xs uppercase tracking-[0.2em] text-amber-100/85">Celebration</p>
-            <h2 className="mt-2 text-4xl font-extrabold text-amber-100">انتهت لعبة المعلومات</h2>
+            <h2 className="mt-2 text-5xl font-black text-amber-100">انتهت لعبة الجيوباردي</h2>
 
             {winningSummary ? (
               <>
-                <p className="mt-3 text-xl text-slate-100">
+                <p className="mt-3 text-2xl text-slate-100">
                   {winningSummary.tied.length > 1
                     ? "تعادل بين الفرق!"
                     : `الفائز: ${winningSummary.top.name} برصيد ${winningSummary.top.score} نقطة`}
@@ -746,8 +940,8 @@ export default function HostStagePage() {
                     const tone = getTeamTone(team.teamId)
                     return (
                       <article key={team.teamId} className={`rounded-2xl border p-4 ${tone.border} ${tone.bg}`}>
-                        <p className={`text-lg ${tone.text}`}>{team.name}</p>
-                        <p className="mt-1 text-4xl font-bold">{team.score}</p>
+                        <p className={`text-xl ${tone.text}`}>{team.name}</p>
+                        <p className="mt-1 text-5xl font-black">{team.score}</p>
                       </article>
                     )
                   })}
@@ -758,7 +952,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950"
+                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-8 text-lg font-bold text-slate-950"
                 disabled={Boolean(busyAction)}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
@@ -774,14 +968,15 @@ export default function HostStagePage() {
 
       {showTriviaRulesModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-3xl border border-white/20 bg-slate-950/95 p-6 text-white shadow-2xl">
-            <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Trivia Rules</p>
-            <h3 className="mt-2 text-3xl font-bold">قواعد لعبة المعلومات</h3>
-            <ul className="mt-4 space-y-2 text-sm text-slate-200">
-              <li>1. السؤال يظهر لمجيب واحد محدد من الفريق الحالي.</li>
-              <li>2. الإجابة الصحيحة للفريق الأساسي = 10 نقاط.</li>
-              <li>3. إذا أخطأ الفريق الأساسي، يحصل الفريق الآخر على فرصة سرقة = 6 نقاط.</li>
-              <li>4. بعد كل سؤال، المضيف ينتقل يدويًا إلى السؤال التالي.</li>
+          <div className="w-full max-w-3xl rounded-3xl border border-white/20 bg-slate-950/95 p-6 text-white shadow-2xl">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Jeopardy Rules</p>
+            <h3 className="mt-2 text-3xl font-bold">قواعد لعبة الجيوباردي</h3>
+            <ul className="mt-4 space-y-2 text-base text-slate-200">
+              <li>1. لديك 6 فئات وكل فئة فيها 5 أسئلة بقيم 10 إلى 50.</li>
+              <li>2. الدور يتناوب بين الفريقين لاختيار الفئة والقيمة.</li>
+              <li>3. بعد الاختيار يبدأ عدّاد 5 ثوانٍ ثم يفتح البازر 20 ثانية.</li>
+              <li>4. أول لاعب يضغط البازر هو الوحيد الذي يجيب من جهازه.</li>
+              <li>5. الإجابة الصحيحة تضيف النقاط، والخاطئة تخصم نفس القيمة.</li>
             </ul>
 
             <div className="mt-6 flex flex-wrap justify-end gap-3">
@@ -790,11 +985,11 @@ export default function HostStagePage() {
               </Button>
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 font-bold text-slate-950"
+                className="rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-6 font-bold text-slate-950"
                 disabled={Boolean(busyAction)}
                 onClick={() => void handleStartTriviaFromModal()}
               >
-                إغلاق وبدء الأسئلة
+                إغلاق وبدء اللعبة
               </Button>
             </div>
           </div>
