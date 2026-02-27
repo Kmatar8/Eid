@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
 import { X } from "lucide-react"
@@ -22,7 +22,7 @@ import {
 import type { ClientActionType } from "@/lib/server/protocol-v1"
 import type { RoomSnapshot } from "@/lib/server/types"
 
-const POLL_MS = 1500
+const POLL_MS = 1700
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
 
@@ -107,6 +107,14 @@ function remainingSeconds(targetTs: number | null, nowTs: number) {
   return Math.max(0, Math.ceil((targetTs - nowTs) / 1000))
 }
 
+function isDocumentVisible() {
+  if (typeof document === "undefined") {
+    return true
+  }
+
+  return document.visibilityState === "visible"
+}
+
 export default function HostStagePage() {
   const router = useRouter()
 
@@ -125,6 +133,7 @@ export default function HostStagePage() {
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
+  const refreshInFlightRef = useRef(false)
 
   useEffect(() => {
     if (!hostToken) {
@@ -247,6 +256,11 @@ export default function HostStagePage() {
     if (!hostToken || !roomId) {
       return
     }
+    if (refreshInFlightRef.current) {
+      return
+    }
+
+    refreshInFlightRef.current = true
 
     try {
       const response = await getRoomState(roomId, hostToken)
@@ -264,6 +278,8 @@ export default function HostStagePage() {
       }
 
       setError(toErrorMessage(requestError))
+    } finally {
+      refreshInFlightRef.current = false
     }
   }, [hostToken, roomId])
 
@@ -319,10 +335,14 @@ export default function HostStagePage() {
     }
 
     const bootstrap = window.setTimeout(() => {
-      void refreshState()
+      if (isDocumentVisible()) {
+        void refreshState()
+      }
     }, 0)
     const timer = window.setInterval(() => {
-      void refreshState()
+      if (isDocumentVisible()) {
+        void refreshState()
+      }
     }, POLL_MS)
 
     return () => {
@@ -337,6 +357,9 @@ export default function HostStagePage() {
     }
 
     const timer = window.setInterval(() => {
+      if (!isDocumentVisible()) {
+        return
+      }
       void sendAction(roomId, hostToken, "host.heartbeat").catch(() => {
         // Ignore transient heartbeat failures; polling path handles visible errors.
       })

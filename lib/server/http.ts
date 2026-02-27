@@ -3,6 +3,8 @@ export function jsonResponse<T>(status: number, data: T) {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store, no-cache, must-revalidate, max-age=0",
+      pragma: "no-cache",
     },
   })
 }

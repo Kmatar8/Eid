@@ -16,6 +16,8 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
+
 export class LiveApiError extends Error {
   status: number
   code: string
@@ -42,6 +44,12 @@ function safeParseJson<T>(text: string): T | null {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: HeadersInit = {
     "content-type": "application/json",
@@ -51,12 +59,42 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
     headers.authorization = `Bearer ${options.token}`
   }
 
-  const response = await fetch(path, {
-    method: options.method ?? "GET",
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: options.signal,
-  })
+  const method = options.method ?? "GET"
+  const isRetryableMethod = method === "GET"
+  const maxAttempts = isRetryableMethod ? 3 : 1
+
+  let response: Response | null = null
+  let lastFetchError: unknown = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      response = await fetch(path, {
+        method,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: options.signal,
+      })
+
+      if (!RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
+        break
+      }
+    } catch (error) {
+      lastFetchError = error
+      if (!isRetryableMethod || attempt === maxAttempts) {
+        throw error
+      }
+    }
+
+    const backoffMs = 140 * 2 ** (attempt - 1) + Math.floor(Math.random() * 80)
+    await sleep(backoffMs)
+  }
+
+  if (!response) {
+    if (lastFetchError instanceof LiveApiError) {
+      throw lastFetchError
+    }
+    throw new LiveApiError(503, "UPSTREAM_UNAVAILABLE", "Unable to reach live API")
+  }
 
   const text = await response.text()
   const json = safeParseJson<T & ErrorBody>(text)

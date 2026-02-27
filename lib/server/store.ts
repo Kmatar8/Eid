@@ -22,12 +22,15 @@ const LOBBY_OPEN_TIMEOUT_MS = 45 * 60 * 1000
 const HOST_PAUSE_GRACE_MS = 20 * 60 * 1000
 const HARD_ROOM_CAP_MS = 4 * 60 * 60 * 1000
 const HOST_INACTIVITY_MS = 60 * 1000
+const MAX_ROOM_EVENTS = 4000
 const TRIVIA_COUNTDOWN_MS = 5 * 1000
 const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 
 type InMemoryStore = {
   seeded: boolean
+  revision: number
+  nextEventSeq: number
   hosts: Map<string, HostRecord>
   hostsByUsername: Map<string, string>
   rooms: Map<string, RoomRecord>
@@ -100,6 +103,8 @@ function getStore(): InMemoryStore {
   if (!globalStore.__hroofInMemoryStore) {
     globalStore.__hroofInMemoryStore = {
       seeded: false,
+      revision: 0,
+      nextEventSeq: 1,
       hosts: new Map(),
       hostsByUsername: new Map(),
       rooms: new Map(),
@@ -178,6 +183,8 @@ function isStoreLike(value: unknown): value is InMemoryStore {
   const candidate = value as Partial<InMemoryStore>
   return (
     typeof candidate.seeded === "boolean" &&
+    typeof candidate.revision === "number" &&
+    typeof candidate.nextEventSeq === "number" &&
     candidate.hosts instanceof Map &&
     candidate.hostsByUsername instanceof Map &&
     candidate.rooms instanceof Map &&
@@ -199,6 +206,10 @@ export function exportStoreSnapshot(): unknown {
   return JSON.parse(JSON.stringify(store, encodeStoreValue))
 }
 
+export function getStoreRevision() {
+  return getStore().revision
+}
+
 export function importStoreSnapshot(snapshot: unknown): boolean {
   if (!snapshot || typeof snapshot !== "object") {
     return false
@@ -208,6 +219,20 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
     const restored = JSON.parse(JSON.stringify(snapshot), decodeStoreValue) as unknown
     if (restored && typeof restored === "object") {
       const candidate = restored as Partial<InMemoryStore> & Record<string, unknown>
+      if (typeof candidate.revision !== "number") {
+        candidate.revision = 0
+      }
+      if (typeof candidate.nextEventSeq !== "number") {
+        const currentEvents = Array.isArray(candidate.roomEvents) ? candidate.roomEvents : []
+        const maxSeq = currentEvents.reduce((max, event) => {
+          if (!event || typeof event !== "object") {
+            return max
+          }
+          const seq = (event as { seq?: unknown }).seq
+          return typeof seq === "number" && Number.isFinite(seq) ? Math.max(max, seq) : max
+        }, 0)
+        candidate.nextEventSeq = maxSeq + 1
+      }
       if (!(candidate.processedPlayerSubmitByRoom instanceof Map)) {
         candidate.processedPlayerSubmitByRoom = new Map()
       }
@@ -307,13 +332,19 @@ function recordRoomEvent(
 
   store.roomEvents.push({
     id: `evt_${randomUUID()}`,
-    seq: store.roomEvents.length + 1,
+    seq: store.nextEventSeq,
     roomId,
     roomVersion: room?.version ?? 0,
     eventType,
     payload,
     createdAt,
   })
+  store.revision += 1
+  store.nextEventSeq += 1
+
+  if (store.roomEvents.length > MAX_ROOM_EVENTS) {
+    store.roomEvents.splice(0, store.roomEvents.length - MAX_ROOM_EVENTS)
+  }
 }
 
 function isPastLobbyTimeout(room: RoomRecord) {
@@ -1226,6 +1257,18 @@ function getLatestRoomEvent(store: InMemoryStore, roomId: string): RoomEventReco
   return null
 }
 
+function buildSyntheticAckEvent(room: RoomRecord, eventType: string, payload: Record<string, unknown>): RoomEventRecord {
+  return {
+    id: `evt_${randomUUID()}`,
+    seq: room.version,
+    roomId: room.id,
+    roomVersion: room.version,
+    eventType,
+    payload,
+    createdAt: nowMs(),
+  }
+}
+
 export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionResult {
   const store = getStore()
   const room = getRoom(input.roomId)
@@ -1258,12 +1301,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     }
 
     if (input.actionType === "host.heartbeat") {
-      recordRoomEvent(store, room.id, "host.heartbeat", { hostId: input.actorId }, { bumpVersion: false })
-
-      const event = getLatestRoomEvent(store, input.roomId)
-      if (!event) {
-        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
-      }
+      const event = buildSyntheticAckEvent(room, "host.heartbeat", { hostId: input.actorId })
 
       if (input.requestId) {
         const processed = store.processedHostCommandsByRoom.get(room.id) ?? new Set<string>()
@@ -1565,7 +1603,8 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
 
   if (input.actionType === "player.heartbeat") {
     touchPlayer(input.roomId, input.actorId)
-    recordRoomEvent(store, room.id, "player.heartbeat", { playerId: input.actorId })
+    const event = buildSyntheticAckEvent(room, "player.heartbeat", { playerId: input.actorId })
+    return { ok: true, room, event }
   } else if (input.actionType === "player.input") {
     if (room.state !== "game_live") {
       return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import RoomStatePanel from "@/components/live/room-state-panel"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,15 @@ import { LiveApiError, getRoomState } from "@/lib/client/live-api"
 import { getHostToken } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
 
-const POLL_MS = 1500
+const POLL_MS = 2000
+
+function isDocumentVisible() {
+  if (typeof document === "undefined") {
+    return true
+  }
+
+  return document.visibilityState === "visible"
+}
 
 type RoomDisplayClientPageProps = {
   roomId: string
@@ -31,11 +39,17 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
   const [hostToken] = useState<string | null>(() => getHostToken())
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const refreshInFlightRef = useRef(false)
 
   const refreshState = useCallback(async () => {
     if (!hostToken) {
       return
     }
+    if (refreshInFlightRef.current) {
+      return
+    }
+
+    refreshInFlightRef.current = true
 
     try {
       const response = await getRoomState(roomId, hostToken)
@@ -43,6 +57,8 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
       setError(null)
     } catch (requestError) {
       setError(toErrorMessage(requestError))
+    } finally {
+      refreshInFlightRef.current = false
     }
   }, [hostToken, roomId])
 
@@ -52,10 +68,14 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
     }
 
     const bootstrap = window.setTimeout(() => {
-      void refreshState()
+      if (isDocumentVisible()) {
+        void refreshState()
+      }
     }, 0)
     const timer = window.setInterval(() => {
-      void refreshState()
+      if (isDocumentVisible()) {
+        void refreshState()
+      }
     }, POLL_MS)
 
     return () => {

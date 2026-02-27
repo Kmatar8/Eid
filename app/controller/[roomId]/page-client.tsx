@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
@@ -10,7 +10,7 @@ import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction 
 import { clearPlayerSession, getPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
 
-const POLL_MS = 1200
+const POLL_MS = 1500
 const HEARTBEAT_MS = 10000
 const CLOCK_TICK_MS = 300
 
@@ -90,6 +90,14 @@ function remainingSeconds(targetTs: number | null, nowTs: number) {
   return Math.max(0, Math.ceil((targetTs - nowTs) / 1000))
 }
 
+function isDocumentVisible() {
+  if (typeof document === "undefined") {
+    return true
+  }
+
+  return document.visibilityState === "visible"
+}
+
 export default function ControllerClientPage({ roomId }: ControllerClientPageProps) {
   const [session, setSession] = useState<PlayerSession | null>(() => getPlayerSession(roomId))
   const [room, setRoom] = useState<RoomSnapshot | null>(null)
@@ -100,6 +108,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [notice, setNotice] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
+  const refreshInFlightRef = useRef(false)
 
   useEffect(() => {
     const qId = room?.trivia?.selectedClue?.questionId
@@ -145,6 +154,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     if (!session) {
       return
     }
+    if (refreshInFlightRef.current) {
+      return
+    }
+
+    refreshInFlightRef.current = true
 
     try {
       const response = await getRoomState(roomId, session.token)
@@ -152,6 +166,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setError(null)
     } catch (requestError) {
       setError(toErrorMessage(requestError))
+    } finally {
+      refreshInFlightRef.current = false
     }
   }, [roomId, session])
 
@@ -182,12 +198,12 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     const bootstrap = window.setTimeout(() => {
-      if (!busy) {
+      if (!busy && isDocumentVisible()) {
         void refreshState()
       }
     }, 0)
     const timer = window.setInterval(() => {
-      if (!busy) {
+      if (!busy && isDocumentVisible()) {
         void refreshState()
       }
     }, POLL_MS)
@@ -204,6 +220,9 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     const timer = window.setInterval(() => {
+      if (!isDocumentVisible()) {
+        return
+      }
       void sendAction(roomId, session.token, "player.heartbeat")
     }, HEARTBEAT_MS)
 

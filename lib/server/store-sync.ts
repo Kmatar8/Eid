@@ -1,9 +1,10 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
-import { exportStoreSnapshot, importStoreSnapshot } from "@/lib/server/store"
+import { exportStoreSnapshot, getStoreRevision, importStoreSnapshot } from "@/lib/server/store"
 
 const GLOBAL_STORE_DO_NAME = "hroof-global-store-v1"
 const STORE_STATE_URL = "https://hroof-store/state"
+const HYDRATE_TTL_MS = 1200
 
 type DurableObjectNamespaceLike = {
   idFromName: (name: string) => unknown
@@ -11,6 +12,11 @@ type DurableObjectNamespaceLike = {
     fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
   }
 }
+
+let lastHydratedAt = 0
+let lastPersistedRevision = -1
+let hydrateInFlight: Promise<void> | null = null
+let persistInFlight: Promise<void> | null = null
 
 async function getSharedStoreStub() {
   try {
@@ -31,47 +37,89 @@ async function getSharedStoreStub() {
 }
 
 export async function hydrateSharedStoreFromDurable() {
-  const stub = await getSharedStoreStub()
-  if (!stub) {
+  if (Date.now() - lastHydratedAt < HYDRATE_TTL_MS) {
     return
   }
 
+  if (hydrateInFlight) {
+    await hydrateInFlight
+    return
+  }
+
+  hydrateInFlight = (async () => {
+    const stub = await getSharedStoreStub()
+    if (!stub) {
+      lastHydratedAt = Date.now()
+      return
+    }
+
+    try {
+      const response = await stub.fetch(STORE_STATE_URL)
+      if (!response.ok) {
+        return
+      }
+
+      const payload = (await response.json().catch(() => null)) as { snapshot?: unknown } | null
+      if (!payload || payload.snapshot === undefined) {
+        return
+      }
+
+      if (importStoreSnapshot(payload.snapshot)) {
+        lastPersistedRevision = getStoreRevision()
+      }
+    } catch {
+      // Intentionally non-fatal in local/dev runtimes without DO context.
+    } finally {
+      lastHydratedAt = Date.now()
+    }
+  })()
+
   try {
-    const response = await stub.fetch(STORE_STATE_URL)
-    if (!response.ok) {
-      return
-    }
-
-    const payload = (await response.json().catch(() => null)) as { snapshot?: unknown } | null
-    if (!payload || payload.snapshot === undefined) {
-      return
-    }
-
-    importStoreSnapshot(payload.snapshot)
-  } catch {
-    // Intentionally non-fatal in local/dev runtimes without DO context.
+    await hydrateInFlight
+  } finally {
+    hydrateInFlight = null
   }
 }
 
 export async function persistSharedStoreToDurable() {
-  const stub = await getSharedStoreStub()
-  if (!stub) {
+  const currentRevision = getStoreRevision()
+  if (currentRevision === lastPersistedRevision) {
     return
   }
 
+  if (persistInFlight) {
+    await persistInFlight
+    return
+  }
+
+  persistInFlight = (async () => {
+    const stub = await getSharedStoreStub()
+    if (!stub) {
+      return
+    }
+
+    try {
+      await stub.fetch(STORE_STATE_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          snapshot: exportStoreSnapshot(),
+          updatedAt: Date.now(),
+        }),
+      })
+      lastPersistedRevision = currentRevision
+      lastHydratedAt = Date.now()
+    } catch {
+      // Intentionally non-fatal in local/dev runtimes without DO context.
+    }
+  })()
+
   try {
-    await stub.fetch(STORE_STATE_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        snapshot: exportStoreSnapshot(),
-        updatedAt: Date.now(),
-      }),
-    })
-  } catch {
-    // Intentionally non-fatal in local/dev runtimes without DO context.
+    await persistInFlight
+  } finally {
+    persistInFlight = null
   }
 }
 
