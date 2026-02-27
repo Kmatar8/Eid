@@ -1429,33 +1429,18 @@ export default function HostStagePage() {
                                     animate={{ opacity: 1, y: 0 }}
                                     className="mt-6 flex flex-col items-center justify-center text-center"
                                   >
-                                    <motion.div
+                                    <motion.p
                                       initial={{ scale: 0.9, opacity: 0 }}
-                                      animate={{ scale: 1, opacity: 1, y: [0, -10, 0] }}
-                                      transition={{
-                                        scale: { duration: 0.35, ease: "easeOut" },
-                                        opacity: { duration: 0.35, ease: "easeOut" },
-                                        y: { duration: 2, ease: "easeInOut", repeat: Number.POSITIVE_INFINITY },
-                                      }}
-                                      className="flex flex-col items-center"
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      transition={{ duration: 0.35, ease: "easeOut" }}
+                                      className={`text-7xl font-black leading-none ${
+                                        (revealResult?.awardedPoints ?? 0) >= 0
+                                          ? "text-emerald-300 drop-shadow-[0_0_26px_rgba(16,185,129,0.58)]"
+                                          : "text-rose-300 drop-shadow-[0_0_26px_rgba(244,63,94,0.58)]"
+                                      }`}
                                     >
-                                      <div
-                                        className={`flex h-24 w-24 items-center justify-center rounded-full border text-6xl ${
-                                          revealResult?.wasCorrect
-                                            ? "border-emerald-300/70 bg-emerald-500/25"
-                                            : "border-rose-300/70 bg-rose-500/25"
-                                        }`}
-                                      >
-                                        {revealResult?.wasCorrect ? "✓" : "✕"}
-                                      </div>
-                                      <p
-                                        className={`mt-3 text-7xl font-black leading-none ${
-                                          (revealResult?.awardedPoints ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
-                                        }`}
-                                      >
-                                        {scoreBadge(revealResult?.awardedPoints ?? 0)}
-                                      </p>
-                                    </motion.div>
+                                      {scoreBadge(revealResult?.awardedPoints ?? 0)}
+                                    </motion.p>
                                   </motion.div>
                                 ) : null}
                               </motion.div>
