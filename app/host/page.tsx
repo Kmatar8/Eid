@@ -1198,7 +1198,10 @@ export default function HostStagePage() {
             </div>
 
             {/* Jeopardy Board - Now Full Width */}
-            <article className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl bg-black/50 p-4 shadow-2xl">
+            <article
+              className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl p-4 shadow-2xl"
+              style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+            >
               <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div className="text-center lg:text-right">
                   <p className="text-xs uppercase tracking-[0.25em] text-pink-200">Jeopardy Board</p>
