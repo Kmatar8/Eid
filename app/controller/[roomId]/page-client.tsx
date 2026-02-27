@@ -241,6 +241,9 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const buzzSeconds = remainingSeconds(room?.trivia.buzzEndsAt ?? null, nowTs)
   const answerSeconds = remainingSeconds(room?.trivia.answerEndsAt ?? null, nowTs)
   const selectedClue = room?.trivia.selectedClue ?? null
+  const isCountdownPhase = room?.trivia.phase === "countdown"
+  const isQuestionRevealed =
+    room?.trivia.phase === "buzzer_open" || room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal"
 
   const statusText = useMemo(() => {
     if (!room || !session || room.trivia.status !== "in_progress") {
@@ -374,7 +377,15 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               <p className="text-xs uppercase tracking-[0.2em] text-slate-300">
                 {selectedClue.categoryName} | {selectedClue.points} points
               </p>
-              <p className="mt-2 text-xl font-semibold leading-relaxed">{selectedClue.prompt}</p>
+              {isCountdownPhase ? (
+                <div className="mt-3 rounded-xl border border-white/20 bg-black/30 p-4 text-center">
+                  <p className="text-sm text-slate-200">استعد للبازر</p>
+                  <p className="mt-1 text-7xl font-black leading-none text-amber-200 animate-pulse">
+                    {countdownSeconds}
+                  </p>
+                </div>
+              ) : null}
+              {isQuestionRevealed ? <p className="mt-2 text-xl font-semibold leading-relaxed">{selectedClue.prompt}</p> : null}
             </div>
           ) : null}
 

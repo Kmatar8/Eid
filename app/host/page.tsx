@@ -459,6 +459,9 @@ export default function HostStagePage() {
     trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
 
   const canSelectClue = trivia?.status === "in_progress" && trivia.phase === "board_turn"
+  const isCountdownPhase = trivia?.phase === "countdown"
+  const isQuestionRevealed =
+    trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active" || trivia?.phase === "answer_reveal"
 
   const boardRowIndexes = useMemo(() => {
     const maxRows = Math.max(...(trivia?.board ?? []).map((category) => category.clues.length), 0)
@@ -543,27 +546,7 @@ export default function HostStagePage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.14),transparent_52%),linear-gradient(160deg,#090f1e_0%,#1a2052_48%,#090f1e_100%)]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:56px_56px]" />
 
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1700px] px-4 py-5 sm:px-8">
-        <header className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/35 px-5 py-4 backdrop-blur-xl">
-          <div>
-            <h1 className="text-2xl font-bold sm:text-3xl">وضع المضيف - شاشة الفعالية</h1>
-            <p className="mt-1 text-sm text-slate-200">
-              {hostUsername} | الغرفة: {roomId ?? "جاري التحضير..."}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/" className="text-sm text-amber-200 underline-offset-2 hover:underline">
-              العودة للهبوط
-            </Link>
-            <Button type="button" variant="outline" onClick={() => void refreshState()} disabled={!roomId}>
-              تحديث
-            </Button>
-            <Button type="button" variant="destructive" onClick={handleLogout}>
-              تسجيل خروج
-            </Button>
-          </div>
-        </header>
-
+      <main className="relative z-10 mx-auto min-h-screen w-full max-w-[1700px] px-4 pb-28 pt-5 sm:px-8">
         {error ? <p className="mb-3 rounded-xl bg-red-500/20 px-4 py-3 text-sm text-red-100">{error}</p> : null}
         {notice ? <p className="mb-3 rounded-xl bg-emerald-500/20 px-4 py-3 text-sm text-emerald-100">{notice}</p> : null}
 
@@ -862,14 +845,31 @@ export default function HostStagePage() {
                     <p className="mt-2 text-sm text-slate-200">
                       {selectedClue.categoryName} | {selectedClue.points} نقطة
                     </p>
-                    <p className="mt-2 text-lg font-semibold leading-relaxed">{selectedClue.prompt}</p>
-                    <div className="mt-3 grid gap-2">
-                      {selectedClue.options.map((option, index) => (
-                        <div key={`${selectedClue.questionId}-${index}`} className="rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm">
-                          <span className="font-bold">{["A", "B", "C", "D"][index]}.</span> {option}
+
+                    {isCountdownPhase ? (
+                      <div className="mt-4 rounded-2xl border border-white/30 bg-black/35 p-5 text-center">
+                        <p className="text-sm text-slate-200">استعدوا... السؤال سيظهر حالًا</p>
+                        <p className="mt-2 text-8xl font-black leading-none text-amber-200 animate-pulse">
+                          {countdownSeconds}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {isQuestionRevealed ? (
+                      <>
+                        <p className="mt-2 text-lg font-semibold leading-relaxed">{selectedClue.prompt}</p>
+                        <div className="mt-3 grid gap-2">
+                          {selectedClue.options.map((option, index) => (
+                            <div
+                              key={`${selectedClue.questionId}-${index}`}
+                              className="rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm"
+                            >
+                              <span className="font-bold">{["A", "B", "C", "D"][index]}.</span> {option}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-slate-200">
@@ -965,6 +965,25 @@ export default function HostStagePage() {
           </section>
         ) : null}
       </main>
+
+      <div className="fixed bottom-3 left-0 right-0 z-30 px-4">
+        <div className="mx-auto flex w-full max-w-[1200px] flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/20 bg-black/65 px-4 py-3 backdrop-blur-xl">
+          <p className="text-xs text-slate-200 sm:text-sm">
+            {hostUsername} | الغرفة: {roomId ?? "..." }
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/" className="text-sm text-amber-200 underline-offset-2 hover:underline">
+              العودة للهبوط
+            </Link>
+            <Button type="button" variant="outline" onClick={() => void refreshState()} disabled={!roomId}>
+              تحديث
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleLogout}>
+              تسجيل خروج
+            </Button>
+          </div>
+        </div>
+      </div>
 
       {showTriviaRulesModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">

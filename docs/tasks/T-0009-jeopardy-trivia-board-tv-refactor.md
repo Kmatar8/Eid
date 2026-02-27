@@ -21,6 +21,8 @@ Convert the current linear trivia flow into a Jeopardy-style board game with buz
 6. Keep host fallback action to select another responder from same team when needed.
 7. Refactor host trivia screen layout for TV/wide screens to reduce dead space and improve readability.
 8. Update host copy/rules messaging to reflect Jeopardy behavior (no steal mode).
+9. Remove oversized top host header block and move global host controls to a compact bottom control bar.
+10. Ensure question text/options stay hidden during countdown; show only large animated countdown until reveal phase starts.
 
 ### Out
 1. New persistent schema migrations in D1 for trivia content management.
@@ -68,6 +70,7 @@ Convert the current linear trivia flow into a Jeopardy-style board game with buz
 7. Host can reselect another responder from same team during active answer when needed.
 8. Host screen uses TV-appropriate spacing and typography with no large empty dead zones.
 9. Controller screen shows only essential gameplay UI (buzzer/question/answers context).
+10. During `countdown`, host and controller must not display question prompt/options.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -83,6 +86,10 @@ Convert the current linear trivia flow into a Jeopardy-style board game with buz
 1. `npm run lint` passed with warnings only (no errors).
 2. `npm run build` passed with successful production compilation.
 3. `scripts/smoke-live.sh` updated to Jeopardy flow (`host.selectTriviaClue` + buzzer + answer path) for live verification.
+4. Host UI refinement: removed top header block and moved global host controls to bottom fixed control bar.
+5. Countdown refinement: question prompt/options hidden during `countdown` phase on host and controller, with large animated countdown rendering.
+6. Live deployment completed to `https://hroof-app.k-matar.workers.dev` with version `8a82c540-404f-4382-aa91-f332c5b63bab`.
+7. Live smoke test passed on deployed environment using `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh`.
 
 ## Rollback Plan
 1. Revert trivia engine/session model changes in `lib/server/store.ts` and related types.
