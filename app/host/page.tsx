@@ -26,6 +26,7 @@ const HOST_POLL_BOARD_MS = 850
 const HOST_POLL_ACTIVE_MS = 260
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
+const OPTION_LETTERS = ["A", "B", "C", "D"] as const
 
 type FeedbackType = "correct" | "wrong" | null
 type HostStage = "lobby" | "overview" | "trivia" | "celebration" | "paused"
@@ -754,6 +755,9 @@ export default function HostStagePage() {
   const isCountdownPhase = trivia?.phase === "countdown"
   const isQuestionRevealed =
     trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active" || trivia?.phase === "answer_reveal"
+  const revealResult =
+    trivia?.phase === "answer_reveal" && trivia?.lastResult?.questionId === selectedClue?.questionId ? trivia.lastResult : null
+  const hasScoredReveal = Boolean(revealResult && revealResult.reason !== "no_buzz" && revealResult.reason !== "host_skip")
 
   const handleQuestionModalExit = useCallback(async () => {
     setFeedbackState(null)
@@ -1296,13 +1300,19 @@ export default function HostStagePage() {
                               <div className="flex flex-wrap items-center gap-4">
                                 {responderPlayer ? (
                                   <>
-                                    <div className={`flex items-center gap-2 rounded-full border px-6 py-3 shadow-[0_0_20px_inherit] animate-pulse ${currentTone.chip}`}>
-                                      <span className="text-2xl font-black">{responderPlayer.displayName}</span>
+                                    <div
+                                      className={`min-w-[24rem] rounded-2xl border px-6 py-4 shadow-[0_0_24px_inherit] animate-pulse ${currentTone.chip}`}
+                                    >
+                                      <p className="text-sm font-semibold opacity-90">اللاعب المكلّف بالإجابة</p>
+                                      <p className="mt-1 text-3xl font-black">{responderPlayer.displayName}</p>
+                                      <p className="mt-1 text-base font-semibold opacity-90">
+                                        من {responderTeam?.name ?? currentTurnTeam?.name ?? "الفريق الحالي"}
+                                      </p>
                                     </div>
                                     <Button
                                       type="button"
                                       variant="secondary"
-                                      className="rounded-full px-6 py-6 font-bold"
+                                      className="h-full min-h-[6rem] rounded-2xl px-7 py-5 text-lg font-black"
                                       disabled={Boolean(busyAction) || !canSelectAnotherResponder}
                                       onClick={() => void handleSelectAnotherResponder()}
                                     >
@@ -1310,8 +1320,9 @@ export default function HostStagePage() {
                                     </Button>
                                   </>
                                 ) : (
-                                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-3">
-                                    <span className="text-xl font-bold text-slate-300">
+                                  <div className="min-w-[24rem] rounded-2xl border border-white/20 bg-white/5 px-6 py-4">
+                                    <p className="text-sm font-semibold text-slate-300/90">الحالة الحالية</p>
+                                    <span className="mt-1 block text-2xl font-black text-slate-200">
                                       {trivia?.phase === "board_turn" ? `دور فريق: ${currentTurnTeam?.name ?? "..."}` : "بانتظار البازر..."}
                                     </span>
                                   </div>
@@ -1340,18 +1351,105 @@ export default function HostStagePage() {
                                 </p>
 
                                 <div className="grid gap-6 sm:grid-cols-2">
-                                  {selectedClue.options.map((option, index) => (
-                                    <div
+                                  {selectedClue.options.map((option, index) => {
+                                    const optionKey = OPTION_LETTERS[index] ?? "A"
+                                    const isCorrectOption = hasScoredReveal && optionKey === revealResult?.correctOption
+                                    const isAnsweredOption = hasScoredReveal && optionKey === revealResult?.answeredOption
+                                    const isCorrectFlash = Boolean(isCorrectOption && revealResult?.wasCorrect)
+                                    const isWrongFlash = Boolean(isAnsweredOption && !revealResult?.wasCorrect)
+                                    const isCorrectReveal = Boolean(isCorrectOption && !revealResult?.wasCorrect)
+                                    const dimOption = hasScoredReveal && !isCorrectOption && !isAnsweredOption
+
+                                    return (
+                                    <motion.div
                                       key={`${selectedClue.questionId}-${index}`}
-                                      className="group relative flex items-center rounded-3xl border border-white/10 bg-white/5 p-8 hover:bg-white/10 transition-colors"
+                                      className={`group relative flex items-center overflow-hidden rounded-3xl border p-8 transition-colors ${
+                                        dimOption
+                                          ? "border-white/10 bg-white/5 opacity-70"
+                                          : "border-white/10 bg-white/5 hover:bg-white/10"
+                                      } ${
+                                        isCorrectFlash || isCorrectReveal
+                                          ? "border-emerald-300/70 text-emerald-50"
+                                          : isWrongFlash
+                                            ? "border-rose-300/80 text-rose-50"
+                                            : ""
+                                      }`}
+                                      animate={
+                                        isCorrectFlash
+                                          ? {
+                                              backgroundColor: ["rgba(16,185,129,0.22)", "rgba(16,185,129,0.68)", "rgba(16,185,129,0.44)"],
+                                              borderColor: ["rgba(110,231,183,0.4)", "rgba(110,231,183,0.95)", "rgba(110,231,183,0.75)"],
+                                            }
+                                          : isWrongFlash
+                                            ? {
+                                                backgroundColor: [
+                                                  "rgba(244,63,94,0.22)",
+                                                  "rgba(244,63,94,0.72)",
+                                                  "rgba(244,63,94,0.46)",
+                                                ],
+                                                borderColor: [
+                                                  "rgba(253,164,175,0.45)",
+                                                  "rgba(253,164,175,1)",
+                                                  "rgba(253,164,175,0.8)",
+                                                ],
+                                              }
+                                            : isCorrectReveal
+                                              ? {
+                                                  backgroundColor: ["rgba(16,185,129,0.15)", "rgba(16,185,129,0.44)"],
+                                                  borderColor: ["rgba(110,231,183,0.4)", "rgba(110,231,183,0.8)"],
+                                                }
+                                              : undefined
+                                      }
+                                      transition={{
+                                        duration: isCorrectFlash || isWrongFlash ? 0.95 : 0.7,
+                                        times: isCorrectFlash || isWrongFlash ? [0, 0.45, 1] : [0, 1],
+                                        ease: "easeInOut",
+                                      }}
                                     >
+                                      {isCorrectReveal ? (
+                                        <motion.span
+                                          aria-hidden
+                                          className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/35 blur-2xl"
+                                          initial={{ scale: 0.3, opacity: 0 }}
+                                          animate={{ scale: 1.15, opacity: [0, 0.55, 0] }}
+                                          transition={{ duration: 0.85, ease: "easeIn" }}
+                                        />
+                                      ) : null}
                                       <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-violet-500 opacity-50">
-                                        {["A", "B", "C", "D"][index]}
+                                        {optionKey}
                                       </span>
                                       <p className="pr-8 text-3xl font-bold leading-tight">{option}</p>
-                                    </div>
-                                  ))}
+                                    </motion.div>
+                                  )})}
                                 </div>
+
+                                {hasScoredReveal ? (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 12 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-6 flex flex-col items-center justify-center text-center"
+                                  >
+                                    <div
+                                      className={`flex h-24 w-24 items-center justify-center rounded-full border text-6xl ${
+                                        revealResult?.wasCorrect
+                                          ? "border-emerald-300/70 bg-emerald-500/25"
+                                          : "border-rose-300/70 bg-rose-500/25"
+                                      }`}
+                                    >
+                                      {revealResult?.wasCorrect ? "✓" : "✕"}
+                                    </div>
+                                    <motion.p
+                                      initial={{ scale: 0.9, opacity: 0 }}
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      transition={{ duration: 0.35, ease: "easeOut" }}
+                                      className={`mt-3 text-7xl font-black leading-none ${
+                                        (revealResult?.awardedPoints ?? 0) >= 0 ? "text-emerald-300" : "text-rose-300"
+                                      }`}
+                                    >
+                                      {scoreBadge(revealResult?.awardedPoints ?? 0)}
+                                    </motion.p>
+                                  </motion.div>
+                                ) : null}
                               </motion.div>
                             ) : null}
                           </div>
@@ -1361,28 +1459,6 @@ export default function HostStagePage() {
                           </div>
                         )}
 
-                        {trivia?.lastResult && (
-                          <motion.div
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            className="rounded-3xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-6"
-                          >
-                            <p className="text-xs uppercase tracking-[0.2em] text-fuchsia-300">Result Summary</p>
-                            <div className="mt-3 flex items-center justify-between">
-                              <div>
-                                <p className="text-lg font-bold">الإجابة الصحيحة: {trivia.lastResult.correctOption}</p>
-                                <p className="text-sm opacity-80">{trivia.lastResult.reason}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-2xl font-black text-fuchsia-400">
-                                  {trivia.lastResult.awardedPoints > 0 ? "+" : ""}{trivia.lastResult.awardedPoints}
-                                </p>
-                                <p className="text-xs opacity-50">نقاط</p>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-
                         <div className="pt-6">
                           <Button
                             type="button"
@@ -1390,7 +1466,7 @@ export default function HostStagePage() {
                             disabled={Boolean(busyAction) || !canAdvanceFromQuestionModal}
                             onClick={() => void handleQuestionModalExit()}
                           >
-                            {trivia?.phase === "answer_reveal" ? "العودة للوحة (السؤال التالي)" : "تخطي السؤال الحالي"}
+                            السؤال التالي
                           </Button>
                         </div>
                       </div>
