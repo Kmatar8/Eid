@@ -139,6 +139,17 @@ export default function HostStagePage() {
     return () => window.clearInterval(timer)
   }, [])
 
+  useEffect(() => {
+    const currentQId = room?.trivia?.selectedClue?.questionId ?? null
+    if (currentQId && currentQId !== lastQuestionId) {
+      setLastQuestionId(currentQId)
+      setShowQuestionModal(true)
+    } else if (!currentQId && lastQuestionId) {
+      setLastQuestionId(null)
+      setShowQuestionModal(false)
+    }
+  }, [room?.trivia?.selectedClue?.questionId, lastQuestionId])
+
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -444,6 +455,7 @@ export default function HostStagePage() {
     async (questionId: string) => {
       try {
         await runAction("host.selectTriviaClue", { questionId })
+        setShowQuestionModal(true)
       } catch (requestError) {
         setError(toErrorMessage(requestError))
       }
