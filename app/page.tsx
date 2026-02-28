@@ -24,6 +24,7 @@ import {
 import { FireworksBackground } from "@/components/ui/fireworks"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { BorderBeam } from "@/components/ui/border-beam"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -274,8 +275,34 @@ export default function Home() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="space-y-4 text-center"
+          className="space-y-4 text-center mt-2 relative z-50 pt-4"
         >
+          <div className="mx-auto mb-6 w-fit relative z-50">
+            <a
+              href="https://www.tiktok.com/@happytiime"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative inline-flex z-50 items-center gap-2 overflow-hidden rounded-full border border-white/20 bg-slate-950/80 px-5 py-2 text-base font-bold text-white shadow-lg backdrop-blur-md transition-all hover:scale-105 hover:bg-slate-900"
+            >
+              <BorderBeam
+                duration={4}
+                size={140}
+                className="from-transparent via-cyan-400 to-transparent"
+              />
+              <BorderBeam
+                duration={4}
+                delay={2}
+                size={140}
+                borderWidth={1.5}
+                className="from-transparent via-fuchsia-400 to-transparent"
+              />
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 15.68a6.34 6.34 0 0 0 6.27 6.36 6.34 6.34 0 0 0 6.25-6.36V7.94a8.27 8.27 0 0 0 3.76.92V5.38a5.04 5.04 0 0 1-1.69-.69z" />
+              </svg>
+              @happytiime
+            </a>
+          </div>
+
           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
             <MoonStar className="size-4" />
             جمعة العيد العائلية
