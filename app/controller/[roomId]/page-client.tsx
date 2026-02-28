@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import { FeedbackOverlay } from "@/components/ui/feedback-animations"
+import { FeedbackOverlay, type FeedbackOverlayContext } from "@/components/ui/feedback-animations"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction } from "@/lib/client/live-api"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
@@ -166,6 +166,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [notice, setNotice] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<"correct" | "wrong" | null>(null)
   const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
+  const [feedbackContext, setFeedbackContext] = useState<FeedbackOverlayContext | null>(null)
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
@@ -197,8 +198,23 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
+        const responderPlayerId = room.trivia.currentResponderPlayerId
+        const responderPlayerName = responderPlayerId
+          ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
+          : "لاعب"
+        const awardedTeamId = room.trivia.lastResult.awardedTeamId ?? room.trivia.currentResponderTeamId
+        const awardedTeamName = awardedTeamId
+          ? room.teams.find((team) => team.teamId === awardedTeamId)?.name ?? "فريق"
+          : "فريق"
+
         setFeedbackState(wasCorrect ? "correct" : "wrong")
         setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
+        setFeedbackContext({
+          playerName: responderPlayerName,
+          teamName: awardedTeamName,
+          points: room.trivia.lastResult.awardedPoints,
+          reason,
+        })
         setProcessedFeedbackQuestionId(qId)
       }
     }
@@ -207,8 +223,9 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setProcessedFeedbackQuestionId(null)
       setFeedbackState(null)
       setFeedbackScoreDelta(null)
+      setFeedbackContext(null)
     }
-  }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
+  }, [processedFeedbackQuestionId, room])
 
   const hydrateState = useCallback(async () => {
     if (!session) {
@@ -589,10 +606,12 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       <FeedbackOverlay
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
+        context={feedbackState ? feedbackContext : null}
         showStickers={false}
         onComplete={() => {
           setFeedbackState(null)
           setFeedbackScoreDelta(null)
+          setFeedbackContext(null)
         }}
       />
 
@@ -638,7 +657,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 {isCountdownPhase ? (
                   <div className="mt-3 rounded-2xl border border-amber-300/35 bg-amber-500/12 p-4 text-center">
                     <p className="text-sm text-amber-100">استعد للبازر</p>
-                    <p className="mt-1 text-7xl font-black leading-none text-rose-300 animate-pulse">
+                    <p className="mt-1 text-7xl font-black leading-none text-amber-300 animate-pulse">
                       {countdownSeconds}
                     </p>
                   </div>
@@ -709,7 +728,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             {room?.trivia.phase === "buzzer_open" ? (
               <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
                 <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي للبازر</p>
-                <p className="mt-2 text-7xl font-black leading-none text-rose-50 tabular-nums sm:text-8xl">{buzzSeconds}</p>
+                <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>
                 <p className="mt-1 text-sm font-semibold text-rose-100/90">ثانية</p>
               </div>
             ) : null}

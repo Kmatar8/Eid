@@ -8,7 +8,7 @@ import { LogOut, Power, X } from "lucide-react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
-import { FeedbackOverlay } from "@/components/ui/feedback-animations"
+import { FeedbackOverlay, type FeedbackOverlayContext } from "@/components/ui/feedback-animations"
 import { BorderBeam } from "@/components/ui/border-beam"
 import confetti from "canvas-confetti"
 import { AvatarGroup, AvatarGroupTooltip } from "@/components/animate-ui/components/animate/avatar-group"
@@ -257,6 +257,7 @@ export default function HostStagePage() {
   const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
   const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
+  const [feedbackContext, setFeedbackContext] = useState<FeedbackOverlayContext | null>(null)
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
@@ -382,8 +383,23 @@ export default function HostStagePage() {
     if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
+        const responderPlayerId = room.trivia.currentResponderPlayerId
+        const responderPlayerName = responderPlayerId
+          ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
+          : "لاعب"
+        const awardedTeamId = room.trivia.lastResult.awardedTeamId ?? room.trivia.currentResponderTeamId
+        const awardedTeamName = awardedTeamId
+          ? room.teams.find((team) => team.teamId === awardedTeamId)?.name ?? "فريق"
+          : "فريق"
+
         setFeedbackState(wasCorrect ? "correct" : "wrong")
         setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
+        setFeedbackContext({
+          playerName: responderPlayerName,
+          teamName: awardedTeamName,
+          points: room.trivia.lastResult.awardedPoints,
+          reason,
+        })
         setProcessedFeedbackQuestionId(qId)
 
         if (wasCorrect) {
@@ -426,14 +442,13 @@ export default function HostStagePage() {
       setProcessedFeedbackQuestionId(null)
       setFeedbackState(null)
       setFeedbackScoreDelta(null)
+      setFeedbackContext(null)
     }
   }, [
     playCorrectAnswerSound,
     playWrongAnswerSound,
     processedFeedbackQuestionId,
-    room?.trivia?.lastResult,
-    room?.trivia?.phase,
-    room?.trivia?.selectedClue?.questionId,
+    room,
   ])
 
   const joinUrl = useMemo(() => {
@@ -1039,9 +1054,11 @@ export default function HostStagePage() {
       <FeedbackOverlay
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
+        context={feedbackState ? feedbackContext : null}
         onComplete={() => {
           setFeedbackState(null)
           setFeedbackScoreDelta(null)
+          setFeedbackContext(null)
         }}
       />
       <FireworksBackground
@@ -1502,7 +1519,7 @@ export default function HostStagePage() {
                                   key={countdownSeconds}
                                   initial={{ scale: 1.5, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
-                                  className="text-[10rem] font-black leading-none text-violet-400 drop-shadow-[0_0_30px_rgba(167,139,250,0.5)]"
+                                  className="text-[10rem] font-black leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(251,191,36,0.45)]"
                                 >
                                   {countdownSeconds}
                                 </motion.p>

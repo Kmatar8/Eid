@@ -2,10 +2,31 @@
 
 import { useEffect, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import Image from "next/image"
 import { Check, X } from "lucide-react"
 
 type FeedbackType = "correct" | "wrong" | null
+export type FeedbackReason = "correct" | "wrong" | "timeout" | "no_buzz" | "host_skip"
+export type FeedbackOverlayContext = {
+  playerName: string
+  teamName: string
+  points: number
+  reason?: FeedbackReason
+}
+type WrongSticker = {
+  i: number
+  emoji: string
+  size: number
+  x: number
+  y: number
+  rotate: number
+  duration: number
+  delay: number
+}
+
+function pseudo(seed: number) {
+  const x = Math.sin(seed * 12.9898) * 43758.5453
+  return x - Math.floor(x)
+}
 
 function formatScoreDelta(score: number) {
   return score >= 0 ? `+${score}` : `${score}`
@@ -14,11 +35,13 @@ function formatScoreDelta(score: number) {
 export function FeedbackOverlay({
   currentStatus,
   scoreDelta,
+  context,
   onComplete,
   showStickers = true,
 }: {
   currentStatus: FeedbackType
   scoreDelta?: number | null
+  context?: FeedbackOverlayContext | null
   onComplete?: () => void
   showStickers?: boolean
 }) {
@@ -34,21 +57,22 @@ export function FeedbackOverlay({
     return () => window.clearTimeout(timer)
   }, [currentStatus, onComplete])
 
-  const wrongStickers = useMemo(() => {
-    if (currentStatus !== "wrong") return []
+  const wrongStickers = useMemo<WrongSticker[]>(() => {
+    if (currentStatus !== "wrong" || !showStickers) return []
 
     const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
     const sizeMultiplier = isMobile ? 0.6 : 1
 
     return [...Array(36)].map((_, i) => {
-      const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
+      const angleJitter = pseudo(i + 1) * 20 - 10
+      const angle = (i * 360) / 36 + angleJitter
 
       // Push the minimum distance out so they clear the 150px central icon
       const minDistance = isMobile ? 180 : 280
       const spread = isMobile ? 150 : 350
-      const distance = minDistance + Math.random() * spread
+      const distance = minDistance + pseudo(i + 17) * spread
 
-      const size = (2.5 + Math.random() * 3.5) * sizeMultiplier
+      const size = (2.5 + pseudo(i + 23) * 3.5) * sizeMultiplier
       const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
       const emoji = emojis[i % emojis.length]
 
@@ -61,13 +85,43 @@ export function FeedbackOverlay({
         y += isMobile ? 110 : 180
       }
 
-      const rotate = Math.random() * 360 - 180
-      const duration = 0.8 + Math.random() * 0.4
-      const delay = Math.random() * 0.1
+      const rotate = pseudo(i + 31) * 360 - 180
+      const duration = 0.8 + pseudo(i + 47) * 0.4
+      const delay = pseudo(i + 59) * 0.1
 
       return { i, emoji, size, x, y, rotate, duration, delay }
     })
-  }, [currentStatus])
+  }, [currentStatus, showStickers])
+
+  const feedbackSummary = useMemo(() => {
+    if (!currentStatus || !context) {
+      return null
+    }
+
+    const opener =
+      context.reason === "timeout"
+        ? "انتهى الوقت على"
+        : currentStatus === "correct"
+          ? "جوابك صح يا"
+          : "جوابك غلط يا"
+
+    const absolutePoints = Math.abs(context.points)
+    if (absolutePoints === 0) {
+      return {
+        opener,
+        playerName: context.playerName,
+        impactText: `بدون تغيير نقاط فريق ${context.teamName}`,
+      }
+    }
+
+    const verb = context.points > 0 ? "تمت إضافة" : "تم خصم"
+    const direction = context.points > 0 ? "إلى فريق" : "من فريق"
+    return {
+      opener,
+      playerName: context.playerName,
+      impactText: `${verb} ${absolutePoints} ${direction} ${context.teamName}`,
+    }
+  }, [context, currentStatus])
 
   return (
     <AnimatePresence>
@@ -127,6 +181,19 @@ export function FeedbackOverlay({
               >
                 {formatScoreDelta(scoreDelta)}
               </motion.p>
+            ) : null}
+
+            {feedbackSummary ? (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                className="rounded-2xl border border-emerald-200/45 bg-black/35 px-6 py-4 text-center shadow-xl"
+              >
+                <p className="text-lg font-bold text-emerald-100">{feedbackSummary.opener}</p>
+                <p className="mt-1 text-3xl font-black text-white">{feedbackSummary.playerName}</p>
+                <p className="mt-2 text-lg font-semibold text-emerald-50">{feedbackSummary.impactText}</p>
+              </motion.div>
             ) : null}
           </motion.div>
         </motion.div>
@@ -205,6 +272,19 @@ export function FeedbackOverlay({
               >
                 {formatScoreDelta(scoreDelta)}
               </motion.p>
+            ) : null}
+
+            {feedbackSummary ? (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                className="rounded-2xl border border-red-200/45 bg-black/35 px-6 py-4 text-center shadow-xl"
+              >
+                <p className="text-lg font-bold text-rose-100">{feedbackSummary.opener}</p>
+                <p className="mt-1 text-3xl font-black text-white">{feedbackSummary.playerName}</p>
+                <p className="mt-2 text-lg font-semibold text-rose-50">{feedbackSummary.impactText}</p>
+              </motion.div>
             ) : null}
           </motion.div>
         </motion.div>
