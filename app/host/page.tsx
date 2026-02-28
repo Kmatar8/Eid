@@ -1410,8 +1410,8 @@ export default function HostStagePage() {
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
                         className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-xl border-2 text-3xl font-black transition-all duration-200 lg:text-4xl ${isUsed
-                          ? "border-transparent bg-slate-900/40 text-slate-700 shadow-inner backdrop-blur-sm"
-                          : "border-indigo-500/30 bg-gradient-to-b from-indigo-900/80 to-slate-900/90 text-amber-400 shadow-sm backdrop-blur-md hover:-translate-y-1 hover:border-indigo-400/60 hover:from-indigo-800/90 hover:to-slate-800/90 hover:text-amber-300 hover:shadow-[0_8px_20px_rgba(79,70,229,0.25)] active:translate-y-0 active:scale-95"
+                          ? "border-transparent bg-gradient-to-r from-amber-400/25 via-pink-400/25 to-cyan-400/25 text-slate-500 shadow-inner backdrop-blur-sm"
+                          : "border-transparent bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.28)] backdrop-blur-md hover:-translate-y-1 hover:brightness-110 hover:shadow-[0_14px_32px_rgba(56,189,248,0.35)] active:translate-y-0 active:scale-95"
                           } ${isSelected ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900" : ""}`}
                       >
                         {!isUsed && (
