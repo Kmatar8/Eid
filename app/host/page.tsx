@@ -1247,7 +1247,7 @@ export default function HostStagePage() {
                 {(trivia?.board ?? []).map((category) => (
                   <div
                     key={`header-${category.categoryId}`}
-                    className="flex min-h-0 items-center justify-center rounded-2xl border-b-4 border-t border-x border-violet-400/40 border-b-violet-500/60 bg-gradient-to-b from-indigo-800/60 to-violet-900/60 px-2 py-2 text-center text-[0.8rem] md:text-sm lg:text-lg font-black uppercase tracking-wider text-slate-100 shadow-[inset_0_2px_15px_rgba(255,255,255,0.1)] drop-shadow-lg"
+                    className="flex min-h-0 items-center justify-center rounded-xl border border-white/10 bg-slate-900/80 px-2 py-2 text-center text-[0.8rem] md:text-sm lg:text-lg font-bold uppercase tracking-wide text-indigo-100 shadow-sm backdrop-blur-md"
                   >
                     {category.name}
                   </div>
@@ -1268,13 +1268,13 @@ export default function HostStagePage() {
                         type="button"
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
-                        className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-2xl border text-3xl font-black transition-all duration-300 lg:text-4xl ${isUsed
-                            ? "border-white/5 bg-black/40 text-slate-500/30 shadow-inner"
-                            : "border-cyan-400/40 bg-gradient-to-br from-blue-900/80 to-indigo-900/60 text-amber-300 shadow-[0_4px_20px_rgba(59,130,246,0.3)] drop-shadow-[0_0_10px_rgba(252,211,77,0.6)] hover:scale-[1.04] hover:border-cyan-300/80 hover:from-blue-800/90 hover:to-indigo-800/80 hover:text-amber-200 hover:shadow-[0_8px_30px_rgba(59,130,246,0.5)] active:scale-95"
-                          } ${isSelected ? "ring-4 ring-amber-400/70 ring-offset-4 ring-offset-slate-900" : ""}`}
+                        className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-xl border-2 text-3xl font-black transition-all duration-200 lg:text-4xl ${isUsed
+                            ? "border-transparent bg-slate-900/40 text-slate-700 shadow-inner backdrop-blur-sm"
+                            : "border-indigo-500/30 bg-gradient-to-b from-indigo-900/80 to-slate-900/90 text-amber-400 shadow-sm backdrop-blur-md hover:-translate-y-1 hover:border-indigo-400/60 hover:from-indigo-800/90 hover:to-slate-800/90 hover:text-amber-300 hover:shadow-[0_8px_20px_rgba(79,70,229,0.25)] active:translate-y-0 active:scale-95"
+                          } ${isSelected ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900" : ""}`}
                       >
                         {!isUsed && (
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-white/5 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                         )}
                         <span className="relative z-10">{isUsed ? "✓" : clue.points}</span>
                       </button>
