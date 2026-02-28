@@ -36,6 +36,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 18. Update landing hero wording from `ليلة` to `فعالية` for consistent event terminology.
 19. Remove duplicate pre-start popup from host overview start action and restore board clue-tile color styling to prior indigo theme.
 20. Revert host floating icon controls (terminate/logout) and controller buzzer to their prior visual styles while keeping other button updates.
+21. Remove duplicate controller buzzer countdown display and upgrade the remaining buzzer timer block for clear, larger readability.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -82,6 +83,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 19. Adjust landing hero title copy (`ليلة العيد` -> `فعالية العيد`).
 20. Remove redundant pre-start modal trigger; start trivia directly from overview CTA and keep board tile styling unchanged from prior indigo design.
 21. Restore prior styling for host floating end/logout controls and controller red buzzer.
+22. Keep a single controller buzzer countdown source and restyle it as a larger, clearer timer card.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -105,6 +107,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 19. Landing hero headline uses `فعالية` wording instead of `ليلة`.
 20. Overview start no longer opens a duplicate popup, and board clue buttons retain prior indigo visual style.
 21. Host floating end/logout controls and controller buzzer match their previous styles (not gradient-unified versions).
+22. During `buzzer_open`, controller shows only one countdown timer and it is visually prominent/large.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -127,6 +130,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: landing hero text shows `فعالية العيد` (not `ليلة العيد`).
 - [ ] Manual: board clue buttons use prior indigo theme styling (not the join CTA gradient).
 - [ ] Manual: host floating end/logout controls and controller buzzer use their previous non-gradient styles.
+- [ ] Manual: controller buzzer phase shows a single large countdown (no duplicate 20s timer).
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -146,6 +150,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 14. Updated landing hero wording from `ليلة العيد` to `فعالية العيد`.
 15. Removed redundant overview start popup and restored board clue button styling to the prior indigo design.
 16. Restored prior host floating end/logout button styles and prior controller red buzzer style.
+17. Removed duplicate controller buzzer timer text-countdown and promoted the remaining buzzer timer into a larger, clearer visual block.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.

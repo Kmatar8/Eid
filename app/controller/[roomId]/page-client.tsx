@@ -487,7 +487,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     if (room.trivia.phase === "buzzer_open") {
-      return `البازر مفتوح للجميع لمدة ${buzzSeconds} ثانية.`
+      return "البازر مفتوح الآن للجميع. اضغط بسرعة للإجابة."
     }
 
     if (room.trivia.phase === "answer_active") {
@@ -510,7 +510,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     return "بانتظار التحديث التالي."
-  }, [buzzSeconds, canAnswer, countdownSeconds, playerNameById, responderName, responderTeam?.name, room, session, teamById])
+  }, [canAnswer, countdownSeconds, playerNameById, responderName, responderTeam?.name, room, session, teamById])
 
   const submitBuzz = async () => {
     if (!session || busy || !canBuzz) {
@@ -707,9 +707,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             ) : null}
 
             {room?.trivia.phase === "buzzer_open" ? (
-              <p className="mt-4 rounded-xl border border-rose-300/30 bg-rose-500/15 px-4 py-2 text-sm text-rose-100">
-                الوقت المتبقي للبازر: {buzzSeconds} ثانية
-              </p>
+              <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
+                <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي للبازر</p>
+                <p className="mt-2 text-7xl font-black leading-none text-rose-50 tabular-nums sm:text-8xl">{buzzSeconds}</p>
+                <p className="mt-1 text-sm font-semibold text-rose-100/90">ثانية</p>
+              </div>
             ) : null}
 
             {error ? <p className="party-status-error mt-4 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
