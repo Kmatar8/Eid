@@ -20,18 +20,26 @@ After deployment, use these routes:
 3. `/controller/<roomId>` for player controller + answer submission.
 4. `/room/<roomId>` for TV/host display view.
 
-Host credentials are seeded from:
-
-1. `HROOF_HOST_CREDENTIALS_JSON` (if provided), else
-2. `lib/server/host-credentials.generated.json` (generated from CSV).
-
-Regenerate credential pool (500 rows by default):
+Generate host credential pool (500 rows by default):
 
 ```bash
 npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 12 lib/server/host-credentials.generated.json
 ```
 
+Sync generated credentials to D1 (passwords are hashed before insertion):
+
+```bash
+# remote D1
+npm run sync:host-codes:d1 -- docs/seeds/host-redeem-codes.csv --remote
+```
+
 CSV format is `code,password` and login uses `code` as username.
+Credential tracking is stored in `host_access_codes` (D1):
+- `active` before first login
+- `redeemed` after first successful login
+- `expired` after access expiry
+
+Access window is `2 months` from first successful activation.
 
 ## Deployed Smoke Test
 

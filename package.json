@@ -12,7 +12,8 @@
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "load:rooms-100": "node scripts/load-rooms-100.mjs",
-    "seed:redeem-codes": "node scripts/generate-redeem-codes.mjs"
+    "seed:redeem-codes": "node scripts/generate-redeem-codes.mjs",
+    "sync:host-codes:d1": "node scripts/sync-host-codes-to-d1.mjs"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.18",

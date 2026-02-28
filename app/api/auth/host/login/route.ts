@@ -1,5 +1,6 @@
-import { authenticateHost, resolveHostTokenTtlSeconds } from "@/lib/server/store"
+import { authenticateHostAccessCode } from "@/lib/server/host-access-code-auth"
 import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
+import { authenticateHost, resolveHostTokenTtlSeconds, upsertHostCredentialRecord } from "@/lib/server/store"
 import { withSharedStore } from "@/lib/server/store-sync"
 import { signToken } from "@/lib/server/token"
 
@@ -24,9 +25,24 @@ export async function POST(request: Request) {
       return errorResponse(400, "VALIDATION_ERROR", "username and password are required")
     }
 
-    const host = authenticateHost(username, password)
+    const dbAuthResult = await authenticateHostAccessCode(username, password)
+    let host: ReturnType<typeof authenticateHost> = null
+    if (dbAuthResult.ok) {
+      host = upsertHostCredentialRecord({
+        username: dbAuthResult.code,
+        passwordHash: dbAuthResult.passwordHash,
+        accessExpiresAt: dbAuthResult.accessExpiresAt,
+      })
+    } else if (dbAuthResult.reason === "DB_UNAVAILABLE") {
+      host = authenticateHost(username, password)
+    } else if (dbAuthResult.reason === "DB_ERROR") {
+      return errorResponse(503, "AUTH_STORE_UNAVAILABLE", "Credential database is temporarily unavailable")
+    } else if (dbAuthResult.reason === "ACCESS_EXPIRED") {
+      return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
+    }
+
     if (!host) {
-      return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host username or password")
+      return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code or password")
     }
 
     const tokenTtlSeconds = resolveHostTokenTtlSeconds(host)

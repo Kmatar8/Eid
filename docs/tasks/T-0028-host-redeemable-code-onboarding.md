@@ -8,22 +8,22 @@
 Deliver host authentication using pre-issued credential pairs from CSV:
 1. Each host uses `code + password` directly on `/host/login` (code acts as username).
 2. No email input or account setup step in host UI.
-3. Generated credential pairs are bundled and available in deployed runtime.
-4. Host access is revoked 30 days after activation (first successful login).
+3. Generated credential pairs are exported to CSV and stored in D1 for redemption tracking.
+4. Host access is revoked 2 months after activation (first successful login).
 
 ## Scope
 ### In
 1. Update PRD auth requirements to code/password credential flow.
 2. Update host login UI to accept only code + password.
 3. Generate 500 `code,password` credentials and store in CSV.
-4. Bundle generated credentials for deployed runtime lookup.
-5. Seed host credentials in runtime store with hashed passwords.
+4. Store all generated credential hashes in D1 for runtime authentication/tracking.
+5. Mark code as redeemed on first activation and enforce 2-month access expiry.
 
 ### Out
 1. Admin dashboard for code management.
 2. Email delivery/verification workflow.
 3. Password reset and account recovery flows.
-4. Full D1-backed runtime migration (keep current store authority behavior intact).
+4. Admin dashboard for bulk upload/download management.
 
 ## Dependencies
 1. Existing host token issuance and room lifecycle flow from T-0001.
@@ -37,29 +37,30 @@ Deliver host authentication using pre-issued credential pairs from CSV:
 2. `POST /api/auth/host/redeem` + `POST /api/auth/host/register` become legacy/non-primary and are no longer required by host UI.
 
 ## Data Model Impact (D1/DO/R2)
-1. `D1`: `hosts` stores issued credential code (`username`) + hashed password + optional `access_expires_at`.
+1. `D1`: add `host_access_codes` to store code, password hash, redemption status, and activation/expiry timestamps.
 2. `DO`: no authority change; host role checks and room authority remain unchanged.
 3. `R2`: no change.
 
 ## Implementation Plan
 1. Update `PRD.md` sections for host auth journey.
-2. Generate `code,password` credential pairs (CSV + bundled JSON).
-3. Extend host seed loading to prefer env JSON, then bundled JSON, then CSV.
-4. Update `/host/login` to code/password-only experience.
-5. Keep host access revocation window at 30 days after first successful login.
-6. Run lint/typecheck and capture validation evidence.
+2. Add D1 migration for `host_access_codes`.
+3. Generate `code,password` credential pairs (CSV) and sync hashed credentials to D1.
+4. Update host login auth to read credentials from D1 and mark first activation as redeemed.
+5. Enforce access expiry at `activatedAt + 2 months`.
+6. Run lint/typecheck/build and capture validation evidence.
 
 ## Acceptance Criteria
 1. `/host/login` accepts code + password only (no email/setup form).
 2. Generated CSV contains 500 rows with `code,password`.
-3. Deployed runtime can authenticate using generated credential pairs from bundled seed file.
-4. Successful login activates host access window and expiry revokes further access.
+3. D1 contains all generated credentials as hashed password records.
+4. Successful first login marks credential as redeemed and sets expiry to 2 months after activation.
+5. Expired redeemed credentials cannot log in.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass for changed code.
 - [x] Manual: code/password login from CSV succeeds.
 - [x] Manual: second code/password pair also succeeds.
-- [x] Manual: returning host login still works.
+- [x] Manual: D1 shows redeemed credentials with future 2-month expiry.
 - [x] Evidence recorded in this task file.
 
 ## Validation Evidence (2026-02-28)
@@ -124,6 +125,26 @@ Deliver host authentication using pre-issued credential pairs from CSV:
 19. Validation commands after bug fix:
    - `npx eslint app/api/auth/host/login/route.ts app/api/auth/host/redeem/route.ts app/api/auth/host/register/route.ts app/host/login/page.tsx lib/client/live-api.ts lib/server/store.ts scripts/generate-redeem-codes.mjs README.md PRD.md docs/tasks/T-0028-host-redeemable-code-onboarding.md` ✅ (docs files ignored warnings only)
    - `npm run build` ✅
+20. D1-backed credential tracking implementation (customer request):
+   - added migration `migrations/0003_host_access_codes.sql`.
+   - added DB auth service `lib/server/host-access-code-auth.ts`.
+   - `POST /api/auth/host/login` now authenticates against D1 `host_access_codes` (with in-memory fallback only when DB binding is unavailable).
+21. Activation window update (customer request):
+   - first successful login sets `status = redeemed`, `activated_at`, `redeemed_at`, `access_expires_at`.
+   - expiry is now `activated_at + 2 calendar months`.
+22. Import/sync tooling added:
+   - `scripts/sync-host-codes-to-d1.mjs` to hash CSV passwords and upsert to D1.
+   - npm script: `npm run sync:host-codes:d1`.
+   - importer now replaces only non-activated active/expired codes, preserving redeemed history.
+23. CSV + D1 inventory refresh:
+   - regenerated `docs/seeds/host-redeem-codes.csv` and `lib/server/host-credentials.generated.json` with 500 credentials.
+   - applied migrations locally and remotely (`wrangler d1 migrations apply hroof-main-db --local/--remote`).
+   - synced credentials to remote D1: total codes now 500 (`active=500`, `redeemed=0` before activation).
+24. Local preview integration check (`npm run preview` on `http://127.0.0.1:8787`):
+   - login with CSV credential succeeded (`POST /api/auth/host/login` => `200`).
+   - D1 row transitioned to `redeemed` with:
+     - `activated_at_utc`: `2026-02-28 22:55:27`
+     - `access_expires_at_utc`: `2026-04-28 22:55:27` (2 months later)
 
 ## Rollback Plan
 1. Revert PRD auth section changes.

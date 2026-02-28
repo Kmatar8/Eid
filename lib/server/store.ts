@@ -31,7 +31,7 @@ const TRIVIA_COUNTDOWN_MS = 5 * 1000
 const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 const REDEEMED_CODE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 30
-const HOST_ACCESS_DURATION_MS = 1000 * 60 * 60 * 24 * 30
+const HOST_ACCESS_DURATION_MONTHS = 2
 const DEFAULT_HOST_TOKEN_TTL_SECONDS = 60 * 60 * 12
 
 type InMemoryStore = {
@@ -117,6 +117,25 @@ const ACTIVE_ROOM_STATES: Set<RoomState> = new Set([
 
 function nowMs() {
   return Date.now()
+}
+
+function addUtcMonths(fromMs: number, months: number) {
+  const from = new Date(fromMs)
+  const targetMonth = from.getUTCMonth() + months
+  const targetYear = from.getUTCFullYear() + Math.floor(targetMonth / 12)
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12
+  const maxDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate()
+  const targetDay = Math.min(from.getUTCDate(), maxDay)
+
+  return Date.UTC(
+    targetYear,
+    normalizedMonth,
+    targetDay,
+    from.getUTCHours(),
+    from.getUTCMinutes(),
+    from.getUTCSeconds(),
+    from.getUTCMilliseconds()
+  )
 }
 
 function getRoomEventSubscribersMap() {
@@ -1669,7 +1688,7 @@ export function registerHostFromRedeem(input: {
     username,
     email: normalizedEmail,
     passwordHash: hashPassword(input.password),
-    accessExpiresAt: createdAt + HOST_ACCESS_DURATION_MS,
+    accessExpiresAt: addUtcMonths(createdAt, HOST_ACCESS_DURATION_MONTHS),
     activeRoomId: null,
     createdAt,
   }
@@ -1711,6 +1730,41 @@ export function resolveHostTokenTtlSeconds(host: HostRecord) {
   return Math.min(DEFAULT_HOST_TOKEN_TTL_SECONDS, remainingSeconds)
 }
 
+export function upsertHostCredentialRecord(input: {
+  username: string
+  passwordHash: string
+  accessExpiresAt: number | null
+}): HostRecord {
+  const store = getStore()
+  const normalizedUsername = normalizeRedeemCode(input.username)
+  const existingHostId = store.hostsByUsername.get(normalizedUsername)
+  const now = nowMs()
+
+  if (existingHostId) {
+    const existing = store.hosts.get(existingHostId)
+    if (existing) {
+      existing.passwordHash = input.passwordHash
+      existing.accessExpiresAt = input.accessExpiresAt
+      return existing
+    }
+  }
+
+  const host: HostRecord = {
+    id: `host_${randomUUID()}`,
+    username: normalizedUsername,
+    email: null,
+    passwordHash: input.passwordHash,
+    accessExpiresAt: input.accessExpiresAt,
+    activeRoomId: null,
+    createdAt: now,
+  }
+
+  store.hosts.set(host.id, host)
+  store.hostsByUsername.set(host.username, host.id)
+  store.revision += 1
+  return host
+}
+
 export function authenticateHost(username: string, password: string): HostRecord | null {
   const store = getStore()
   const normalizedUsername = username.trim()
@@ -1731,7 +1785,7 @@ export function authenticateHost(username: string, password: string): HostRecord
   }
 
   if (typeof host.accessExpiresAt !== "number") {
-    host.accessExpiresAt = nowMs() + HOST_ACCESS_DURATION_MS
+    host.accessExpiresAt = addUtcMonths(nowMs(), HOST_ACCESS_DURATION_MONTHS)
     store.revision += 1
   }
 

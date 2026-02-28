@@ -27,7 +27,7 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
 ## 5. Users and Access
 ### 5.1 Host
 - Authenticates using pre-issued `code + password` from the credential CSV (code acts as username).
-- Host account access is revoked `30 days` after activation (first successful login).
+- Host account access is revoked `2 months` after activation (first successful login).
 - Constraint: one host can run only one active room at a time.
 - Controls room lifecycle and game progression.
 
@@ -180,13 +180,14 @@ Host UI also switches by room/game stage payload, preserving server authority fo
 Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case if WebSocket hibernation and room lifecycle controls are implemented to control duration costs.
 
 ## 11. Data Model (high-level)
-1. `hosts` (credential code as username, password hash, access expiry, active room pointer)
-2. `rooms` (state, host, timestamps, timeout fields)
-3. `players` (identity, avatar/emoji, connection metadata)
-4. `teams` and `team_members`
-5. `scores` (team-level snapshots)
-6. `room_events` (append-only audit/event stream)
-7. `game_sessions` and `trivia_questions`
+1. `host_access_codes` (credential code, password hash, activation/redeem status, activation and expiry timestamps)
+2. `hosts` (runtime host identity, active room pointer)
+3. `rooms` (state, host, timestamps, timeout fields)
+4. `players` (identity, avatar/emoji, connection metadata)
+5. `teams` and `team_members`
+6. `scores` (team-level snapshots)
+7. `room_events` (append-only audit/event stream)
+8. `game_sessions` and `trivia_questions`
 
 ## 12. API + Event Contracts (high-level)
 ## 12.1 Host actions
