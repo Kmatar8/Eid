@@ -259,6 +259,7 @@ export default function HostStagePage() {
   const serverClockOffsetRef = useRef(0)
   const streamConnectedRef = useRef(false)
   const correctAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
+  const wrongAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -288,18 +289,39 @@ export default function HostStagePage() {
   }, [])
 
   useEffect(() => {
-    const audio = new Audio("/sounds/correct-answer.mp3")
-    audio.preload = "auto"
-    correctAnswerAudioRef.current = audio
+    const correctAudio = new Audio("/sounds/correct-answer.mp3")
+    correctAudio.preload = "auto"
+    correctAnswerAudioRef.current = correctAudio
+
+    const wrongAudio = new Audio("/sounds/wrong-answer.mp3")
+    wrongAudio.preload = "auto"
+    wrongAnswerAudioRef.current = wrongAudio
 
     return () => {
-      audio.pause()
+      correctAudio.pause()
+      wrongAudio.pause()
       correctAnswerAudioRef.current = null
+      wrongAnswerAudioRef.current = null
     }
   }, [])
 
   const playCorrectAnswerSound = useCallback(() => {
     const audio = correctAnswerAudioRef.current
+    if (!audio) {
+      return
+    }
+
+    audio.currentTime = 0
+    const playPromise = audio.play()
+    if (playPromise) {
+      void playPromise.catch(() => {
+        // Browser autoplay policy may block playback before first user interaction.
+      })
+    }
+  }, [])
+
+  const playWrongAnswerSound = useCallback(() => {
+    const audio = wrongAnswerAudioRef.current
     if (!audio) {
       return
     }
@@ -390,6 +412,8 @@ export default function HostStagePage() {
           }
 
           frame()
+        } else {
+          playWrongAnswerSound()
         }
       }
     }
@@ -401,6 +425,7 @@ export default function HostStagePage() {
     }
   }, [
     playCorrectAnswerSound,
+    playWrongAnswerSound,
     processedFeedbackQuestionId,
     room?.trivia?.lastResult,
     room?.trivia?.phase,
@@ -635,7 +660,7 @@ export default function HostStagePage() {
           return
         }
 
-        if (isPageVisible && !streamConnectedRef.current) {
+        if (isPageVisible) {
           await refreshState()
         }
 

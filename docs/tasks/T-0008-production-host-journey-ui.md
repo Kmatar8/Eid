@@ -24,7 +24,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 6. Extend host action contract for server-authoritative manual team assignment.
 7. Improve trivia controller clarity with team color coding and explicit responder text.
 8. Add host fallback action to randomly select another responder from the same active team.
-9. Play a host-only success sound effect when a correct answer is revealed.
+9. Play host-only sound effects when answer reveal is correct or wrong.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -59,7 +59,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 7. Add trivia rules modal and runtime team-context messaging with team-color cues.
 8. Update controller question card to show explicit responder text and team cue styling.
 9. Validate with lint/build + live smoke flow and capture evidence.
-10. Add host-only audio preload/playback path for correct-answer reveal feedback.
+10. Add host-only audio preload/playback path for correct/wrong answer reveal feedback.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -71,7 +71,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 7. Host can trigger random responder reselection within the same active team when trivia question is active.
 8. Controller clearly shows "this question is for you" for active responder and team/player context for others.
 9. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
-10. Host screen plays configured success sound once per correctly answered reveal.
+10. Host screen plays configured sound once per reveal result (`correct` or `wrong`).
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -82,7 +82,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: host can select another responder from same team during active question.
 - [ ] Manual: controller shows clear responder/team context with team color cues.
 - [ ] Manual: trivia completion -> winner celebration -> next game CTA.
-- [ ] Manual: host plays success sound exactly once when reveal result is correct.
+- [ ] Manual: host plays correct/wrong sound exactly once for each scored reveal.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -90,7 +90,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 2. `npm run build` completed successfully with `/host/login` and updated `/host` route output.
 3. Live deploy completed to `https://hroof-app.k-matar.workers.dev` with version `83f5ed74-acf4-407c-983f-bf25cf357722`.
 4. `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh` passed full host/join/trivia/reconnect/end flow.
-5. Added host-only correct-answer sound playback hook in reveal flow using `/sounds/correct-answer.mp3`.
+5. Added host-only answer-reveal sound playback hooks using `/sounds/correct-answer.mp3` and `/sounds/wrong-answer.mp3`.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.

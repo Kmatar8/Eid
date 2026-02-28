@@ -159,3 +159,9 @@ Deliver a room-sharded realtime architecture that sustains `1,000-5,000` concurr
 21. Validation run (controller desync fix):
    - `npm run lint` (warnings only; no errors)
    - `npm run build` (success)
+22. Addressed host-side stale-stream freeze observed during trivia transitions (countdown reached `0` while controllers advanced to buzzer):
+   - host fallback polling now runs while visible regardless of stream open state, ensuring periodic authoritative refresh even if SSE connection is open-but-stale
+   - preserves existing adaptive poll cadence (`1000ms` idle, `850ms` board, `260ms` active) for bounded cost
+23. Validation run (host stale-stream fallback fix):
+   - `npm run lint` (warnings only; no errors)
+   - `npm run build` (success)
