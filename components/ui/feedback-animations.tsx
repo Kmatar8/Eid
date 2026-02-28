@@ -129,8 +129,11 @@ export function FeedbackOverlay({
               {/* Massive spread of Wrong Answer Stickers */}
               {[...Array(36)].map((_, i) => {
                 const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
-                const distance = 140 + Math.random() * 450 // Much larger spread across overlay
-                const size = 2.5 + Math.random() * 3.5 // Bigger sticker sizes
+                const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
+                const distanceMultiplier = isMobile ? 0.45 : 1
+                const sizeMultiplier = isMobile ? 0.6 : 1
+                const distance = (140 + Math.random() * 450) * distanceMultiplier
+                const size = (2.5 + Math.random() * 3.5) * sizeMultiplier
                 const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
                 const emoji = emojis[i % emojis.length]
 
@@ -141,7 +144,7 @@ export function FeedbackOverlay({
                     initial={{ x: 0, y: 0, scale: 0, opacity: 0, rotate: 0 }}
                     animate={{
                       x: Math.cos((angle * Math.PI) / 180) * distance,
-                      y: Math.sin((angle * Math.PI) / 180) * distance + (Math.random() * 150),
+                      y: Math.sin((angle * Math.PI) / 180) * distance + (Math.random() * 150 * distanceMultiplier),
                       scale: [0, 1.2, 1],
                       opacity: [0, 1],
                       rotate: Math.random() * 360 - 180,

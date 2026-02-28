@@ -120,10 +120,6 @@ function getTeamTone(teamId: string | null | undefined): TeamTone {
   )
 }
 
-function scoreBadge(score: number) {
-  return score >= 0 ? `+${score}` : `${score}`
-}
-
 function remainingSeconds(targetTs: number | null, nowTs: number) {
   if (!targetTs) {
     return 0
@@ -963,58 +959,6 @@ export default function HostStagePage() {
     return Array.from({ length: maxRows }, (_, index) => index)
   }, [trivia?.board])
 
-  const liveHeadline = useMemo(() => {
-    if (!trivia || trivia.status !== "in_progress") {
-      return "في انتظار بدء لوحة الجيوباردي."
-    }
-
-    if (trivia.phase === "board_turn") {
-      const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
-      const pickerName = currentPicker?.displayName ?? "لاعب عشوائي"
-      return `${teamName} يختار الآن. اللاعب المحدد للدور: ${pickerName}`
-    }
-
-    if (trivia.phase === "countdown") {
-      return `سيتم كشف السؤال بعد ${countdownSeconds} ثوانٍ.`
-    }
-
-    if (trivia.phase === "buzzer_open") {
-      return `البازر مفتوح للجميع. أول ضغطة خلال ${buzzSeconds} ثانية تحسم الإجابة.`
-    }
-
-    if (trivia.phase === "answer_active") {
-      const playerName = responderPlayer?.displayName ?? "لاعب غير معروف"
-      const teamName = responderTeam?.name ?? "فريق غير معروف"
-      return `السؤال للاعب ${playerName} من ${teamName}. وقت الإجابة ${answerSeconds} ثانية.`
-    }
-
-    if (trivia.phase === "answer_reveal" && trivia.lastResult) {
-      const teamName = room?.teams.find((team) => team.teamId === trivia.lastResult?.awardedTeamId)?.name ?? "الفريق"
-      if (trivia.lastResult.reason === "no_buzz") {
-        return "لم يضغط أحد البازر. لا توجد نقاط لهذا السؤال."
-      }
-      if (trivia.lastResult.reason === "host_skip") {
-        return "تم تخطي السؤال بواسطة المضيف."
-      }
-      if (trivia.lastResult.wasCorrect) {
-        return `إجابة صحيحة. ${teamName} كسب ${scoreBadge(trivia.lastResult.awardedPoints)} نقاط.`
-      }
-      return `إجابة خاطئة. ${teamName} خسر ${Math.abs(trivia.lastResult.awardedPoints)} نقاط.`
-    }
-
-    return "استمروا في اللعب."
-  }, [
-    answerSeconds,
-    countdownSeconds,
-    currentPicker?.displayName,
-    currentTurnTeam?.name,
-    responderPlayer?.displayName,
-    responderTeam?.name,
-    room?.teams,
-    trivia,
-    buzzSeconds,
-  ])
-
   const liveStatusCommandText = useMemo(() => {
     const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
     const pickerName = currentPicker?.displayName ?? "لاعب الفريق"
@@ -1395,12 +1339,7 @@ export default function HostStagePage() {
                   borderWidth={2}
                   className="from-transparent via-cyan-400 to-transparent"
                 />
-                <p className="relative text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Live Status</p>
-                <h2 className="relative mt-2 text-2xl font-extrabold leading-tight text-white">{liveStatusCommandText}</h2>
-                <p className="relative mt-2 text-sm text-slate-200">{liveHeadline}</p>
-                <p className="relative mt-1 text-sm text-slate-300">
-                  تم استخدام {trivia?.questionIndex ?? 0} من {trivia?.totalQuestions ?? 0} سؤال.
-                </p>
+                <h2 className="relative text-3xl font-black leading-tight text-white lg:text-4xl">{liveStatusCommandText}</h2>
               </article>
 
               {orderedTeams[1] ? (
