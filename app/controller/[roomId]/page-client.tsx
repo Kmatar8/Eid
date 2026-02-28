@@ -504,7 +504,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     if (room.trivia.phase === "buzzer_open") {
-      return "البازر مفتوح الآن للجميع. اضغط بسرعة للإجابة."
+      return null
     }
 
     if (room.trivia.phase === "answer_active") {
@@ -645,9 +645,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-4 shadow-inner">
-              <p className={`text-base font-semibold leading-relaxed ${activeTone.text}`}>{statusText}</p>
-            </div>
+            {statusText ? (
+              <div className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-4 shadow-inner">
+                <p className={`text-base font-semibold leading-relaxed ${activeTone.text}`}>{statusText}</p>
+              </div>
+            ) : null}
 
             {selectedClue ? (
               <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
@@ -727,7 +729,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
             {room?.trivia.phase === "buzzer_open" ? (
               <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
-                <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي للبازر</p>
+                <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي</p>
                 <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>
                 <p className="mt-1 text-sm font-semibold text-rose-100/90">ثانية</p>
               </div>

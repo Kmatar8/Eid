@@ -38,12 +38,14 @@ export function FeedbackOverlay({
   context,
   onComplete,
   showStickers = true,
+  correctSummaryPanelClassName,
 }: {
   currentStatus: FeedbackType
   scoreDelta?: number | null
   context?: FeedbackOverlayContext | null
   onComplete?: () => void
   showStickers?: boolean
+  correctSummaryPanelClassName?: string
 }) {
   useEffect(() => {
     if (!currentStatus) {
@@ -188,7 +190,7 @@ export function FeedbackOverlay({
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.28, ease: "easeOut" }}
-                className="rounded-2xl border border-emerald-200/45 bg-black/35 px-6 py-4 text-center shadow-xl"
+                className={`rounded-2xl border px-6 py-4 text-center shadow-xl ${correctSummaryPanelClassName ?? "border-emerald-200/45 bg-black/35"}`}
               >
                 <p className="text-lg font-bold text-emerald-100">{feedbackSummary.opener}</p>
                 <p className="mt-1 text-3xl font-black text-white">{feedbackSummary.playerName}</p>

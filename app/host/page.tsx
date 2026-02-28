@@ -1055,6 +1055,7 @@ export default function HostStagePage() {
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
         context={feedbackState ? feedbackContext : null}
+        correctSummaryPanelClassName="border-emerald-200/70 bg-black/70"
         onComplete={() => {
           setFeedbackState(null)
           setFeedbackScoreDelta(null)
@@ -1505,7 +1506,7 @@ export default function HostStagePage() {
                                   <div className="min-w-[24rem] rounded-2xl border border-white/20 bg-white/5 px-6 py-4">
                                     <p className="text-sm font-semibold text-slate-300/90">الحالة الحالية</p>
                                     <span className="mt-1 block text-2xl font-black text-slate-200">
-                                      {trivia?.phase === "board_turn" ? `دور فريق: ${currentTurnTeam?.name ?? "..."}` : "بانتظار البازر..."}
+                                      {trivia?.phase === "board_turn" ? `دور فريق: ${currentTurnTeam?.name ?? "..."}` : "لالي يضغط اول يجاوب.."}
                                     </span>
                                   </div>
                                 )}

@@ -39,6 +39,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 21. Remove duplicate controller buzzer countdown display and upgrade the remaining buzzer timer block for clear, larger readability.
 22. Set host/controller visible countdown numbers to a yellowish color tone for clearer timer emphasis.
 23. Enrich host/controller answer-reveal overlay copy with responder name, team impact, and points gain/loss messaging.
+24. Update host waiting-buzzer helper copy from `بانتظار البازر...` to `لالي يضغط اول يجاوب..`.
+25. Remove controller buzzer-open status block text and simplify the 20s countdown label by dropping `البازر`.
+26. Increase host `جوابك صح` overlay summary container opacity for better visibility.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -88,6 +91,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 22. Keep a single controller buzzer countdown source and restyle it as a larger, clearer timer card.
 23. Update host/controller countdown number color tokens to a yellowish theme.
 24. Pass responder/team/points context into shared feedback overlay and render localized Arabic result lines.
+25. Apply requested host waiting-buzzer text wording update in question modal status.
+26. Hide controller top status panel during `buzzer_open` and shorten buzzer timer title copy.
+27. Add host-only feedback overlay panel style override to reduce transparency in correct-answer summary.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -114,6 +120,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 22. During `buzzer_open`, controller shows only one countdown timer and it is visually prominent/large.
 23. Host and controller countdown numbers render with a yellowish color.
 24. On answer reveal, host and controllers show overlay text including responder name and which team gained/lost points (with value).
+25. Host question-modal idle responder text shows `لالي يضغط اول يجاوب..`.
+26. Controller no longer shows the `البازر مفتوح...` status block, and the 20s counter title reads `الوقت المتبقي`.
+27. Host `جوابك صح` summary container appears with stronger opacity/contrast than before.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -139,6 +148,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: controller buzzer phase shows a single large countdown (no duplicate 20s timer).
 - [ ] Manual: host/controller countdown numbers appear in the new yellowish color tone.
 - [ ] Manual: answer-reveal overlay shows responder name + points impact + team name on host and controllers.
+- [ ] Manual: host waiting-buzzer helper text matches `لالي يضغط اول يجاوب..`.
+- [ ] Manual: controller `buzzer_open` phase hides the top status block and shows `الوقت المتبقي` above the countdown.
+- [ ] Manual: host correct-answer overlay (`جوابك صح`) summary panel is clearly visible with reduced transparency.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -161,6 +173,9 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 17. Removed duplicate controller buzzer timer text-countdown and promoted the remaining buzzer timer into a larger, clearer visual block.
 18. Updated host/controller countdown number color classes to yellowish tones.
 19. Added responder/team/points contextual messaging to host/controller answer-reveal overlays.
+20. Updated host waiting-buzzer helper text to `لالي يضغط اول يجاوب..`.
+21. Removed controller `البازر مفتوح...` status block during `buzzer_open` and renamed timer heading to `الوقت المتبقي`.
+22. Increased host correct-answer overlay summary container opacity via host-only `FeedbackOverlay` panel class override.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.
