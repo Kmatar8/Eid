@@ -311,7 +311,7 @@ export default function Home() {
             "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
             isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
           )}>
-            ليلة العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
+            فعالية العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
           </h1>
           <p className={cn(
             "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
@@ -373,13 +373,13 @@ export default function Home() {
                       window.open('#', '_blank')
                     }}
                     className={cn(
-                      "w-full rounded-2xl bg-gradient-to-r from-amber-500 hover:from-amber-400 to-orange-600 hover:to-orange-500 text-white font-bold shadow-[0_10px_30px_-10px_rgba(245,158,11,0.6)] transition-all hover:scale-[1.02] active:scale-[0.98] border border-amber-400/30 overflow-hidden relative",
+                      "w-full rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] overflow-hidden relative",
                       isTVMode ? "h-20 text-3xl" : "h-16 text-xl"
                     )}
                   >
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
-                    <ShoppingCart className="mr-3 size-6 text-amber-100" />
-                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-md font-cairo">شراء اللعبة</span>
+                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.3)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
+                    <ShoppingCart className="mr-3 size-6 text-slate-900" />
+                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-sm font-cairo text-slate-950">شراء اللعبة</span>
                   </Button>
 
                   <Button

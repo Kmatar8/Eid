@@ -199,7 +199,7 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
   if (action === "host.startTrivia") {
     return room.state === "teams_ready" || room.state === "between_games"
       ? null
-      : "بدء الجيوباردي متاح فقط بعد تجهيز الفرق."
+      : "بدء اللعبة متاح فقط بعد تجهيز الفرق."
   }
 
   if (action === "host.selectTriviaClue") {
@@ -821,7 +821,7 @@ export default function HostStagePage() {
         }
       }
 
-      setNotice("تم تثبيت الفرق. استعرض القواعد ثم ابدأ لوحة الجيوباردي.")
+      setNotice("تم تثبيت الفرق. استعرض القواعد ثم ابدأ لوحة اللعبة.")
       await refreshState()
     } catch (requestError) {
       setError(toErrorMessage(requestError))
@@ -834,7 +834,7 @@ export default function HostStagePage() {
     setShowTriviaRulesModal(false)
     try {
       await runAction("host.startTrivia")
-      setNotice("بدأت لوحة الجيوباردي. الفريق الحالي يختار الفئة والنقاط.")
+      setNotice("بدأت لوحة اللعبة. الفريق الحالي يختار الفئة والنقاط.")
     } catch (requestError) {
       setError(toErrorMessage(requestError))
     }
@@ -1243,47 +1243,49 @@ export default function HostStagePage() {
         ) : null}
 
         {room && stage === "overview" ? (
-          <section className="party-surface-strong rounded-3xl p-6">
-            <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Game Overview</p>
-            <h2 className="mt-2 text-4xl font-bold">قواعد الجيوباردي قبل البداية</h2>
-            <div className="mt-5 grid gap-3 lg:grid-cols-2">
-              <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
-                <h3 className="text-2xl font-bold">آلية اللعب</h3>
-                <ul className="mt-3 space-y-2 text-base text-slate-200">
-                  <li>1. كل دور لفريق واحد لاختيار الفئة والنقاط.</li>
-                  <li>2. بعد الاختيار يبدأ عد تنازلي 5 ثوانٍ قبل كشف السؤال.</li>
-                  <li>3. البازر مفتوح للجميع لمدة 20 ثانية.</li>
-                  <li>4. أول لاعب يضغط البازر هو الوحيد الذي يرى الخيارات ويجيب.</li>
-                </ul>
-              </article>
-              <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
-                <h3 className="text-2xl font-bold">النقاط</h3>
-                <ul className="mt-3 space-y-2 text-base text-slate-200">
-                  <li>1. إجابة صحيحة = إضافة قيمة السؤال.</li>
-                  <li>2. إجابة خاطئة = خصم قيمة السؤال.</li>
-                  <li>3. لا يوجد سرقة نقاط في هذا الوضع.</li>
-                  <li>4. يمكن للمضيف اختيار لاعب بديل من نفس الفريق عند الحاجة.</li>
-                </ul>
-              </article>
-            </div>
+          <section className="flex min-h-[calc(100dvh-8.5rem)] items-center justify-center">
+            <div className="party-surface-strong w-full max-w-6xl rounded-3xl p-6">
+              <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">نظرة عامة</p>
+              <h2 className="mt-2 text-4xl font-bold">قواعد اللعبة قبل البداية</h2>
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
+                  <h3 className="text-2xl font-bold">آلية اللعب</h3>
+                  <ul className="mt-3 space-y-2 text-base text-slate-200">
+                    <li>1. كل دور لفريق واحد لاختيار الفئة والنقاط.</li>
+                    <li>2. بعد الاختيار يبدأ عد تنازلي 5 ثوانٍ قبل كشف السؤال.</li>
+                    <li>3. البازر مفتوح للجميع لمدة 20 ثانية.</li>
+                    <li>4. أول لاعب يضغط البازر هو الوحيد الذي يرى الخيارات ويجيب.</li>
+                  </ul>
+                </article>
+                <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
+                  <h3 className="text-2xl font-bold">النقاط</h3>
+                  <ul className="mt-3 space-y-2 text-base text-slate-200">
+                    <li>1. إجابة صحيحة = إضافة قيمة السؤال.</li>
+                    <li>2. إجابة خاطئة = خصم قيمة السؤال.</li>
+                    <li>3. لا يوجد سرقة نقاط في هذا الوضع.</li>
+                    <li>4. يمكن للمضيف اختيار لاعب بديل من نفس الفريق عند الحاجة.</li>
+                  </ul>
+                </article>
+              </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button
-                type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                disabled={Boolean(busyAction) || !canStartTrivia}
-                onClick={() => setShowTriviaRulesModal(true)}
-              >
-                ابدأ لعبة الجيوباردي
-              </Button>
-              <Button
-                type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                disabled={Boolean(busyAction) || !canEndSession}
-                onClick={() => void handleEndSession()}
-              >
-                إنهاء الجلسة
-              </Button>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                  disabled={Boolean(busyAction) || !canStartTrivia}
+                  onClick={() => setShowTriviaRulesModal(true)}
+                >
+                  ابدأ اللعبة
+                </Button>
+                <Button
+                  type="button"
+                  className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                  disabled={Boolean(busyAction) || !canEndSession}
+                  onClick={() => void handleEndSession()}
+                >
+                  إنهاء الجلسة
+                </Button>
+              </div>
             </div>
           </section>
         ) : null}
@@ -1359,14 +1361,14 @@ export default function HostStagePage() {
               ) : null}
             </div>
 
-            {/* Jeopardy Board - Now Full Width */}
+            {/* Game Board - Now Full Width */}
             <article
               className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl p-4 shadow-2xl"
               style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
             >
               <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div className="text-center lg:text-right">
-                  <p className="text-xs uppercase tracking-[0.25em] text-pink-200">Jeopardy Board</p>
+                  <p className="text-xs uppercase tracking-[0.25em] text-pink-200">لوحة اللعبة</p>
                   <h3 className="mt-1 text-2xl font-black lg:text-3xl">اختر فئة وقيمة النقاط</h3>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1611,7 +1613,7 @@ export default function HostStagePage() {
         {room && stage === "celebration" ? (
           <section className="party-surface-strong rounded-3xl p-6 text-center">
             <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Celebration</p>
-            <h2 className="mt-2 text-5xl font-black text-amber-100">انتهت لعبة الجيوباردي</h2>
+            <h2 className="mt-2 text-5xl font-black text-amber-100">انتهت اللعبة</h2>
 
             {winningSummary ? (
               <>
@@ -1715,8 +1717,8 @@ export default function HostStagePage() {
         showTriviaRulesModal ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
             <div className="party-surface-strong w-full max-w-3xl rounded-3xl bg-slate-950/95 p-6 text-white shadow-2xl">
-              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Jeopardy Rules</p>
-              <h3 className="mt-2 text-3xl font-bold">قواعد لعبة الجيوباردي</h3>
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">قواعد اللعبة</p>
+              <h3 className="mt-2 text-3xl font-bold">قواعد اللعبة</h3>
               <ul className="mt-4 space-y-2 text-base text-slate-200">
                 <li>1. لديك 6 فئات وكل فئة فيها 5 أسئلة بقيم 10 إلى 50.</li>
                 <li>2. الدور يتناوب بين الفريقين لاختيار الفئة والقيمة.</li>

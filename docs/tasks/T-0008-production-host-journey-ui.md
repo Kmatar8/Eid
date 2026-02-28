@@ -32,6 +32,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 14. Simplify controller runtime chrome by removing phase pill/update button and localizing feedback text to Arabic.
 15. Tune controller buzzer/countdown copy and color styling (`اضغط` -> `جاوب`, countdown number color alignment).
 16. Unify host + controller action button colors to match the join/start CTA gradient (`ابدأ الفعالية` style).
+17. Localize host game-overview stage copy to Arabic, center it vertically, and replace `الجيوباردي/Jeopardy` wording with `اللعبة` in host-facing runtime copy.
+18. Update landing hero wording from `ليلة` to `فعالية` for consistent event terminology.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -74,6 +76,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 15. Remove controller phase-status pill and bottom update button; localize controller feedback/status copy to Arabic.
 16. Update controller buzzer CTA text and align countdown number color with controller buzzer color theme.
 17. Apply shared join/start gradient styling to host and controller interactive buttons for visual consistency.
+18. Update host overview/trivia runtime text labels to Arabic-first terminology (`اللعبة`) and adjust overview stage layout centering.
+19. Adjust landing hero title copy (`ليلة العيد` -> `فعالية العيد`).
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -93,6 +97,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 15. Controller no longer shows phase pill/update button, and player feedback text is Arabic.
 16. Controller buzzer button label shows `جاوب` and countdown number uses aligned buzzer color tone.
 17. Host and controller interactive buttons use the same gradient color direction as the `ابدأ الفعالية` CTA.
+18. Host overview stage is vertically centered, fully Arabic-localized, and no longer shows `جيوباردي/Jeopardy` wording in user-facing runtime labels.
+19. Landing hero headline uses `فعالية` wording instead of `ليلة`.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -111,6 +117,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: controller has no phase pill/update button and shows Arabic feedback copy.
 - [ ] Manual: controller buzzer label is `جاوب` and countdown number color matches buzzer tone.
 - [ ] Manual: host/controller action buttons visually match `ابدأ الفعالية` gradient color style.
+- [ ] Manual: host overview block is vertically centered and host runtime labels use `اللعبة` wording instead of `جيوباردي/Jeopardy`.
+- [ ] Manual: landing hero text shows `فعالية العيد` (not `ليلة العيد`).
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -126,6 +134,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 10. Removed controller phase pill/update button and localized controller feedback/status messages to Arabic.
 11. Updated controller buzzer CTA label to `جاوب` and aligned countdown number color with buzzer theme.
 12. Unified host/controller action button styling with the `ابدأ الفعالية` gradient palette.
+13. Localized host overview and runtime labels to Arabic `اللعبة` wording and centered overview stage vertically.
+14. Updated landing hero wording from `ليلة العيد` to `فعالية العيد`.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.
