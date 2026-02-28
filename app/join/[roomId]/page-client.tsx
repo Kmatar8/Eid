@@ -99,7 +99,7 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
           </p>
         </header>
 
-        <section className="backdrop-blur-3xl bg-black/25 border border-white/10 rounded-4xl p-6 sm:p-7 shadow-2xl">
+        <section className="backdrop-blur-lg bg-black/10 border border-white/20 rounded-4xl p-6 sm:p-7 shadow-2xl">
           <form className="space-y-5" onSubmit={handleJoin}>
             <label className="block text-sm font-semibold text-slate-100">
               الاسم المستعار
@@ -114,7 +114,7 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
               />
             </label>
 
-            <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-black/10 p-4">
               <label className="block text-sm font-semibold text-slate-100">صورة العرض أو الرمز التعبيري</label>
 
               <div className="flex flex-col sm:flex-row gap-4 items-center">
