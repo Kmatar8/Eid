@@ -1,4 +1,4 @@
-import { authenticateHost } from "@/lib/server/store"
+import { authenticateHost, resolveHostTokenTtlSeconds } from "@/lib/server/store"
 import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
 import { withSharedStore } from "@/lib/server/store-sync"
 import { signToken } from "@/lib/server/token"
@@ -29,18 +29,24 @@ export async function POST(request: Request) {
       return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host username or password")
     }
 
+    const tokenTtlSeconds = resolveHostTokenTtlSeconds(host)
+    if (tokenTtlSeconds <= 0) {
+      return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
+    }
+
     const token = signToken({
       sub: host.id,
       role: "host",
       hostId: host.id,
       username: host.username,
-    })
+    }, tokenTtlSeconds)
 
     return jsonResponse(200, {
       token,
       host: {
         id: host.id,
         username: host.username,
+        email: host.email,
       },
     })
   })

@@ -14,9 +14,24 @@ export type AvatarType = "none" | "emoji" | "image"
 export type HostRecord = {
   id: string
   username: string
+  email: string | null
   passwordHash: string
+  accessExpiresAt: number | null
   activeRoomId: string | null
   createdAt: number
+}
+
+export type RedeemCodeStatus = "active" | "redeemed" | "expired"
+
+export type RedeemCodeRecord = {
+  id: string
+  codeHash: string
+  email: string | null
+  status: RedeemCodeStatus
+  createdAt: number
+  expiresAt: number | null
+  redeemedAt: number | null
+  redeemedByHostId: string | null
 }
 
 export type RoomRecord = {

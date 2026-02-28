@@ -1,4 +1,6 @@
-import { randomUUID } from "crypto"
+import { createHash, randomUUID } from "crypto"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 
 import { hashPassword, verifyPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
@@ -7,6 +9,7 @@ import type {
   AvatarType,
   HostRecord,
   PlayerRecord,
+  RedeemCodeRecord,
   RoomEventRecord,
   RoomRecord,
   RoomSnapshot,
@@ -26,6 +29,9 @@ const MAX_ROOM_EVENTS = 4000
 const TRIVIA_COUNTDOWN_MS = 5 * 1000
 const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
+const REDEEMED_CODE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 30
+const HOST_ACCESS_DURATION_MS = 1000 * 60 * 60 * 24 * 30
+const DEFAULT_HOST_TOKEN_TTL_SECONDS = 60 * 60 * 12
 
 type InMemoryStore = {
   seeded: boolean
@@ -33,6 +39,8 @@ type InMemoryStore = {
   nextEventSeq: number
   hosts: Map<string, HostRecord>
   hostsByUsername: Map<string, string>
+  hostsByEmail: Map<string, string>
+  redeemCodesByHash: Map<string, RedeemCodeRecord>
   rooms: Map<string, RoomRecord>
   players: Map<string, PlayerRecord>
   playersByRoom: Map<string, Set<string>>
@@ -48,8 +56,17 @@ type InMemoryStore = {
 
 type HostSeedInput = {
   username: string
+  email?: string
   passwordHash?: string
   password?: string
+  accessExpiresAt?: number | null
+}
+
+type RedeemCodeSeedInput = {
+  code?: string
+  codeHash?: string
+  email?: string | null
+  expiresAt?: number | null
 }
 
 type TriviaClueState = {
@@ -152,6 +169,8 @@ function getStore(): InMemoryStore {
       nextEventSeq: 1,
       hosts: new Map(),
       hostsByUsername: new Map(),
+      hostsByEmail: new Map(),
+      redeemCodesByHash: new Map(),
       rooms: new Map(),
       players: new Map(),
       playersByRoom: new Map(),
@@ -169,6 +188,7 @@ function getStore(): InMemoryStore {
   const store = globalStore.__hroofInMemoryStore
   if (!store.seeded) {
     seedHosts(store)
+    seedRedeemCodes(store)
     store.seeded = true
   }
 
@@ -245,6 +265,8 @@ function isStoreLike(value: unknown): value is InMemoryStore {
     typeof candidate.nextEventSeq === "number" &&
     candidate.hosts instanceof Map &&
     candidate.hostsByUsername instanceof Map &&
+    candidate.hostsByEmail instanceof Map &&
+    candidate.redeemCodesByHash instanceof Map &&
     candidate.rooms instanceof Map &&
     candidate.players instanceof Map &&
     candidate.playersByRoom instanceof Map &&
@@ -475,6 +497,40 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
       if (!(candidate.pausedFromStateByRoom instanceof Map)) {
         candidate.pausedFromStateByRoom = new Map()
       }
+      if (!(candidate.hostsByEmail instanceof Map)) {
+        candidate.hostsByEmail = new Map()
+      }
+      if (!(candidate.redeemCodesByHash instanceof Map)) {
+        candidate.redeemCodesByHash = new Map()
+      }
+      if (candidate.hosts instanceof Map && candidate.hostsByEmail instanceof Map) {
+        const rebuiltHostEmailMap = new Map<string, string>()
+        for (const [hostId, hostValue] of candidate.hosts.entries()) {
+          if (typeof hostId !== "string") {
+            continue
+          }
+
+          if (!hostValue || typeof hostValue !== "object") {
+            continue
+          }
+
+          const hostRecord = hostValue as HostRecord
+          const host = hostValue as Partial<HostRecord>
+          if (typeof host.accessExpiresAt !== "number") {
+            hostRecord.accessExpiresAt = null
+          }
+
+          if (typeof host.email !== "string") {
+            hostRecord.email = null
+            continue
+          }
+
+          const normalizedEmail = normalizeEmail(host.email)
+          hostRecord.email = normalizedEmail
+          rebuiltHostEmailMap.set(normalizedEmail, hostId)
+        }
+        candidate.hostsByEmail = rebuiltHostEmailMap
+      }
     }
 
     if (!isStoreLike(restored)) {
@@ -492,13 +548,13 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
 function parseHostSeedInputs(): HostSeedInput[] {
   const raw = process.env.HROOF_HOST_CREDENTIALS_JSON
   if (!raw) {
-    return [{ username: "host-demo", password: "demo1234" }]
+    return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
   }
 
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) {
-      return [{ username: "host-demo", password: "demo1234" }]
+      return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
     }
 
     const safeInputs: HostSeedInput[] = []
@@ -509,23 +565,171 @@ function parseHostSeedInputs(): HostSeedInput[] {
 
       const candidate = item as Record<string, unknown>
       const username = typeof candidate.username === "string" ? candidate.username.trim() : ""
+      const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : undefined
       const passwordHash = typeof candidate.passwordHash === "string" ? candidate.passwordHash : undefined
       const password = typeof candidate.password === "string" ? candidate.password : undefined
+      const accessExpiresAt = parseTimestampValue(candidate.accessExpiresAt)
 
       if (!username || (!passwordHash && !password)) {
         continue
       }
 
-      safeInputs.push({ username, passwordHash, password })
+      safeInputs.push({ username, email, passwordHash, password, accessExpiresAt })
     }
 
     if (safeInputs.length === 0) {
-      return [{ username: "host-demo", password: "demo1234" }]
+      return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
     }
 
     return safeInputs
   } catch {
-    return [{ username: "host-demo", password: "demo1234" }]
+    return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
+  }
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function normalizeRedeemCode(value: string) {
+  return value.trim().toUpperCase()
+}
+
+function hashRedeemCode(code: string) {
+  const normalized = normalizeRedeemCode(code)
+  return createHash("sha256").update(normalized).digest("hex")
+}
+
+function parseTimestampValue(input: unknown): number | null {
+  if (input === null || input === undefined || input === "") {
+    return null
+  }
+
+  if (typeof input === "number" && Number.isFinite(input)) {
+    return input
+  }
+
+  if (typeof input === "string") {
+    const asNumber = Number.parseInt(input, 10)
+    if (Number.isFinite(asNumber)) {
+      return asNumber
+    }
+
+    const parsed = Date.parse(input)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  return null
+}
+
+function parseRedeemCodeCsv(raw: string): RedeemCodeSeedInput[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length <= 1) {
+    return []
+  }
+
+  const header = lines[0]?.split(",").map((value) => value.trim().toLowerCase()) ?? []
+  const codeIndex = header.indexOf("code")
+  const emailIndex = header.indexOf("email")
+  const expiresAtIndex = Math.max(header.indexOf("expiresat"), header.indexOf("expires_at"))
+
+  if (codeIndex < 0) {
+    return []
+  }
+
+  const parsed: RedeemCodeSeedInput[] = []
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (!line) {
+      continue
+    }
+
+    const columns = line.split(",").map((value) => value.trim())
+    const code = columns[codeIndex] ? normalizeRedeemCode(columns[codeIndex]) : undefined
+    const email =
+      emailIndex >= 0 && columns[emailIndex] ? normalizeEmail(columns[emailIndex]) : null
+    const expiresAt = expiresAtIndex >= 0 ? parseTimestampValue(columns[expiresAtIndex]) : null
+
+    if (!code) {
+      continue
+    }
+
+    parsed.push({ code, email, expiresAt })
+  }
+
+  return parsed
+}
+
+function parseRedeemCodeCsvFromFile(): RedeemCodeSeedInput[] {
+  const filePath = process.env.HROOF_REDEEM_CODES_CSV_PATH ?? "docs/seeds/host-redeem-codes.csv"
+  try {
+    const absolutePath = resolve(process.cwd(), filePath)
+    const raw = readFileSync(absolutePath, "utf8")
+    return parseRedeemCodeCsv(raw)
+  } catch {
+    return []
+  }
+}
+
+function parseRedeemCodeSeedInputs(): RedeemCodeSeedInput[] {
+  const raw = process.env.HROOF_REDEEM_CODES_JSON
+  if (!raw) {
+    const csvSeeds = parseRedeemCodeCsvFromFile()
+    if (csvSeeds.length > 0) {
+      return csvSeeds
+    }
+    return [{ code: "Q7M4ZP9X2L" }]
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      const csvSeeds = parseRedeemCodeCsvFromFile()
+      if (csvSeeds.length > 0) {
+        return csvSeeds
+      }
+      return [{ code: "Q7M4ZP9X2L" }]
+    }
+
+    const safeInputs: RedeemCodeSeedInput[] = []
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") {
+        continue
+      }
+
+      const candidate = item as Record<string, unknown>
+      const code = typeof candidate.code === "string" ? normalizeRedeemCode(candidate.code) : undefined
+      const codeHash = typeof candidate.codeHash === "string" ? candidate.codeHash.trim() : undefined
+      const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : null
+      const expiresAt = parseTimestampValue(candidate.expiresAt)
+
+      if (!code && !codeHash) {
+        continue
+      }
+
+      safeInputs.push({ code, codeHash, email, expiresAt })
+    }
+
+    if (safeInputs.length === 0) {
+      const csvSeeds = parseRedeemCodeCsvFromFile()
+      if (csvSeeds.length > 0) {
+        return csvSeeds
+      }
+      return [{ code: "Q7M4ZP9X2L" }]
+    }
+
+    return safeInputs
+  } catch {
+    const csvSeeds = parseRedeemCodeCsvFromFile()
+    if (csvSeeds.length > 0) {
+      return csvSeeds
+    }
+    return [{ code: "Q7M4ZP9X2L" }]
   }
 }
 
@@ -533,17 +737,58 @@ function seedHosts(store: InMemoryStore) {
   const seeds = parseHostSeedInputs()
 
   for (const seed of seeds) {
+    const username = seed.username.trim()
+    if (!username || store.hostsByUsername.has(username)) {
+      continue
+    }
+
+    const normalizedEmail = seed.email ? normalizeEmail(seed.email) : null
+    if (normalizedEmail && store.hostsByEmail.has(normalizedEmail)) {
+      continue
+    }
+
     const id = `host_${randomUUID()}`
     const host: HostRecord = {
       id,
-      username: seed.username,
+      username,
+      email: normalizedEmail,
       passwordHash: seed.passwordHash ?? hashPassword(seed.password ?? "change-me"),
+      accessExpiresAt: seed.accessExpiresAt ?? null,
       activeRoomId: null,
       createdAt: nowMs(),
     }
 
     store.hosts.set(host.id, host)
     store.hostsByUsername.set(host.username, host.id)
+    if (host.email) {
+      store.hostsByEmail.set(host.email, host.id)
+    }
+  }
+}
+
+function seedRedeemCodes(store: InMemoryStore) {
+  const seeds = parseRedeemCodeSeedInputs()
+  const now = nowMs()
+
+  for (const seed of seeds) {
+    const codeHash = seed.codeHash || (seed.code ? hashRedeemCode(seed.code) : "")
+    if (!codeHash || store.redeemCodesByHash.has(codeHash)) {
+      continue
+    }
+
+    const expiresAt = seed.expiresAt ?? null
+    const record: RedeemCodeRecord = {
+      id: `redeem_${randomUUID()}`,
+      codeHash,
+      email: seed.email ? normalizeEmail(seed.email) : null,
+      status: expiresAt && now > expiresAt ? "expired" : "active",
+      createdAt: now,
+      expiresAt,
+      redeemedAt: null,
+      redeemedByHostId: null,
+    }
+
+    store.redeemCodesByHash.set(record.codeHash, record)
   }
 }
 
@@ -1228,12 +1473,133 @@ function getPlayerTeamId(store: InMemoryStore, roomId: string, playerId: string)
   return teamMap.get(playerId) ?? null
 }
 
+function isRedeemCodeExpired(record: RedeemCodeRecord) {
+  return record.status === "redeemed" && typeof record.expiresAt === "number" && nowMs() > record.expiresAt
+}
+
+export function redeemHostCode(
+  code: string
+): { ok: true; email: string | null; redeemCodeHash: string } | { ok: false; code: "REDEEM_CODE_NOT_FOUND" | "REDEEM_CODE_ALREADY_REDEEMED" | "REDEEM_CODE_EXPIRED" } {
+  const normalizedCode = normalizeRedeemCode(code)
+  if (!normalizedCode) {
+    return { ok: false, code: "REDEEM_CODE_NOT_FOUND" }
+  }
+
+  const store = getStore()
+  const codeHash = hashRedeemCode(normalizedCode)
+  const record = store.redeemCodesByHash.get(codeHash)
+  if (!record) {
+    return { ok: false, code: "REDEEM_CODE_NOT_FOUND" }
+  }
+
+  if (record.status === "expired" || isRedeemCodeExpired(record)) {
+    record.status = "expired"
+    return { ok: false, code: "REDEEM_CODE_EXPIRED" }
+  }
+
+  if (record.status === "redeemed") {
+    return { ok: false, code: "REDEEM_CODE_ALREADY_REDEEMED" }
+  }
+
+  return {
+    ok: true,
+    email: record.email,
+    redeemCodeHash: record.codeHash,
+  }
+}
+
+export function registerHostFromRedeem(input: {
+  redeemCodeHash: string
+  email: string
+  username: string
+  password: string
+}):
+  | { ok: true; host: HostRecord }
+  | {
+      ok: false
+      code:
+        | "REDEEM_CODE_NOT_FOUND"
+        | "REDEEM_CODE_ALREADY_REDEEMED"
+        | "REDEEM_CODE_EXPIRED"
+        | "REDEEM_EMAIL_MISMATCH"
+        | "USERNAME_TAKEN"
+        | "EMAIL_TAKEN"
+    } {
+  const store = getStore()
+  const record = store.redeemCodesByHash.get(input.redeemCodeHash)
+  if (!record) {
+    return { ok: false, code: "REDEEM_CODE_NOT_FOUND" }
+  }
+
+  if (record.status === "expired" || isRedeemCodeExpired(record)) {
+    record.status = "expired"
+    return { ok: false, code: "REDEEM_CODE_EXPIRED" }
+  }
+
+  if (record.status === "redeemed") {
+    return { ok: false, code: "REDEEM_CODE_ALREADY_REDEEMED" }
+  }
+
+  const normalizedEmail = normalizeEmail(input.email)
+  if (record.email && normalizedEmail !== record.email) {
+    return { ok: false, code: "REDEEM_EMAIL_MISMATCH" }
+  }
+
+  const username = input.username.trim()
+  if (store.hostsByUsername.has(username)) {
+    return { ok: false, code: "USERNAME_TAKEN" }
+  }
+
+  if (store.hostsByEmail.has(normalizedEmail)) {
+    return { ok: false, code: "EMAIL_TAKEN" }
+  }
+
+  const createdAt = nowMs()
+  const host: HostRecord = {
+    id: `host_${randomUUID()}`,
+    username,
+    email: normalizedEmail,
+    passwordHash: hashPassword(input.password),
+    accessExpiresAt: createdAt + HOST_ACCESS_DURATION_MS,
+    activeRoomId: null,
+    createdAt,
+  }
+
+  store.hosts.set(host.id, host)
+  store.hostsByUsername.set(host.username, host.id)
+  store.hostsByEmail.set(normalizedEmail, host.id)
+
+  record.status = "redeemed"
+  record.redeemedAt = nowMs()
+  record.expiresAt = record.redeemedAt + REDEEMED_CODE_EXPIRY_MS
+  record.redeemedByHostId = host.id
+
+  return { ok: true, host }
+}
+
 export function isRoomActiveState(state: RoomState) {
   return ACTIVE_ROOM_STATES.has(state)
 }
 
 export function isRoomJoinableState(state: RoomState) {
   return state === "lobby_open"
+}
+
+function isHostAccessExpired(host: HostRecord) {
+  return typeof host.accessExpiresAt === "number" && nowMs() > host.accessExpiresAt
+}
+
+export function resolveHostTokenTtlSeconds(host: HostRecord) {
+  if (typeof host.accessExpiresAt !== "number") {
+    return DEFAULT_HOST_TOKEN_TTL_SECONDS
+  }
+
+  const remainingSeconds = Math.floor((host.accessExpiresAt - nowMs()) / 1000)
+  if (remainingSeconds <= 0) {
+    return 0
+  }
+
+  return Math.min(DEFAULT_HOST_TOKEN_TTL_SECONDS, remainingSeconds)
 }
 
 export function authenticateHost(username: string, password: string): HostRecord | null {
@@ -1248,7 +1614,15 @@ export function authenticateHost(username: string, password: string): HostRecord
     return null
   }
 
-  return verifyPassword(password, host.passwordHash) ? host : null
+  if (!verifyPassword(password, host.passwordHash)) {
+    return null
+  }
+
+  if (isHostAccessExpired(host)) {
+    return null
+  }
+
+  return host
 }
 
 export function getRoom(roomId: string): RoomRecord | null {

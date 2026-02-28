@@ -19,14 +19,16 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
 5. Support peak concurrency of `1,000-5,000` rooms.
 
 ## 4. Non-Goals (v1)
-1. Public host self-signup (hosts use pre-generated credentials).
+1. Public host self-signup without invitation/redeem controls.
 2. Complex admin panel UI.
 3. Individual scoring leaderboard (team score only in v1).
 4. Rich media chat/social feed.
 
 ## 5. Users and Access
 ### 5.1 Host
-- Authenticates with pre-generated `username + password`.
+- Authenticates via one-time redeemable code onboarding, then uses created `username + password`.
+- Redeemed code records expire `30 days` after successful redemption (unused active codes have no default time-based expiry).
+- Host account access is revoked `30 days` after activation (successful redeem registration).
 - Constraint: one host can run only one active room at a time.
 - Controls room lifecycle and game progression.
 
@@ -48,7 +50,10 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
 
 ### 6.1 Host Journey UX (TV-Mirrored Flow)
 1. Landing primary CTA (`ابدأ الفعالية`) routes to a dedicated host login page.
-2. Host login page uses festive visual style and captures only username/password.
+2. Host login page uses festive visual style and supports:
+   - Redeem code input for first-time hosts.
+   - Account setup form (email + username + password) after successful redeem.
+   - Returning host login with username/password.
 3. After login, host enters a TV-first lobby view that includes:
    - Large join QR code and join URL.
    - Live list of joined players.
@@ -177,13 +182,14 @@ Host UI also switches by room/game stage payload, preserving server authority fo
 Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case if WebSocket hibernation and room lifecycle controls are implemented to control duration costs.
 
 ## 11. Data Model (high-level)
-1. `hosts` (pre-generated credentials, active room pointer)
+1. `hosts` (email, username/password credentials, active room pointer)
 2. `rooms` (state, host, timestamps, timeout fields)
 3. `players` (identity, avatar/emoji, connection metadata)
 4. `teams` and `team_members`
 5. `scores` (team-level snapshots)
 6. `room_events` (append-only audit/event stream)
-7. `game_sessions` and `trivia_questions`
+7. `redeem_codes` (hashed one-time code, optional assignment email, status, redemption metadata)
+8. `game_sessions` and `trivia_questions`
 
 ## 12. API + Event Contracts (high-level)
 ## 12.1 Host actions
@@ -221,6 +227,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 3. Enforce role-based action authorization in Durable Object.
 4. Validate all client actions server-side.
 5. Add basic rate limiting and replay protection for critical actions.
+6. Store redeemable codes hashed and enforce one-time redemption.
 
 ## 14. Non-Functional Requirements
 1. Score updates visible on host within near real-time (<300ms target in-region).

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto"
 
-type TokenRole = "host" | "player"
+type TokenRole = "host" | "player" | "host_setup"
 
 export type TokenClaims = {
   sub: string
@@ -9,6 +9,8 @@ export type TokenClaims = {
   roomId?: string
   playerId?: string
   username?: string
+  email?: string
+  redeemCodeHash?: string
   iat: number
   exp: number
 }
@@ -22,6 +24,11 @@ export type PlayerTokenClaims = TokenClaims & {
   role: "player"
   playerId: string
   roomId: string
+}
+
+export type HostSetupTokenClaims = TokenClaims & {
+  role: "host_setup"
+  redeemCodeHash: string
 }
 
 type SignableClaims = Omit<TokenClaims, "iat" | "exp">
@@ -104,5 +111,14 @@ export function isPlayerToken(claims: TokenClaims | null): claims is PlayerToken
       claims.role === "player" &&
       typeof claims.playerId === "string" &&
       typeof claims.roomId === "string"
+  )
+}
+
+export function isHostSetupToken(claims: TokenClaims | null): claims is HostSetupTokenClaims {
+  return Boolean(
+    claims &&
+      claims.role === "host_setup" &&
+      typeof claims.redeemCodeHash === "string" &&
+      claims.redeemCodeHash.length > 0
   )
 }
