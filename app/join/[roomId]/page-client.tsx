@@ -99,7 +99,7 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
           </p>
         </header>
 
-        <section className="backdrop-blur-2xl bg-black/50 border border-white/10 rounded-4xl p-6 sm:p-7 shadow-2xl">
+        <section className="backdrop-blur-3xl bg-black/25 border border-white/10 rounded-4xl p-6 sm:p-7 shadow-2xl">
           <form className="space-y-5" onSubmit={handleJoin}>
             <label className="block text-sm font-semibold text-slate-100">
               الاسم المستعار
