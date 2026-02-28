@@ -798,7 +798,7 @@ export default function HostStagePage() {
   )
 
   const handleStartSession = useCallback(async () => {
-    if (!hostToken || !roomId) {
+    if (!hostToken || !roomId || !room) {
       return
     }
 
@@ -807,6 +807,19 @@ export default function HostStagePage() {
     setNotice(null)
 
     try {
+      // Auto-save team names
+      for (const team of room.teams) {
+        const draft = teamNameDrafts[team.teamId] ?? ""
+        const name = draft.trim().replace(/\s+/g, " ")
+        if (name.length >= 2 && name.length <= 24) {
+          try {
+            await sendAction(roomId, hostToken, "host.renameTeam", { teamId: team.teamId, name })
+          } catch (err) {
+            console.warn("Failed to rename team", team.teamId, err)
+          }
+        }
+      }
+
       try {
         const lockAck = await sendAction(roomId, hostToken, "host.lockLobby")
         setRoom(lockAck.payload.room)
@@ -832,7 +845,7 @@ export default function HostStagePage() {
     } finally {
       setBusyAction(null)
     }
-  }, [hostToken, refreshState, roomId])
+  }, [hostToken, refreshState, room, roomId, teamNameDrafts])
 
   const handleStartTrivia = useCallback(async () => {
     try {
@@ -932,9 +945,11 @@ export default function HostStagePage() {
 
   const canManageTeams = room?.state === "lobby_open" || room?.state === "lobby_locked" || room?.state === "teams_ready"
 
-  const allTeamsNamed = room?.teams.every(
-    (t) => t.name && t.name.trim() !== "" && t.name.trim() !== "اسم الفريق" && t.name.trim() !== "Team A" && t.name.trim() !== "Team B"
-  )
+  const allTeamsNamed = room?.teams.every((t) => {
+    const draftName = teamNameDrafts[t.teamId] ?? t.name ?? ""
+    const trimmed = draftName.trim()
+    return trimmed !== "" && trimmed !== "اسم الفريق" && trimmed !== "Team A" && trimmed !== "Team B" && trimmed.length >= 2
+  })
   const canStartSession = Boolean(canManageTeams && room && room.playerCount > 0 && allTeamsNamed)
 
   const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
@@ -1111,7 +1126,6 @@ export default function HostStagePage() {
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {room.teams.map((team) => {
                     const tone = getTeamTone(team.teamId)
-                    const isSaving = renamingTeamId === team.teamId
                     return (
                       <div key={`name-editor-${team.teamId}`} className="rounded-xl border border-white/15 bg-black/20 p-2.5">
                         <label className="mb-1 block text-xs text-slate-300">{team.teamId === "team_a" ? "الفريق الأول" : "الفريق الثاني"}</label>
@@ -1126,15 +1140,6 @@ export default function HostStagePage() {
                             className={`h-10 flex-1 rounded-lg border bg-black/30 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-cyan-400/50 ${tone.border}`}
                             maxLength={24}
                           />
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={Boolean(busyAction) || isSaving || !canManageTeams}
-                            onClick={() => void handleRenameTeam(team.teamId)}
-                            className={`${HOST_ACTION_BUTTON_CLASS} h-10 rounded-lg px-3 text-xs`}
-                          >
-                            {isSaving ? "جارٍ الحفظ..." : "حفظ"}
-                          </Button>
                         </div>
                       </div>
                     )
