@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import Image from "next/image"
 import { Check, X } from "lucide-react"
 
 type FeedbackType = "correct" | "wrong" | null
@@ -14,10 +15,12 @@ export function FeedbackOverlay({
   currentStatus,
   scoreDelta,
   onComplete,
+  wrongStickerSrc = "/images/stickers/wrong-sticker.png",
 }: {
   currentStatus: FeedbackType
   scoreDelta?: number | null
   onComplete?: () => void
+  wrongStickerSrc?: string | null
 }) {
   useEffect(() => {
     if (!currentStatus) {
@@ -120,10 +123,29 @@ export function FeedbackOverlay({
             className="relative z-10 flex flex-col items-center justify-center gap-4"
           >
             <div className="relative flex items-center justify-center">
-              <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
-              <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
-                <X className="h-20 w-20 text-white" strokeWidth={4} />
-              </div>
+              {wrongStickerSrc ? (
+                <div className="relative">
+                  <div className="absolute -inset-8 rounded-full bg-red-600/20 blur-2xl" />
+                  <Image
+                    src={wrongStickerSrc}
+                    alt="Wrong answer sticker"
+                    width={512}
+                    height={448}
+                    priority
+                    className="relative h-auto w-[clamp(220px,36vw,380px)] drop-shadow-[0_12px_40px_rgba(255,31,61,0.45)]"
+                  />
+                  <div className="absolute -right-3 -top-3 rounded-full border-2 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-2 shadow-[0_0_18px_rgba(239,68,68,0.5)]">
+                    <X className="h-6 w-6 text-white" strokeWidth={3} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
+                  <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                    <X className="h-20 w-20 text-white" strokeWidth={4} />
+                  </div>
+                </>
+              )}
             </div>
 
             {typeof scoreDelta === "number" ? (
