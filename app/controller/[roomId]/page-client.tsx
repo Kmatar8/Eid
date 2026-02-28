@@ -638,7 +638,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 {isCountdownPhase ? (
                   <div className="mt-3 rounded-2xl border border-amber-300/35 bg-amber-500/12 p-4 text-center">
                     <p className="text-sm text-amber-100">استعد للبازر</p>
-                    <p className="mt-1 text-7xl font-black leading-none text-rose-300 animate-pulse">
+                    <p className="mt-1 text-7xl font-black leading-none text-amber-300 animate-pulse">
                       {countdownSeconds}
                     </p>
                   </div>
@@ -709,7 +709,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             {room?.trivia.phase === "buzzer_open" ? (
               <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
                 <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي للبازر</p>
-                <p className="mt-2 text-7xl font-black leading-none text-rose-50 tabular-nums sm:text-8xl">{buzzSeconds}</p>
+                <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>
                 <p className="mt-1 text-sm font-semibold text-rose-100/90">ثانية</p>
               </div>
             ) : null}

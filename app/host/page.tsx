@@ -1497,7 +1497,7 @@ export default function HostStagePage() {
                                   key={countdownSeconds}
                                   initial={{ scale: 1.5, opacity: 0 }}
                                   animate={{ scale: 1, opacity: 1 }}
-                                  className="text-[10rem] font-black leading-none text-violet-400 drop-shadow-[0_0_30px_rgba(167,139,250,0.5)]"
+                                  className="text-[10rem] font-black leading-none text-amber-300 drop-shadow-[0_0_30px_rgba(251,191,36,0.45)]"
                                 >
                                   {countdownSeconds}
                                 </motion.p>
