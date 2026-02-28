@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import {
@@ -326,73 +327,65 @@ export default function Home() {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-12 w-full max-w-5xl mx-auto"
+          className="mx-auto mt-12 w-full max-w-5xl"
         >
-          <div className="relative group rounded-[2.5rem] overflow-hidden border border-white/20 bg-slate-900/40 p-1 sm:p-2 backdrop-blur-xl shadow-[0_0_80px_rgba(14,165,233,0.15)] transition-all hover:shadow-[0_0_100px_rgba(14,165,233,0.3)]">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-indigo-500/10 to-purple-500/10 opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
+          <div className="group relative overflow-hidden rounded-[2.75rem] border border-white/20 bg-slate-950/50 shadow-[0_28px_120px_rgba(6,182,212,0.24)]">
+            <Image
+              src="/images/landing-hero.jpg"
+              alt="أجواء فعالية العيد العائلية"
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 1200px"
+              className="object-cover object-center transition-transform duration-[1400ms] group-hover:scale-105"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/20" />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(251,191,36,0.34),transparent_46%),radial-gradient(circle_at_82%_18%,rgba(56,189,248,0.24),transparent_42%)]" />
 
-            <div className="relative rounded-[2rem] overflow-hidden bg-slate-950/50 backdrop-blur-2xl border border-white/10 flex flex-col md:flex-row shadow-inner">
+            <div className="relative z-10 flex min-h-[27rem] flex-col justify-end gap-5 p-5 sm:min-h-[31rem] sm:p-8 lg:min-h-[34rem] lg:p-12">
+              <span className="inline-flex w-fit items-center rounded-full border border-amber-300/40 bg-black/50 px-4 py-2 text-xs font-bold tracking-[0.18em] text-amber-200 backdrop-blur-md">
+                اللعبة الرئيسية
+              </span>
 
-              {/* Image Side */}
-              <div className="relative w-full md:w-1/2 h-64 md:h-auto overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-l from-slate-950/90 to-transparent z-10" />
-                <div
-                  className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 group-hover:scale-110"
-                  style={{ backgroundImage: `url(/images/zizo.jpg)` }}
-                />
-
-                {/* Floating Elements on Image */}
-                <div className="absolute top-6 left-6 z-20">
-                  <span className="px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold tracking-widest uppercase backdrop-blur-md">
-                    اللعبة الرئيسية
-                  </span>
-                </div>
-              </div>
-
-              {/* Content Side */}
-              <div className="relative w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center space-y-6 z-20">
-                <div>
-                  <h2 className={cn(
-                    "font-cairo font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-indigo-400 tracking-tight drop-shadow-sm mb-2",
-                    isTVMode ? "text-5xl" : "text-4xl"
-                  )}>
-                    مسابقات العائلة
-                  </h2>
-                  <p className="text-xl text-indigo-200/80 font-cairo font-medium">قصص، ذكريات، ومفاجآت</p>
-                </div>
-
-                <p className="text-slate-300 font-cairo leading-relaxed text-lg">
+              <div className="max-w-2xl rounded-3xl border border-white/25 bg-black/60 p-5 shadow-2xl backdrop-blur-md sm:p-8">
+                <h2
+                  className={cn(
+                    "font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300",
+                    isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
+                  )}
+                >
+                  مسابقات العائلة
+                </h2>
+                <p className="mt-2 text-lg font-medium text-cyan-100/90 sm:text-xl">قصص، ذكريات، ومفاجآت</p>
+                <p className="mt-3 text-base leading-relaxed text-slate-100/90 sm:text-lg">
                   اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
                 </p>
 
-                <div className="pt-4 flex flex-col gap-4">
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
                   <Button
                     size="lg"
                     onClick={() => {
                       // TODO: Add purchase link here when provided by the user
-                      window.open('#', '_blank')
+                      window.open("#", "_blank")
                     }}
                     className={cn(
-                      "w-full rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] overflow-hidden relative",
-                      isTVMode ? "h-20 text-3xl" : "h-16 text-xl"
+                      "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
+                      isTVMode ? "text-2xl" : ""
                     )}
                   >
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.3)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
-                    <ShoppingCart className="mr-3 size-6 text-slate-900" />
-                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-sm font-cairo text-slate-950">شراء اللعبة</span>
+                    <ShoppingCart className="mr-2 size-6 text-slate-900" />
+                    شراء اللعبة
                   </Button>
 
                   <Button
                     size="lg"
                     onClick={startSequence}
                     className={cn(
-                      "w-full rounded-2xl bg-gradient-to-r from-cyan-500 hover:from-cyan-400 to-indigo-600 hover:to-indigo-500 text-white font-bold shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] active:scale-[0.98] border border-cyan-400/30 overflow-hidden relative",
-                      isTVMode ? "h-20 text-3xl" : "h-16 text-xl"
+                      "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
+                      isTVMode ? "text-2xl" : ""
                     )}
                   >
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
-                    <Sparkles className="mr-3 size-6 text-cyan-100" />
-                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-md font-cairo">ابدأ اللعبة الآن</span>
+                    <Sparkles className="mr-2 size-6 text-cyan-100" />
+                    ابدأ الفعالية الآن
                   </Button>
                 </div>
               </div>

@@ -42,6 +42,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 24. Update host waiting-buzzer helper copy from `بانتظار البازر...` to `لالي يضغط اول يجاوب..`.
 25. Remove controller buzzer-open status block text and simplify the 20s countdown label by dropping `البازر`.
 26. Increase host `جوابك صح` overlay summary container opacity for better visibility.
+27. Replace landing hero visual with provided `landing.png` asset, convert it to optimized delivery format, and switch hero layout from split panel to single-image overlay composition.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -94,6 +95,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 25. Apply requested host waiting-buzzer text wording update in question modal status.
 26. Hide controller top status panel during `buzzer_open` and shorten buzzer timer title copy.
 27. Add host-only feedback overlay panel style override to reduce transparency in correct-answer summary.
+28. Optimize landing hero image asset and rework landing hero section with layered overlay content over one full-bleed image panel.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -123,6 +125,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 25. Host question-modal idle responder text shows `لالي يضغط اول يجاوب..`.
 26. Controller no longer shows the `البازر مفتوح...` status block, and the 20s counter title reads `الوقت المتبقي`.
 27. Host `جوابك صح` summary container appears with stronger opacity/contrast than before.
+28. Landing hero uses the optimized provided image with a single-overlay composition (no split left/right image-content layout).
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -151,6 +154,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: host waiting-buzzer helper text matches `لالي يضغط اول يجاوب..`.
 - [ ] Manual: controller `buzzer_open` phase hides the top status block and shows `الوقت المتبقي` above the countdown.
 - [ ] Manual: host correct-answer overlay (`جوابك صح`) summary panel is clearly visible with reduced transparency.
+- [ ] Manual: landing hero displays optimized provided image and overlay card content in one unified panel.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -176,6 +180,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 20. Updated host waiting-buzzer helper text to `لالي يضغط اول يجاوب..`.
 21. Removed controller `البازر مفتوح...` status block during `buzzer_open` and renamed timer heading to `الوقت المتبقي`.
 22. Increased host correct-answer overlay summary container opacity via host-only `FeedbackOverlay` panel class override.
+23. Converted provided `public/images/landing.png` (2.8MB JPEG payload) into optimized `public/images/landing-hero.jpg` (~483KB) and redesigned landing hero into a single image-overlay container.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.
