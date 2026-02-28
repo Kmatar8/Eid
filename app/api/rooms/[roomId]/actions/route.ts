@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
 import { isActionAllowedForRole, isClientEnvelope, makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
 import { applyRoomAction, buildRoomSnapshot } from "@/lib/server/store"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { withRoomScopedStore, withRoomShardStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
 
@@ -10,27 +10,126 @@ type RouteContext = {
   params: Promise<{ roomId: string }>
 }
 
+const HOST_REQUEST_ID_REQUIRED_ACTIONS = new Set([
+  "host.resumeSession",
+  "host.lockLobby",
+  "host.assignPlayerTeam",
+  "host.renameTeam",
+  "host.selectAnotherResponder",
+  "host.startTeams",
+  "host.startGame",
+  "host.startTrivia",
+  "host.selectTriviaClue",
+  "host.nextQuestion",
+  "host.addTeamScore",
+  "host.endSession",
+])
+
+const HOST_RATE_LIMIT_WINDOW_MS = 5000
+const DEFAULT_HOST_ACTION_RATE_LIMIT = 120
+const HOST_RATE_LIMIT_ENTRY_TTL_MS = 5 * 60 * 1000
+const HOST_RATE_LIMIT_SWEEP_INTERVAL = 200
+
+type GlobalWithHostRateLimit = typeof globalThis & {
+  __hroofHostActionRateLimitByRoom?: Map<string, number[]>
+  __hroofHostActionRateLimitCalls?: number
+}
+
+function getHostRateLimitStore() {
+  const globalWithRateLimit = globalThis as GlobalWithHostRateLimit
+  if (!globalWithRateLimit.__hroofHostActionRateLimitByRoom) {
+    globalWithRateLimit.__hroofHostActionRateLimitByRoom = new Map<string, number[]>()
+  }
+  return globalWithRateLimit.__hroofHostActionRateLimitByRoom
+}
+
+function parsePositiveInt(raw: string | undefined, fallback: number) {
+  if (!raw) {
+    return fallback
+  }
+
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback
+  }
+
+  return parsed
+}
+
+function maybeSweepHostRateLimitStore(now: number, store: Map<string, number[]>) {
+  const globalWithRateLimit = globalThis as GlobalWithHostRateLimit
+  const nextCalls = (globalWithRateLimit.__hroofHostActionRateLimitCalls ?? 0) + 1
+  globalWithRateLimit.__hroofHostActionRateLimitCalls = nextCalls
+  if (nextCalls % HOST_RATE_LIMIT_SWEEP_INTERVAL !== 0) {
+    return
+  }
+
+  const staleCutoff = now - HOST_RATE_LIMIT_ENTRY_TTL_MS
+  for (const [roomId, timestamps] of store.entries()) {
+    const latestTimestamp = timestamps.length > 0 ? timestamps[timestamps.length - 1] ?? 0 : 0
+    if (latestTimestamp < staleCutoff) {
+      store.delete(roomId)
+    }
+  }
+}
+
+function consumeHostActionQuota(roomId: string) {
+  const limit = parsePositiveInt(process.env.HROOF_HOST_ACTIONS_PER_5S, DEFAULT_HOST_ACTION_RATE_LIMIT)
+  const store = getHostRateLimitStore()
+  const now = Date.now()
+  maybeSweepHostRateLimitStore(now, store)
+  const cutoff = now - HOST_RATE_LIMIT_WINDOW_MS
+  const timestamps = store.get(roomId) ?? []
+  const active = timestamps.filter((value) => value > cutoff)
+
+  if (active.length >= limit) {
+    store.set(roomId, active)
+    return false
+  }
+
+  active.push(now)
+  store.set(roomId, active)
+  return true
+}
+
 export async function POST(request: Request, context: RouteContext) {
-  return withSharedStore(async () => {
-    const { roomId } = await context.params
-    if (!roomId) {
-      return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
+  const { roomId } = await context.params
+  if (!roomId) {
+    return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
+  }
+
+  const actor = resolveRoomActor(request, roomId)
+  if (!actor.ok) {
+    return errorResponse(actor.status, actor.code, actor.message)
+  }
+
+  const rawBody = await safeJson<unknown>(request)
+  if (!rawBody || !isClientEnvelope(rawBody)) {
+    return errorResponse(400, "INVALID_PROTOCOL_ENVELOPE", "Body must follow protocol v1 envelope")
+  }
+
+  if (!isActionAllowedForRole(rawBody.type, actor.actor.role)) {
+    return errorResponse(403, "ACTION_FORBIDDEN", "Action is not allowed for this actor role")
+  }
+
+  if (actor.actor.role === "host") {
+    if (HOST_REQUEST_ID_REQUIRED_ACTIONS.has(rawBody.type) && !rawBody.requestId) {
+      return errorResponse(
+        400,
+        "MISSING_REQUEST_ID",
+        "requestId is required for host commands to enforce idempotency"
+      )
     }
 
-    const actor = resolveRoomActor(request, roomId)
-    if (!actor.ok) {
-      return errorResponse(actor.status, actor.code, actor.message)
+    if (rawBody.type !== "host.heartbeat" && !consumeHostActionQuota(roomId)) {
+      return errorResponse(429, "HOST_ACTION_RATE_LIMITED", "Too many host actions for this room")
     }
+  }
 
-    const rawBody = await safeJson<unknown>(request)
-    if (!rawBody || !isClientEnvelope(rawBody)) {
-      return errorResponse(400, "INVALID_PROTOCOL_ENVELOPE", "Body must follow protocol v1 envelope")
-    }
+  // `host.endSession` updates host-global active room ownership, so it needs global + room sync.
+  const syncOperation = rawBody.type === "host.endSession" ? withRoomScopedStore : withRoomShardStore
 
-    if (!isActionAllowedForRole(rawBody.type, actor.actor.role)) {
-      return errorResponse(403, "ACTION_FORBIDDEN", "Action is not allowed for this actor role")
-    }
-
+  return syncOperation(roomId, async () => {
     const applied = applyRoomAction({
       roomId,
       actorRole: actor.actor.role,

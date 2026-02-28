@@ -1,6 +1,6 @@
 import { buildRoomSnapshot, createPlayerForRoom, getRoom, isRoomJoinableState } from "@/lib/server/store"
 import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { withRoomShardStore } from "@/lib/server/store-sync"
 import { signToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -21,12 +21,12 @@ function validateName(name: string) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  return withSharedStore(async () => {
-    const { roomId } = await context.params
-    if (!roomId) {
-      return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
-    }
+  const { roomId } = await context.params
+  if (!roomId) {
+    return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
+  }
 
+  return withRoomShardStore(roomId, async () => {
     const room = getRoom(roomId)
     if (!room) {
       return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")

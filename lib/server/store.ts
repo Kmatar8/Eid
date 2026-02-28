@@ -83,7 +83,10 @@ type TriviaSession = {
 
 type GlobalWithStore = typeof globalThis & {
   __hroofInMemoryStore?: InMemoryStore
+  __hroofRoomEventSubscribers?: Map<string, Set<RoomEventSubscriber>>
 }
+
+type RoomEventSubscriber = (event: RoomEventRecord) => void
 
 const ACTIVE_ROOM_STATES: Set<RoomState> = new Set([
   "lobby_open",
@@ -96,6 +99,48 @@ const ACTIVE_ROOM_STATES: Set<RoomState> = new Set([
 
 function nowMs() {
   return Date.now()
+}
+
+function getRoomEventSubscribersMap() {
+  const globalStore = globalThis as GlobalWithStore
+  if (!globalStore.__hroofRoomEventSubscribers) {
+    globalStore.__hroofRoomEventSubscribers = new Map<string, Set<RoomEventSubscriber>>()
+  }
+  return globalStore.__hroofRoomEventSubscribers
+}
+
+function notifyRoomEventSubscribers(event: RoomEventRecord) {
+  const subscribers = getRoomEventSubscribersMap().get(event.roomId)
+  if (!subscribers || subscribers.size === 0) {
+    return
+  }
+
+  const snapshot = [...subscribers]
+  for (const subscriber of snapshot) {
+    try {
+      subscriber(event)
+    } catch {
+      // Best-effort notification only.
+    }
+  }
+}
+
+export function subscribeRoomEvents(roomId: string, subscriber: RoomEventSubscriber) {
+  const subscribersByRoom = getRoomEventSubscribersMap()
+  const existing = subscribersByRoom.get(roomId) ?? new Set<RoomEventSubscriber>()
+  existing.add(subscriber)
+  subscribersByRoom.set(roomId, existing)
+
+  return () => {
+    const current = subscribersByRoom.get(roomId)
+    if (!current) {
+      return
+    }
+    current.delete(subscriber)
+    if (current.size === 0) {
+      subscribersByRoom.delete(roomId)
+    }
+  }
 }
 
 function getStore(): InMemoryStore {
@@ -138,6 +183,19 @@ type EncodedMap = {
 type EncodedSet = {
   __kind: "Set"
   values: unknown[]
+}
+
+type RoomShardSnapshot = {
+  room: RoomRecord | null
+  players: PlayerRecord[]
+  teams: TeamRecord[]
+  teamAssignments: Array<[string, string]>
+  trivia: TriviaSession | null
+  hostLastSeenAt: number | null
+  pausedFromState: RoomState | null
+  processedHostCommands: string[]
+  processedPlayerSubmit: Array<[string, RoomEventRecord]>
+  roomEvents: RoomEventRecord[]
 }
 
 function encodeStoreValue(_key: string, value: unknown) {
@@ -206,8 +264,183 @@ export function exportStoreSnapshot(): unknown {
   return JSON.parse(JSON.stringify(store, encodeStoreValue))
 }
 
+function removeRoomScopedStoreData(store: InMemoryStore, roomId: string) {
+  store.rooms.delete(roomId)
+
+  const currentPlayers = store.playersByRoom.get(roomId) ?? new Set<string>()
+  for (const playerId of currentPlayers) {
+    store.players.delete(playerId)
+  }
+  store.playersByRoom.delete(roomId)
+
+  store.teamsByRoom.delete(roomId)
+  store.playerTeamsByRoom.delete(roomId)
+  store.triviaByRoom.delete(roomId)
+  store.hostLastSeenByRoom.delete(roomId)
+  store.pausedFromStateByRoom.delete(roomId)
+  store.processedHostCommandsByRoom.delete(roomId)
+  store.processedPlayerSubmitByRoom.delete(roomId)
+  store.roomEvents = store.roomEvents.filter((event) => event.roomId !== roomId)
+}
+
+export function exportRoomShardSnapshot(roomId: string): unknown | null {
+  const store = getStore()
+  const room = store.rooms.get(roomId)
+  if (!room) {
+    return null
+  }
+
+  const playerIds = Array.from(store.playersByRoom.get(roomId) ?? [])
+  const players = playerIds
+    .map((playerId) => store.players.get(playerId))
+    .filter((player): player is PlayerRecord => Boolean(player))
+
+  const teams = [...(store.teamsByRoom.get(roomId) ?? [])]
+  const teamAssignments = Array.from((store.playerTeamsByRoom.get(roomId) ?? new Map<string, string>()).entries())
+  const trivia = store.triviaByRoom.get(roomId) ?? null
+  const hostLastSeenAt = store.hostLastSeenByRoom.get(roomId) ?? null
+  const pausedFromState = store.pausedFromStateByRoom.get(roomId) ?? null
+  const processedHostCommands = Array.from(store.processedHostCommandsByRoom.get(roomId) ?? new Set<string>())
+  const processedPlayerSubmit = Array.from(
+    (store.processedPlayerSubmitByRoom.get(roomId) ?? new Map<string, RoomEventRecord>()).entries()
+  )
+  const roomEvents = store.roomEvents.filter((event) => event.roomId === roomId)
+
+  const shard: RoomShardSnapshot = {
+    room,
+    players,
+    teams,
+    teamAssignments,
+    trivia,
+    hostLastSeenAt,
+    pausedFromState,
+    processedHostCommands,
+    processedPlayerSubmit,
+    roomEvents,
+  }
+
+  return JSON.parse(JSON.stringify(shard, encodeStoreValue))
+}
+
 export function getStoreRevision() {
   return getStore().revision
+}
+
+export function importRoomShardSnapshot(roomId: string, snapshot: unknown): boolean {
+  if (!snapshot || typeof snapshot !== "object") {
+    return false
+  }
+
+  try {
+    const restored = JSON.parse(JSON.stringify(snapshot), decodeStoreValue) as unknown
+    if (!restored || typeof restored !== "object") {
+      return false
+    }
+
+    const candidate = restored as Partial<RoomShardSnapshot>
+    if (
+      !Array.isArray(candidate.players) ||
+      !Array.isArray(candidate.teams) ||
+      !Array.isArray(candidate.teamAssignments) ||
+      !Array.isArray(candidate.processedHostCommands) ||
+      !Array.isArray(candidate.processedPlayerSubmit) ||
+      !Array.isArray(candidate.roomEvents)
+    ) {
+      return false
+    }
+
+    if (candidate.room && candidate.room.id !== roomId) {
+      return false
+    }
+
+    const store = getStore()
+    removeRoomScopedStoreData(store, roomId)
+
+    if (candidate.room) {
+      store.rooms.set(roomId, candidate.room)
+    }
+
+    const playerIds = new Set<string>()
+    for (const player of candidate.players) {
+      if (!player || player.roomId !== roomId || typeof player.id !== "string") {
+        continue
+      }
+      store.players.set(player.id, player)
+      playerIds.add(player.id)
+    }
+    store.playersByRoom.set(roomId, playerIds)
+
+    const teams = candidate.teams
+      .filter((team): team is TeamRecord => Boolean(team && typeof team.id === "string"))
+      .map((team) => ({ ...team, roomId }))
+    store.teamsByRoom.set(roomId, teams)
+
+    const assignmentMap = new Map<string, string>()
+    for (const entry of candidate.teamAssignments) {
+      if (!Array.isArray(entry) || typeof entry[0] !== "string" || typeof entry[1] !== "string") {
+        continue
+      }
+      assignmentMap.set(entry[0], entry[1])
+    }
+    store.playerTeamsByRoom.set(roomId, assignmentMap)
+
+    if (candidate.trivia) {
+      store.triviaByRoom.set(roomId, candidate.trivia)
+    }
+
+    if (typeof candidate.hostLastSeenAt === "number") {
+      store.hostLastSeenByRoom.set(roomId, candidate.hostLastSeenAt)
+    }
+
+    if (candidate.pausedFromState) {
+      store.pausedFromStateByRoom.set(roomId, candidate.pausedFromState)
+    }
+
+    const processedHostCommands = new Set(
+      candidate.processedHostCommands.filter((requestId): requestId is string => typeof requestId === "string")
+    )
+    if (processedHostCommands.size > 0) {
+      store.processedHostCommandsByRoom.set(roomId, processedHostCommands)
+    }
+
+    const processedSubmitByRequestId = new Map<string, RoomEventRecord>()
+    for (const entry of candidate.processedPlayerSubmit) {
+      if (
+        !Array.isArray(entry) ||
+        typeof entry[0] !== "string" ||
+        !entry[1] ||
+        typeof entry[1] !== "object" ||
+        (entry[1] as RoomEventRecord).roomId !== roomId
+      ) {
+        continue
+      }
+      processedSubmitByRequestId.set(entry[0], entry[1] as RoomEventRecord)
+    }
+    if (processedSubmitByRequestId.size > 0) {
+      store.processedPlayerSubmitByRoom.set(roomId, processedSubmitByRequestId)
+    }
+
+    const roomEvents = candidate.roomEvents.filter((event): event is RoomEventRecord => {
+      return (
+        Boolean(event) &&
+        typeof event.roomId === "string" &&
+        event.roomId === roomId &&
+        typeof event.seq === "number" &&
+        Number.isFinite(event.seq)
+      )
+    })
+    store.roomEvents.push(...roomEvents)
+    store.roomEvents.sort((a, b) => a.seq - b.seq)
+    if (store.roomEvents.length > MAX_ROOM_EVENTS) {
+      store.roomEvents.splice(0, store.roomEvents.length - MAX_ROOM_EVENTS)
+    }
+
+    const maxSeq = store.roomEvents.reduce((max, event) => Math.max(max, event.seq), 0)
+    store.nextEventSeq = maxSeq + 1
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function importStoreSnapshot(snapshot: unknown): boolean {
@@ -330,7 +563,7 @@ function recordRoomEvent(
     room.updatedAt = createdAt
   }
 
-  store.roomEvents.push({
+  const roomEvent: RoomEventRecord = {
     id: `evt_${randomUUID()}`,
     seq: store.nextEventSeq,
     roomId,
@@ -338,9 +571,11 @@ function recordRoomEvent(
     eventType,
     payload,
     createdAt,
-  })
+  }
+  store.roomEvents.push(roomEvent)
   store.revision += 1
   store.nextEventSeq += 1
+  notifyRoomEventSubscribers(roomEvent)
 
   if (store.roomEvents.length > MAX_ROOM_EVENTS) {
     store.roomEvents.splice(0, store.roomEvents.length - MAX_ROOM_EVENTS)

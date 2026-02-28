@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
 import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState } from "@/lib/server/store"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { withRoomShardStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
 
@@ -11,12 +11,12 @@ type RouteContext = {
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  return withSharedStore(async () => {
-    const { roomId } = await context.params
-    if (!roomId) {
-      return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
-    }
+  const { roomId } = await context.params
+  if (!roomId) {
+    return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
+  }
 
+  return withRoomShardStore(roomId, async () => {
     const actor = resolveRoomActor(request, roomId)
     if (!actor.ok) {
       return errorResponse(actor.status, actor.code, actor.message)

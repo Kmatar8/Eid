@@ -1,10 +1,19 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
-import { exportStoreSnapshot, getStoreRevision, importStoreSnapshot } from "@/lib/server/store"
+import {
+  exportRoomShardSnapshot,
+  exportStoreSnapshot,
+  getStoreRevision,
+  importRoomShardSnapshot,
+  importStoreSnapshot,
+} from "@/lib/server/store"
 
 const GLOBAL_STORE_DO_NAME = "hroof-global-store-v1"
+const ROOM_STORE_DO_PREFIX = "hroof-room-store-v1:"
 const STORE_STATE_URL = "https://hroof-store/state"
-const HYDRATE_TTL_MS = 350
+const GLOBAL_HYDRATE_TTL_MS = 350
+const ROOM_HYDRATE_TTL_MS = 1000
+const ROOM_SCOPED_STORE_FLAG = "HROOF_ROOM_SCOPED_DO_STORE"
 
 type DurableObjectNamespaceLike = {
   idFromName: (name: string) => unknown
@@ -13,12 +22,57 @@ type DurableObjectNamespaceLike = {
   }
 }
 
+type RoomShardPersistSnapshot = {
+  room?: {
+    version?: number
+    state?: string
+  } | null
+}
+
 let lastHydratedAt = 0
 let lastPersistedRevision = -1
 let hydrateInFlight: Promise<void> | null = null
 let persistInFlight: Promise<void> | null = null
 
-async function getSharedStoreStub() {
+type ScopeSyncState = {
+  lastHydratedAt: number
+  lastPersistedRevision: number
+  hydrateInFlight: Promise<void> | null
+  persistInFlight: Promise<void> | null
+}
+
+const roomScopeSyncByRoomId = new Map<string, ScopeSyncState>()
+
+function getRoomScopeSyncState(roomId: string): ScopeSyncState {
+  const existing = roomScopeSyncByRoomId.get(roomId)
+  if (existing) {
+    return existing
+  }
+
+  const created: ScopeSyncState = {
+    lastHydratedAt: 0,
+    lastPersistedRevision: -1,
+    hydrateInFlight: null,
+    persistInFlight: null,
+  }
+  roomScopeSyncByRoomId.set(roomId, created)
+  return created
+}
+
+function isTruthyFlag(value: string | undefined) {
+  if (!value) {
+    return false
+  }
+
+  const normalized = value.trim().toLowerCase()
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on"
+}
+
+export function isRoomScopedStoreEnabled() {
+  return isTruthyFlag(process.env[ROOM_SCOPED_STORE_FLAG])
+}
+
+async function getStoreStubByName(storeName: string) {
   try {
     const context = await getCloudflareContext({ async: true })
     const namespace = (context?.env as unknown as { ROOMS_DO?: unknown } | undefined)?.ROOMS_DO as
@@ -29,15 +83,23 @@ async function getSharedStoreStub() {
       return null
     }
 
-    const id = namespace.idFromName(GLOBAL_STORE_DO_NAME)
+    const id = namespace.idFromName(storeName)
     return namespace.get(id)
   } catch {
     return null
   }
 }
 
+async function getSharedStoreStub() {
+  return getStoreStubByName(GLOBAL_STORE_DO_NAME)
+}
+
+async function getRoomStoreStub(roomId: string) {
+  return getStoreStubByName(`${ROOM_STORE_DO_PREFIX}${roomId}`)
+}
+
 export async function hydrateSharedStoreFromDurable() {
-  if (Date.now() - lastHydratedAt < HYDRATE_TTL_MS) {
+  if (Date.now() - lastHydratedAt < GLOBAL_HYDRATE_TTL_MS) {
     return
   }
 
@@ -123,6 +185,135 @@ export async function persistSharedStoreToDurable() {
   }
 }
 
+export async function hydrateRoomShardFromDurable(roomId: string) {
+  if (!roomId) {
+    return
+  }
+
+  const syncState = getRoomScopeSyncState(roomId)
+  if (Date.now() - syncState.lastHydratedAt < ROOM_HYDRATE_TTL_MS) {
+    return
+  }
+
+  if (syncState.hydrateInFlight) {
+    await syncState.hydrateInFlight
+    return
+  }
+
+  syncState.hydrateInFlight = (async () => {
+    const stub = await getRoomStoreStub(roomId)
+    if (!stub) {
+      syncState.lastHydratedAt = Date.now()
+      return
+    }
+
+    try {
+      const response = await stub.fetch(STORE_STATE_URL)
+      if (!response.ok) {
+        return
+      }
+
+      const payload = (await response.json().catch(() => null)) as { snapshot?: unknown } | null
+      if (!payload || payload.snapshot === undefined) {
+        return
+      }
+
+      if (importRoomShardSnapshot(roomId, payload.snapshot)) {
+        syncState.lastPersistedRevision = getStoreRevision()
+      }
+    } catch {
+      // Intentionally non-fatal in runtimes where room-scoped snapshot is unavailable.
+    } finally {
+      syncState.lastHydratedAt = Date.now()
+    }
+  })()
+
+  try {
+    await syncState.hydrateInFlight
+  } finally {
+    syncState.hydrateInFlight = null
+  }
+}
+
+export async function persistRoomShardToDurable(roomId: string) {
+  if (!roomId) {
+    return
+  }
+
+  const syncState = getRoomScopeSyncState(roomId)
+  const currentRevision = getStoreRevision()
+  if (currentRevision === syncState.lastPersistedRevision) {
+    return
+  }
+
+  if (syncState.persistInFlight) {
+    await syncState.persistInFlight
+    return
+  }
+
+  syncState.persistInFlight = (async () => {
+    const snapshot = exportRoomShardSnapshot(roomId)
+    if (!snapshot) {
+      syncState.lastPersistedRevision = currentRevision
+      return
+    }
+
+    const stub = await getRoomStoreStub(roomId)
+    if (!stub) {
+      return
+    }
+
+    try {
+      await stub.fetch(STORE_STATE_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          snapshot,
+          updatedAt: Date.now(),
+        }),
+      })
+      const parsedSnapshot = snapshot as RoomShardPersistSnapshot
+      const roomVersion =
+        parsedSnapshot?.room && typeof parsedSnapshot.room.version === "number"
+          ? parsedSnapshot.room.version
+          : undefined
+      const roomState =
+        parsedSnapshot?.room && typeof parsedSnapshot.room.state === "string" ? parsedSnapshot.room.state : undefined
+
+      // Best-effort DO event publish for cross-instance realtime fanout consumers.
+      void stub
+        .fetch("https://hroof-store/publish", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "room.state.delta",
+            payload: {
+              roomId,
+              revision: currentRevision,
+              roomVersion,
+              roomState,
+            },
+          }),
+        })
+        .catch(() => undefined)
+      syncState.lastPersistedRevision = currentRevision
+      syncState.lastHydratedAt = Date.now()
+    } catch {
+      // Intentionally non-fatal in runtimes where room-scoped snapshot is unavailable.
+    }
+  })()
+
+  try {
+    await syncState.persistInFlight
+  } finally {
+    syncState.persistInFlight = null
+  }
+}
+
 export async function withSharedStore<T>(operation: () => Promise<T>): Promise<T> {
   await hydrateSharedStoreFromDurable()
 
@@ -131,4 +322,32 @@ export async function withSharedStore<T>(operation: () => Promise<T>): Promise<T
   } finally {
     await persistSharedStoreToDurable()
   }
+}
+
+async function withRoomStoreInternal<T>(roomId: string, operation: () => Promise<T>, syncGlobalStore: boolean): Promise<T> {
+  if (!roomId || !isRoomScopedStoreEnabled()) {
+    return withSharedStore(operation)
+  }
+
+  if (syncGlobalStore) {
+    await hydrateSharedStoreFromDurable()
+  }
+  await hydrateRoomShardFromDurable(roomId)
+
+  try {
+    return await operation()
+  } finally {
+    await persistRoomShardToDurable(roomId)
+    if (syncGlobalStore) {
+      await persistSharedStoreToDurable()
+    }
+  }
+}
+
+export async function withRoomScopedStore<T>(roomId: string, operation: () => Promise<T>): Promise<T> {
+  return withRoomStoreInternal(roomId, operation, true)
+}
+
+export async function withRoomShardStore<T>(roomId: string, operation: () => Promise<T>): Promise<T> {
+  return withRoomStoreInternal(roomId, operation, false)
 }

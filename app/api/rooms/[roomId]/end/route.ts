@@ -1,6 +1,6 @@
 import { buildRoomSnapshot, completeRoomForHost } from "@/lib/server/store"
 import { errorResponse, getBearerToken, jsonResponse } from "@/lib/server/http"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { withRoomScopedStore } from "@/lib/server/store-sync"
 import { isHostToken, verifyToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -10,12 +10,12 @@ type RouteContext = {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  return withSharedStore(async () => {
-    const { roomId } = await context.params
-    if (!roomId) {
-      return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
-    }
+  const { roomId } = await context.params
+  if (!roomId) {
+    return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
+  }
 
+  return withRoomScopedStore(roomId, async () => {
     const bearer = getBearerToken(request)
     if (!bearer) {
       return errorResponse(401, "UNAUTHORIZED", "Missing bearer token")

@@ -40,6 +40,22 @@ Optional env vars:
 
 The script validates login, room creation, join flow, host lifecycle actions, responder answer submission, reconnect, and session end behavior.
 
+## 100-Room Load Canary
+
+Run the constrained load profile (capped to 100 rooms):
+
+```bash
+BASE_URL=https://<your-deployed-domain> npm run load:rooms-100
+```
+
+Important notes:
+
+- The script requires one unique host credential per concurrently active room.
+- Provide credential pool via `HOST_CREDENTIALS_JSON`:
+  - `HOST_CREDENTIALS_JSON='[{"username":"host-1","password":"..."} ... ]'`
+- Defaults are `LOAD_ROOMS=100` and `PLAYERS_PER_ROOM=20`.
+- The script outputs p50/p95/p99 latency for login, create, joins, host actions, state reads, and end-session.
+
 ## Build and Deploy
 
 ```bash
