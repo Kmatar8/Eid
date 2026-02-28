@@ -404,47 +404,7 @@ export default function Home() {
           </div>
         </motion.section>
 
-        {/* Coming Soon Section */}
-        <section className="mt-24 mb-12">
-          <div className="flex items-center gap-4 mb-8">
-            <h3 className="text-2xl font-black text-slate-100 font-cairo">ألعاب قريباً</h3>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/20 to-transparent" />
-          </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {games.filter(g => g.id !== TRIVIA_GAME_ID).map((game, index) => {
-              return (
-                <motion.div
-                  key={game.id}
-                  className="text-right"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileHover={{ y: -5 }}
-                  transition={{ delay: 0.4 + index * 0.05, duration: 0.4 }}
-                >
-                  <Card
-                    className="relative h-[16rem] overflow-hidden border border-white/5 bg-slate-900/30 text-foreground backdrop-blur-md shadow-lg"
-                  >
-                    <div className="absolute inset-0 opacity-20 transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundImage: game.gradient }} />
-                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px]" />
-
-                    <div className="relative h-full flex flex-col p-6 z-10">
-                      <div className="flex justify-between items-start mb-4">
-                        <game.icon className="size-8 text-white/50" />
-                        <span className="px-2 py-1 rounded-md bg-white/10 text-[10px] font-bold tracking-wider uppercase text-white/60">قريباً</span>
-                      </div>
-
-                      <div className="mt-auto">
-                        <h4 className="font-cairo font-black text-xl text-slate-200 mb-1">{game.title}</h4>
-                        <p className="text-slate-400 text-sm font-cairo line-clamp-2">{game.description}</p>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              )
-            })}
-          </div>
-        </section>
 
         <motion.footer
           initial={{ opacity: 0, y: 18 }}

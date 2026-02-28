@@ -30,6 +30,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 12. Simplify trivia live-status card by removing auxiliary lines and enlarging primary command text.
 13. Vertically center the trivia live-status command text within its card.
 14. Simplify controller runtime chrome by removing phase pill/update button and localizing feedback text to Arabic.
+15. Tune controller buzzer/countdown copy and color styling (`اضغط` -> `جاوب`, countdown number color alignment).
+16. Unify host + controller action button colors to match the join/start CTA gradient (`ابدأ الفعالية` style).
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -70,6 +72,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 13. Trim trivia live-status block to a single large command line.
 14. Center trivia live-status command text vertically in the middle card.
 15. Remove controller phase-status pill and bottom update button; localize controller feedback/status copy to Arabic.
+16. Update controller buzzer CTA text and align countdown number color with controller buzzer color theme.
+17. Apply shared join/start gradient styling to host and controller interactive buttons for visual consistency.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -87,6 +91,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 13. Trivia live-status card no longer shows heading/usage lines and displays larger primary status text.
 14. Trivia live-status command text is vertically centered inside the card.
 15. Controller no longer shows phase pill/update button, and player feedback text is Arabic.
+16. Controller buzzer button label shows `جاوب` and countdown number uses aligned buzzer color tone.
+17. Host and controller interactive buttons use the same gradient color direction as the `ابدأ الفعالية` CTA.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -103,6 +109,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: trivia live-status card shows only large primary command text.
 - [ ] Manual: trivia live-status command text is vertically centered.
 - [ ] Manual: controller has no phase pill/update button and shows Arabic feedback copy.
+- [ ] Manual: controller buzzer label is `جاوب` and countdown number color matches buzzer tone.
+- [ ] Manual: host/controller action buttons visually match `ابدأ الفعالية` gradient color style.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -116,6 +124,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 8. Removed trivia live-status heading/detail/usage lines and increased primary status text size.
 9. Centered trivia live-status command text vertically in the status card.
 10. Removed controller phase pill/update button and localized controller feedback/status messages to Arabic.
+11. Updated controller buzzer CTA label to `جاوب` and aligned countdown number color with buzzer theme.
+12. Unified host/controller action button styling with the `ابدأ الفعالية` gradient palette.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.

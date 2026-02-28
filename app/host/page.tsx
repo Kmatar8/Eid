@@ -29,6 +29,10 @@ const HOST_POLL_ACTIVE_MS = 260
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const
+const JOIN_CTA_GRADIENT_CLASS =
+  "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
+const HOST_ACTION_BUTTON_CLASS = `${JOIN_CTA_GRADIENT_CLASS} rounded-xl font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:brightness-100`
+const HOST_ICON_BUTTON_CLASS = `flex h-11 w-11 items-center justify-center rounded-full ${JOIN_CTA_GRADIENT_CLASS} transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100 disabled:hover:brightness-100`
 
 type FeedbackType = "correct" | "wrong" | null
 type HostStage = "lobby" | "overview" | "trivia" | "celebration" | "paused"
@@ -1097,7 +1101,7 @@ export default function HostStagePage() {
                             size="sm"
                             disabled={Boolean(busyAction) || isSaving || !canManageTeams}
                             onClick={() => void handleRenameTeam(team.teamId)}
-                            className="h-10 rounded-lg bg-white/15 px-3 text-xs font-bold hover:bg-white/25"
+                            className={`${HOST_ACTION_BUTTON_CLASS} h-10 rounded-lg px-3 text-xs`}
                           >
                             {isSaving ? "جارٍ الحفظ..." : "حفظ"}
                           </Button>
@@ -1110,7 +1114,7 @@ export default function HostStagePage() {
 
               <Button
                 type="button"
-                className="mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
+                className={`${HOST_ACTION_BUTTON_CLASS} mt-5 w-full text-lg`}
                 disabled={Boolean(busyAction) || !canStartSession}
                 onClick={() => void handleStartSession()}
               >
@@ -1159,7 +1163,7 @@ export default function HostStagePage() {
                         <button
                           type="button"
                           disabled={Boolean(busyAction) || !canManageTeams}
-                          className="flex-1 rounded-lg border border-pink-300/40 bg-pink-500/20 px-2 py-1 text-xs font-semibold text-pink-100 hover:bg-pink-500/30"
+                          className={`${HOST_ACTION_BUTTON_CLASS} flex-1 rounded-lg px-2 py-1 text-xs`}
                           onClick={() => void assignPlayer(player.playerId, "team_a")}
                         >
                           Team A
@@ -1167,7 +1171,7 @@ export default function HostStagePage() {
                         <button
                           type="button"
                           disabled={Boolean(busyAction) || !canManageTeams}
-                          className="flex-1 rounded-lg border border-cyan-300/40 bg-cyan-500/20 px-2 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/30"
+                          className={`${HOST_ACTION_BUTTON_CLASS} flex-1 rounded-lg px-2 py-1 text-xs`}
                           onClick={() => void assignPlayer(player.playerId, "team_b")}
                         >
                           Team B
@@ -1266,7 +1270,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canStartTrivia}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
@@ -1274,7 +1278,7 @@ export default function HostStagePage() {
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canEndSession}
                 onClick={() => void handleEndSession()}
               >
@@ -1295,7 +1299,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canResumeSession}
                 onClick={() => void handleResumeSession()}
               >
@@ -1303,7 +1307,7 @@ export default function HostStagePage() {
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canEndSession}
                 onClick={() => void handleEndSession()}
               >
@@ -1372,7 +1376,7 @@ export default function HostStagePage() {
                   {selectedClue && (
                     <Button
                       onClick={() => setShowQuestionModal(true)}
-                      className="rounded-xl bg-violet-600 hover:bg-violet-700 font-bold"
+                      className={`${HOST_ACTION_BUTTON_CLASS} px-4`}
                     >
                       عرض السؤال الحالي
                     </Button>
@@ -1434,10 +1438,9 @@ export default function HostStagePage() {
                     {/* Modal Header/Close */}
                     <div className="absolute right-6 top-6 flex gap-3">
                       <Button
-                        variant="ghost"
                         size="icon"
                         onClick={() => void handleQuestionModalExit()}
-                        className="rounded-full bg-white/5 hover:bg-white/10"
+                        className={`${HOST_ACTION_BUTTON_CLASS} rounded-full`}
                       >
                         <X className="size-6" />
                       </Button>
@@ -1467,8 +1470,7 @@ export default function HostStagePage() {
                                     </div>
                                     <Button
                                       type="button"
-                                      variant="secondary"
-                                      className="h-full min-h-[6rem] rounded-2xl px-7 py-5 text-lg font-black"
+                                      className={`${HOST_ACTION_BUTTON_CLASS} h-full min-h-[6rem] rounded-2xl px-7 py-5 text-lg`}
                                       disabled={Boolean(busyAction) || !canSelectAnotherResponder}
                                       onClick={() => void handleSelectAnotherResponder()}
                                     >
@@ -1590,7 +1592,7 @@ export default function HostStagePage() {
                         <div className="pt-6">
                           <Button
                             type="button"
-                            className="h-20 w-full rounded-3xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-2xl font-bold shadow-xl hover:scale-[1.01] transition-all"
+                            className={`${HOST_ACTION_BUTTON_CLASS} h-20 w-full rounded-3xl text-2xl`}
                             disabled={Boolean(busyAction) || !canAdvanceFromQuestionModal}
                             onClick={() => void handleQuestionModalExit()}
                           >
@@ -1636,7 +1638,7 @@ export default function HostStagePage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button
                 type="button"
-                className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canStartTrivia}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
@@ -1644,7 +1646,7 @@ export default function HostStagePage() {
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canEndSession}
                 onClick={() => void handleEndSession()}
               >
@@ -1665,7 +1667,7 @@ export default function HostStagePage() {
                 aria-label="إنهاء الفعالية"
                 title="إنهاء الفعالية"
                 disabled={Boolean(busyAction) || !canEndSession}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-red-500/22"
+                className={HOST_ICON_BUTTON_CLASS}
               >
                 <Power className="size-5" />
               </button>
@@ -1681,7 +1683,7 @@ export default function HostStagePage() {
               onClick={handleLogout}
               aria-label="تسجيل الخروج"
               title="تسجيل الخروج"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
+              className={HOST_ICON_BUTTON_CLASS}
             >
               <LogOut className="size-5" />
             </button>
@@ -1724,12 +1726,12 @@ export default function HostStagePage() {
               </ul>
 
               <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <Button type="button" variant="outline" onClick={() => setShowTriviaRulesModal(false)}>
+                <Button type="button" className={`${HOST_ACTION_BUTTON_CLASS} px-6`} onClick={() => setShowTriviaRulesModal(false)}>
                   إلغاء
                 </Button>
                 <Button
                   type="button"
-                  className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-6 font-black text-slate-950"
+                  className={`${HOST_ACTION_BUTTON_CLASS} px-6`}
                   disabled={Boolean(busyAction) || !canStartTrivia}
                   onClick={() => void handleStartTriviaFromModal()}
                 >
