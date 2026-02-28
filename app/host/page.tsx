@@ -1243,11 +1243,11 @@ export default function HostStagePage() {
                 </div>
               </div>
 
-              <div className="grid min-h-0 flex-1 grid-cols-6 grid-rows-[auto_repeat(5,minmax(0,1fr))] gap-2 lg:gap-3">
+              <div className="grid min-h-0 flex-1 grid-cols-6 grid-rows-[auto_repeat(5,minmax(0,1fr))] gap-2 lg:gap-3 p-2">
                 {(trivia?.board ?? []).map((category) => (
                   <div
                     key={`header-${category.categoryId}`}
-                    className="flex min-h-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-2 py-2 text-center text-base font-black leading-tight text-white shadow-inner lg:text-lg"
+                    className="flex min-h-0 items-center justify-center rounded-2xl border-b-4 border-t border-x border-violet-400/40 border-b-violet-500/60 bg-gradient-to-b from-indigo-800/60 to-violet-900/60 px-2 py-2 text-center text-[0.8rem] md:text-sm lg:text-lg font-black uppercase tracking-wider text-slate-100 shadow-[inset_0_2px_15px_rgba(255,255,255,0.1)] drop-shadow-lg"
                   >
                     {category.name}
                   </div>
@@ -1268,12 +1268,15 @@ export default function HostStagePage() {
                         type="button"
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
-                        className={`h-full min-h-0 rounded-2xl border text-2xl font-black transition-all lg:text-3xl ${isUsed
-                          ? "border-white/5 bg-glass-bg/30 text-slate-500 opacity-50"
-                          : "border-pink-300/45 bg-pink-500/18 text-pink-100 shadow-lg hover:scale-[1.02] hover:bg-pink-500/30 hover:shadow-pink-500/20 active:scale-95"
-                          } ${isSelected ? "ring-4 ring-violet-500/60 ring-offset-4 ring-offset-background" : ""}`}
+                        className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-2xl border text-3xl font-black transition-all duration-300 lg:text-4xl ${isUsed
+                            ? "border-white/5 bg-black/40 text-slate-500/30 shadow-inner"
+                            : "border-cyan-400/40 bg-gradient-to-br from-blue-900/80 to-indigo-900/60 text-amber-300 shadow-[0_4px_20px_rgba(59,130,246,0.3)] drop-shadow-[0_0_10px_rgba(252,211,77,0.6)] hover:scale-[1.04] hover:border-cyan-300/80 hover:from-blue-800/90 hover:to-indigo-800/80 hover:text-amber-200 hover:shadow-[0_8px_30px_rgba(59,130,246,0.5)] active:scale-95"
+                          } ${isSelected ? "ring-4 ring-amber-400/70 ring-offset-4 ring-offset-slate-900" : ""}`}
                       >
-                        {isUsed ? "✓" : clue.points}
+                        {!isUsed && (
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                        )}
+                        <span className="relative z-10">{isUsed ? "✓" : clue.points}</span>
                       </button>
                     )
                   })
@@ -1380,8 +1383,8 @@ export default function HostStagePage() {
                                       <motion.div
                                         key={`${selectedClue.questionId}-${index}`}
                                         className={`group relative flex items-center overflow-hidden rounded-3xl border p-8 transition-colors ${dimOption
-                                            ? "border-white/10 bg-white/5 opacity-70"
-                                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                                          ? "border-white/10 bg-white/5 opacity-70"
+                                          : "border-white/10 bg-white/5 hover:bg-white/10"
                                           } ${isCorrectFlash || isCorrectReveal
                                             ? "border-emerald-300/70 text-emerald-50"
                                             : isWrongFlash
