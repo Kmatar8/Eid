@@ -9,6 +9,7 @@ import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
+import { BorderBeam } from "@/components/ui/border-beam"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import {
@@ -1186,13 +1187,18 @@ export default function HostStagePage() {
               ) : null}
 
               <article className={`party-surface relative overflow-hidden rounded-2xl border p-4 text-center shadow-xl ${currentTone.border} ${currentTone.bg}`}>
-                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
-                  <motion.div
-                    className="absolute -left-20 top-0 h-full w-16 bg-gradient-to-r from-transparent via-cyan-300/65 to-transparent blur-md"
-                    animate={{ x: ["0%", "210%"] }}
-                    transition={{ duration: 1.6, ease: "linear", repeat: Number.POSITIVE_INFINITY, repeatDelay: 0.25 }}
-                  />
-                </div>
+                <BorderBeam
+                  duration={6}
+                  size={400}
+                  className="from-transparent via-amber-400 to-transparent"
+                />
+                <BorderBeam
+                  duration={6}
+                  delay={3}
+                  size={400}
+                  borderWidth={2}
+                  className="from-transparent via-cyan-400 to-transparent"
+                />
                 <p className="relative text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Live Status</p>
                 <h2 className="relative mt-2 text-2xl font-extrabold leading-tight text-white">{liveStatusCommandText}</h2>
                 <p className="relative mt-2 text-sm text-slate-200">{liveHeadline}</p>
@@ -1371,27 +1377,25 @@ export default function HostStagePage() {
                                     const dimOption = hasScoredReveal && !isCorrectOption && !isAnsweredOption
 
                                     return (
-                                    <motion.div
-                                      key={`${selectedClue.questionId}-${index}`}
-                                      className={`group relative flex items-center overflow-hidden rounded-3xl border p-8 transition-colors ${
-                                        dimOption
-                                          ? "border-white/10 bg-white/5 opacity-70"
-                                          : "border-white/10 bg-white/5 hover:bg-white/10"
-                                      } ${
-                                        isCorrectFlash || isCorrectReveal
-                                          ? "border-emerald-300/70 text-emerald-50"
-                                          : isWrongFlash
-                                            ? "border-rose-300/80 text-rose-50"
-                                            : ""
-                                      }`}
-                                      animate={
-                                        isCorrectFlash
-                                          ? {
+                                      <motion.div
+                                        key={`${selectedClue.questionId}-${index}`}
+                                        className={`group relative flex items-center overflow-hidden rounded-3xl border p-8 transition-colors ${dimOption
+                                            ? "border-white/10 bg-white/5 opacity-70"
+                                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                                          } ${isCorrectFlash || isCorrectReveal
+                                            ? "border-emerald-300/70 text-emerald-50"
+                                            : isWrongFlash
+                                              ? "border-rose-300/80 text-rose-50"
+                                              : ""
+                                          }`}
+                                        animate={
+                                          isCorrectFlash
+                                            ? {
                                               backgroundColor: ["rgba(16,185,129,0.22)", "rgba(16,185,129,0.68)", "rgba(16,185,129,0.44)"],
                                               borderColor: ["rgba(110,231,183,0.4)", "rgba(110,231,183,0.95)", "rgba(110,231,183,0.75)"],
                                             }
-                                          : isWrongFlash
-                                            ? {
+                                            : isWrongFlash
+                                              ? {
                                                 backgroundColor: [
                                                   "rgba(244,63,94,0.22)",
                                                   "rgba(244,63,94,0.72)",
@@ -1403,34 +1407,35 @@ export default function HostStagePage() {
                                                   "rgba(253,164,175,0.8)",
                                                 ],
                                               }
-                                            : isCorrectReveal
-                                              ? {
+                                              : isCorrectReveal
+                                                ? {
                                                   backgroundColor: ["rgba(16,185,129,0.15)", "rgba(16,185,129,0.44)"],
                                                   borderColor: ["rgba(110,231,183,0.4)", "rgba(110,231,183,0.8)"],
                                                 }
-                                              : undefined
-                                      }
-                                      transition={{
-                                        duration: isCorrectFlash || isWrongFlash ? 0.95 : 0.7,
-                                        times: isCorrectFlash || isWrongFlash ? [0, 0.45, 1] : [0, 1],
-                                        ease: "easeInOut",
-                                      }}
-                                    >
-                                      {isCorrectReveal ? (
-                                        <motion.span
-                                          aria-hidden
-                                          className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/35 blur-2xl"
-                                          initial={{ scale: 0.3, opacity: 0 }}
-                                          animate={{ scale: 1.15, opacity: [0, 0.55, 0] }}
-                                          transition={{ duration: 0.85, ease: "easeIn" }}
-                                        />
-                                      ) : null}
-                                      <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-violet-500 opacity-50">
-                                        {optionKey}
-                                      </span>
-                                      <p className="pr-8 text-3xl font-bold leading-tight">{option}</p>
-                                    </motion.div>
-                                  )})}
+                                                : undefined
+                                        }
+                                        transition={{
+                                          duration: isCorrectFlash || isWrongFlash ? 0.95 : 0.7,
+                                          times: isCorrectFlash || isWrongFlash ? [0, 0.45, 1] : [0, 1],
+                                          ease: "easeInOut",
+                                        }}
+                                      >
+                                        {isCorrectReveal ? (
+                                          <motion.span
+                                            aria-hidden
+                                            className="pointer-events-none absolute left-1/2 top-1/2 h-56 w-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/35 blur-2xl"
+                                            initial={{ scale: 0.3, opacity: 0 }}
+                                            animate={{ scale: 1.15, opacity: [0, 0.55, 0] }}
+                                            transition={{ duration: 0.85, ease: "easeIn" }}
+                                          />
+                                        ) : null}
+                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-3xl font-black text-violet-500 opacity-50">
+                                          {optionKey}
+                                        </span>
+                                        <p className="pr-8 text-3xl font-bold leading-tight">{option}</p>
+                                      </motion.div>
+                                    )
+                                  })}
                                 </div>
 
                               </motion.div>
