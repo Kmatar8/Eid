@@ -19,7 +19,8 @@ const CLOCK_TICK_MS = 300
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
 const CONTROLLER_ACTION_BUTTON_CLASS = `${JOIN_CTA_GRADIENT_CLASS} rounded-2xl border-0 font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 disabled:hover:brightness-100`
-const CONTROLLER_ROUND_ACTION_BUTTON_CLASS = `group relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-amber-400 via-pink-400 to-cyan-400 shadow-[inset_0_10px_20px_rgba(255,255,255,0.35),inset_0_-10px_20px_rgba(0,0,0,0.5),0_12px_30px_rgba(56,189,248,0.45)] transition-all duration-100 active:translate-y-3 active:scale-[0.98] active:shadow-[inset_0_20px_30px_rgba(0,0,0,0.6),0_0_12px_rgba(56,189,248,0.35)] disabled:pointer-events-none disabled:opacity-50`
+const CONTROLLER_ROUND_ACTION_BUTTON_CLASS =
+  "group relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-b from-red-500 via-red-600 to-red-800 shadow-[inset_0_10px_20px_rgba(255,255,255,0.4),inset_0_-10px_20px_rgba(0,0,0,0.6),0_10px_25px_rgba(225,29,72,0.8)] transition-all duration-100 active:translate-y-3 active:scale-[0.98] active:shadow-[inset_0_20px_30px_rgba(0,0,0,0.7),0_0_10px_rgba(225,29,72,0.4)] disabled:opacity-50 disabled:pointer-events-none"
 
 type ControllerClientPageProps = {
   roomId: string
@@ -661,7 +662,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                   >
                     {/* Top glare for domed 3D plastic effect */}
                     <div className="pointer-events-none absolute left-1/2 top-4 h-[35%] w-[65%] -translate-x-1/2 rounded-[100%] bg-gradient-to-b from-white/40 to-transparent blur-[2px]" />
-                    <span className="relative z-10 -translate-y-1 text-4xl sm:text-6xl font-black uppercase text-slate-950 drop-shadow-[0_2px_4px_rgba(255,255,255,0.45)]">
+                    <span className="relative z-10 -translate-y-1 text-4xl sm:text-6xl font-black uppercase text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)]">
                       جاوب
                     </span>
                   </button>

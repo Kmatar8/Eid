@@ -254,12 +254,13 @@ export function createRoom(hostToken: string) {
   })
 }
 
-export function joinRoom(roomId: string, name: string, avatarEmoji?: string) {
+export function joinRoom(roomId: string, name: string, avatarEmoji?: string, avatarImageUrl?: string) {
   return requestJson<JoinRoomResult>(`/api/rooms/${roomId}/join`, {
     method: "POST",
     body: {
       name,
       ...(avatarEmoji ? { avatarEmoji } : {}),
+      ...(avatarImageUrl ? { avatarImageUrl } : {}),
     },
   })
 }

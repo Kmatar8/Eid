@@ -20,7 +20,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
    - Games overview + general rules + start-first-game CTA.
    - Trivia runtime view with horizontal scoreboard and clear responder/steal messaging.
    - End-of-trivia winner celebration view with next-game CTA.
-5. Add trivia pre-start rules modal on host screen; start questions only after host confirm.
+5. Present game overview/rules directly on host stage before trivia start (without redundant popup confirmation).
 6. Extend host action contract for server-authoritative manual team assignment.
 7. Improve trivia controller clarity with team color coding and explicit responder text.
 8. Add host fallback action to randomly select another responder from the same active team.
@@ -34,6 +34,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 16. Unify host + controller action button colors to match the join/start CTA gradient (`ابدأ الفعالية` style).
 17. Localize host game-overview stage copy to Arabic, center it vertically, and replace `الجيوباردي/Jeopardy` wording with `اللعبة` in host-facing runtime copy.
 18. Update landing hero wording from `ليلة` to `فعالية` for consistent event terminology.
+19. Remove duplicate pre-start popup from host overview start action and restore board clue-tile color styling to prior indigo theme.
+20. Revert host floating icon controls (terminate/logout) and controller buzzer to their prior visual styles while keeping other button updates.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -65,7 +67,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 4. Implement host drag/drop team assignment UX.
 5. Add `host.assignPlayerTeam` protocol/store handling and preserve manual assignments when starting teams.
 6. Add `host.selectAnotherResponder` protocol/store handling for in-question responder fallback.
-7. Add trivia rules modal and runtime team-context messaging with team-color cues.
+7. Keep overview-stage rules visible and runtime team-context messaging with team-color cues.
 8. Update controller question card to show explicit responder text and team cue styling.
 9. Validate with lint/build + live smoke flow and capture evidence.
 10. Add host-only audio preload/playback path for correct/wrong answer reveal feedback.
@@ -78,13 +80,15 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 17. Apply shared join/start gradient styling to host and controller interactive buttons for visual consistency.
 18. Update host overview/trivia runtime text labels to Arabic-first terminology (`اللعبة`) and adjust overview stage layout centering.
 19. Adjust landing hero title copy (`ليلة العيد` -> `فعالية العيد`).
+20. Remove redundant pre-start modal trigger; start trivia directly from overview CTA and keep board tile styling unchanged from prior indigo design.
+21. Restore prior styling for host floating end/logout controls and controller red buzzer.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
 2. Host login succeeds and routes to `/host` with persistent host session.
 3. `/host` lobby shows large QR, joined players, team columns, and supports manual team assignment.
 4. Host can start session and see games overview and rules before starting trivia.
-5. Trivia start is gated behind host confirmation modal.
+5. Trivia starts directly from the overview CTA without an extra popup confirmation.
 6. Trivia runtime view clearly indicates active responder/team and steal-state messaging.
 7. Host can trigger random responder reselection within the same active team when trivia question is active.
 8. Controller clearly shows "this question is for you" for active responder and team/player context for others.
@@ -99,13 +103,15 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 17. Host and controller interactive buttons use the same gradient color direction as the `ابدأ الفعالية` CTA.
 18. Host overview stage is vertically centered, fully Arabic-localized, and no longer shows `جيوباردي/Jeopardy` wording in user-facing runtime labels.
 19. Landing hero headline uses `فعالية` wording instead of `ليلة`.
+20. Overview start no longer opens a duplicate popup, and board clue buttons retain prior indigo visual style.
+21. Host floating end/logout controls and controller buzzer match their previous styles (not gradient-unified versions).
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
 - [x] Build pass.
 - [ ] Manual: landing -> login -> host lobby flow.
 - [ ] Manual: player joins and host can assign teams via drag/drop.
-- [ ] Manual: overview -> rules modal -> trivia runtime messaging flow.
+- [ ] Manual: overview -> direct start (no duplicate popup) -> trivia runtime messaging flow.
 - [ ] Manual: host can select another responder from same team during active question.
 - [ ] Manual: controller shows clear responder/team context with team color cues.
 - [ ] Manual: trivia completion -> winner celebration -> next game CTA.
@@ -119,6 +125,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: host/controller action buttons visually match `ابدأ الفعالية` gradient color style.
 - [ ] Manual: host overview block is vertically centered and host runtime labels use `اللعبة` wording instead of `جيوباردي/Jeopardy`.
 - [ ] Manual: landing hero text shows `فعالية العيد` (not `ليلة العيد`).
+- [ ] Manual: board clue buttons use prior indigo theme styling (not the join CTA gradient).
+- [ ] Manual: host floating end/logout controls and controller buzzer use their previous non-gradient styles.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -136,6 +144,8 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 12. Unified host/controller action button styling with the `ابدأ الفعالية` gradient palette.
 13. Localized host overview and runtime labels to Arabic `اللعبة` wording and centered overview stage vertically.
 14. Updated landing hero wording from `ليلة العيد` to `فعالية العيد`.
+15. Removed redundant overview start popup and restored board clue button styling to the prior indigo design.
+16. Restored prior host floating end/logout button styles and prior controller red buzzer style.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.

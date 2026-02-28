@@ -11,6 +11,8 @@ import { FireworksBackground } from "@/components/ui/fireworks"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
 import { BorderBeam } from "@/components/ui/border-beam"
 import confetti from "canvas-confetti"
+import { AvatarGroup, AvatarGroupTooltip } from "@/components/animate-ui/components/animate/avatar-group"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import {
@@ -32,7 +34,10 @@ const OPTION_LETTERS = ["A", "B", "C", "D"] as const
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
 const HOST_ACTION_BUTTON_CLASS = `${JOIN_CTA_GRADIENT_CLASS} rounded-xl font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:brightness-100`
-const HOST_ICON_BUTTON_CLASS = `flex h-11 w-11 items-center justify-center rounded-full ${JOIN_CTA_GRADIENT_CLASS} transition hover:scale-105 hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100 disabled:hover:brightness-100`
+const HOST_END_ICON_BUTTON_CLASS =
+  "flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-red-500/22"
+const HOST_LOGOUT_ICON_BUTTON_CLASS =
+  "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
 
 type FeedbackType = "correct" | "wrong" | null
 type HostStage = "lobby" | "overview" | "trivia" | "celebration" | "paused"
@@ -245,7 +250,6 @@ export default function HostStagePage() {
   const [isBootstrappingRoom, setIsBootstrappingRoom] = useState(false)
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null)
   const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null)
-  const [showTriviaRulesModal, setShowTriviaRulesModal] = useState(false)
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -830,8 +834,7 @@ export default function HostStagePage() {
     }
   }, [hostToken, refreshState, roomId])
 
-  const handleStartTriviaFromModal = useCallback(async () => {
-    setShowTriviaRulesModal(false)
+  const handleStartTrivia = useCallback(async () => {
     try {
       await runAction("host.startTrivia")
       setNotice("بدأت لوحة اللعبة. الفريق الحالي يختار الفئة والنقاط.")
@@ -928,7 +931,12 @@ export default function HostStagePage() {
     trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
 
   const canManageTeams = room?.state === "lobby_open" || room?.state === "lobby_locked" || room?.state === "teams_ready"
-  const canStartSession = Boolean(canManageTeams && room && room.playerCount > 0)
+
+  const allTeamsNamed = room?.teams.every(
+    (t) => t.name && t.name.trim() !== "" && t.name.trim() !== "اسم الفريق" && t.name.trim() !== "Team A" && t.name.trim() !== "Team B"
+  )
+  const canStartSession = Boolean(canManageTeams && room && room.playerCount > 0 && allTeamsNamed)
+
   const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
   const canResumeSession = room?.state === "paused_wait_host"
   const canEndSession = Boolean(room && !isTerminalRoomState(room.state))
@@ -1077,9 +1085,30 @@ export default function HostStagePage() {
                 )}
               </div>
 
+
+
+              <Button
+                type="button"
+                className={`${HOST_ACTION_BUTTON_CLASS} mt-5 w-full text-lg`}
+                disabled={Boolean(busyAction) || !canStartSession}
+                onClick={() => void handleStartSession()}
+              >
+                {busyAction === "host.prepareSession" ? "جاري تجهيز الفرق..." : "ابدأ الفعالية"}
+              </Button>
+            </article>
+
+            <article className="party-surface-strong space-y-4 rounded-3xl p-5">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Players</p>
+                <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
+                <p className="mt-2 text-base text-slate-200">اسحب اللاعبين إلى أعمدة الفرق أدناه.</p>
+              </div>
+
+              {/* Team Names Inputs (Moved here to be in the same block) */}
               <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-3">
                 <p className="text-sm font-semibold text-slate-100">أسماء الفرق</p>
-                <div className="mt-3 space-y-3">
+                <p className="mt-1 text-xs text-amber-300">يجب تعبئة هذا الحقل وإدخال اسم مميز للفريق للبدء.</p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {room.teams.map((team) => {
                     const tone = getTeamTone(team.teamId)
                     const isSaving = renamingTeamId === team.teamId
@@ -1088,6 +1117,7 @@ export default function HostStagePage() {
                         <label className="mb-1 block text-xs text-slate-300">{team.teamId === "team_a" ? "الفريق الأول" : "الفريق الثاني"}</label>
                         <div className="flex items-center gap-2">
                           <input
+                            placeholder="اسم الفريق"
                             value={teamNameDrafts[team.teamId] ?? ""}
                             onChange={(event) => {
                               const value = event.target.value
@@ -1112,74 +1142,44 @@ export default function HostStagePage() {
                 </div>
               </div>
 
-              <Button
-                type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} mt-5 w-full text-lg`}
-                disabled={Boolean(busyAction) || !canStartSession}
-                onClick={() => void handleStartSession()}
-              >
-                {busyAction === "host.prepareSession" ? "جاري تجهيز الفرق..." : "ابدأ الفعالية"}
-              </Button>
-            </article>
-
-            <article className="party-surface-strong space-y-4 rounded-3xl p-5">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Players</p>
-                <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
-                <p className="mt-2 text-base text-slate-200">اسحب اللاعبين إلى أعمدة الفرق أو استخدم أزرار الإسناد السريعة.</p>
-              </div>
-
-              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+              <div className="py-4">
                 {room.players.length === 0 ? (
-                  <p className="col-span-full rounded-xl border border-white/20 bg-white/10 p-4 text-sm text-slate-300">
+                  <p className="rounded-xl border border-white/20 bg-white/10 p-4 text-sm text-slate-300">
                     لا يوجد لاعبين بعد. انتظر الانضمامات عبر QR.
                   </p>
-                ) : null}
-
-                {room.players.map((player) => {
-                  const teamId = assignmentByPlayer.get(player.playerId) ?? null
-                  const tone = getTeamTone(teamId)
-                  const teamLabel = teamId === "team_a" ? "Team A" : teamId === "team_b" ? "Team B" : "غير مخصص"
-
-                  return (
-                    <article
-                      key={player.playerId}
-                      draggable
-                      onDragStart={(event) => {
-                        setDraggingPlayerId(player.playerId)
-                        event.dataTransfer.setData("text/plain", player.playerId)
-                      }}
-                      onDragEnd={() => {
-                        setDraggingPlayerId(null)
-                        setDropTargetTeamId(null)
-                      }}
-                      className={`rounded-2xl border p-3 shadow-lg transition hover:-translate-y-0.5 ${tone.border} ${tone.bg}`}
-                    >
-                      <p className="text-lg font-semibold">{player.displayName}</p>
-                      <p className="mt-1 text-xs text-slate-300">آخر نشاط: {new Date(player.lastSeenAt).toLocaleTimeString()}</p>
-                      <p className={`mt-2 inline-flex rounded-full border px-2 py-1 text-xs ${tone.chip}`}>{teamLabel}</p>
-
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          type="button"
-                          disabled={Boolean(busyAction) || !canManageTeams}
-                          className={`${HOST_ACTION_BUTTON_CLASS} flex-1 rounded-lg px-2 py-1 text-xs`}
-                          onClick={() => void assignPlayer(player.playerId, "team_a")}
-                        >
-                          Team A
-                        </button>
-                        <button
-                          type="button"
-                          disabled={Boolean(busyAction) || !canManageTeams}
-                          className={`${HOST_ACTION_BUTTON_CLASS} flex-1 rounded-lg px-2 py-1 text-xs`}
-                          onClick={() => void assignPlayer(player.playerId, "team_b")}
-                        >
-                          Team B
-                        </button>
-                      </div>
-                    </article>
-                  )
-                })}
+                ) : (
+                  <div className="flex flex-col items-start gap-4 p-2">
+                    <AvatarGroup>
+                      {room.players.map((player) => {
+                        const teamId = assignmentByPlayer.get(player.playerId) ?? null
+                        const tone = getTeamTone(teamId)
+                        return (
+                          <Avatar
+                            key={player.playerId}
+                            draggable
+                            onDragStart={(event) => {
+                              setDraggingPlayerId(player.playerId)
+                              event.dataTransfer.setData("text/plain", player.playerId)
+                            }}
+                            onDragEnd={() => {
+                              setDraggingPlayerId(null)
+                              setDropTargetTeamId(null)
+                            }}
+                            className={`border-2 cursor-grab shadow-xl hover:z-50 size-16 sm:size-20 ${teamId ? tone.border : "border-slate-500"}`}
+                          >
+                            {player.avatarValue ? (
+                              <AvatarImage src={player.avatarValue} className="object-cover" />
+                            ) : null}
+                            <AvatarFallback className={`${teamId ? tone.bg : "bg-slate-700"} text-2xl`}>
+                              {player.avatarType === "emoji" ? player.avatarValue : "🙂"}
+                            </AvatarFallback>
+                            <AvatarGroupTooltip>{player.displayName}</AvatarGroupTooltip>
+                          </Avatar>
+                        )
+                      })}
+                    </AvatarGroup>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-3 lg:grid-cols-2">
@@ -1273,7 +1273,7 @@ export default function HostStagePage() {
                   type="button"
                   className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                   disabled={Boolean(busyAction) || !canStartTrivia}
-                  onClick={() => setShowTriviaRulesModal(true)}
+                  onClick={() => void handleStartTrivia()}
                 >
                   ابدأ اللعبة
                 </Button>
@@ -1412,8 +1412,8 @@ export default function HostStagePage() {
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
                         className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-xl border-2 text-3xl font-black transition-all duration-200 lg:text-4xl ${isUsed
-                          ? "border-transparent bg-gradient-to-r from-amber-400/25 via-pink-400/25 to-cyan-400/25 text-slate-500 shadow-inner backdrop-blur-sm"
-                          : "border-transparent bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.28)] backdrop-blur-md hover:-translate-y-1 hover:brightness-110 hover:shadow-[0_14px_32px_rgba(56,189,248,0.35)] active:translate-y-0 active:scale-95"
+                          ? "border-transparent bg-slate-900/40 text-slate-700 shadow-inner backdrop-blur-sm"
+                          : "border-indigo-500/30 bg-gradient-to-b from-indigo-900/80 to-slate-900/90 text-amber-400 shadow-sm backdrop-blur-md hover:-translate-y-1 hover:border-indigo-400/60 hover:from-indigo-800/90 hover:to-slate-800/90 hover:text-amber-300 hover:shadow-[0_8px_20px_rgba(79,70,229,0.25)] active:translate-y-0 active:scale-95"
                           } ${isSelected ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900" : ""}`}
                       >
                         {!isUsed && (
@@ -1642,7 +1642,7 @@ export default function HostStagePage() {
                 type="button"
                 className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
                 disabled={Boolean(busyAction) || !canStartTrivia}
-                onClick={() => setShowTriviaRulesModal(true)}
+                onClick={() => void handleStartTrivia()}
               >
                 الانتقال للعبة التالية
               </Button>
@@ -1669,7 +1669,7 @@ export default function HostStagePage() {
                 aria-label="إنهاء الفعالية"
                 title="إنهاء الفعالية"
                 disabled={Boolean(busyAction) || !canEndSession}
-                className={HOST_ICON_BUTTON_CLASS}
+                className={HOST_END_ICON_BUTTON_CLASS}
               >
                 <Power className="size-5" />
               </button>
@@ -1685,7 +1685,7 @@ export default function HostStagePage() {
               onClick={handleLogout}
               aria-label="تسجيل الخروج"
               title="تسجيل الخروج"
-              className={HOST_ICON_BUTTON_CLASS}
+              className={HOST_LOGOUT_ICON_BUTTON_CLASS}
             >
               <LogOut className="size-5" />
             </button>
@@ -1713,37 +1713,6 @@ export default function HostStagePage() {
         ) : null}
       </AnimatePresence>
 
-      {
-        showTriviaRulesModal ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
-            <div className="party-surface-strong w-full max-w-3xl rounded-3xl bg-slate-950/95 p-6 text-white shadow-2xl">
-              <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">قواعد اللعبة</p>
-              <h3 className="mt-2 text-3xl font-bold">قواعد اللعبة</h3>
-              <ul className="mt-4 space-y-2 text-base text-slate-200">
-                <li>1. لديك 6 فئات وكل فئة فيها 5 أسئلة بقيم 10 إلى 50.</li>
-                <li>2. الدور يتناوب بين الفريقين لاختيار الفئة والقيمة.</li>
-                <li>3. بعد الاختيار يبدأ عدّاد 5 ثوانٍ ثم يفتح البازر 20 ثانية.</li>
-                <li>4. أول لاعب يضغط البازر هو الوحيد الذي يجيب من جهازه.</li>
-                <li>5. الإجابة الصحيحة تضيف النقاط، والخاطئة تخصم نفس القيمة.</li>
-              </ul>
-
-              <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <Button type="button" className={`${HOST_ACTION_BUTTON_CLASS} px-6`} onClick={() => setShowTriviaRulesModal(false)}>
-                  إلغاء
-                </Button>
-                <Button
-                  type="button"
-                  className={`${HOST_ACTION_BUTTON_CLASS} px-6`}
-                  disabled={Boolean(busyAction) || !canStartTrivia}
-                  onClick={() => void handleStartTriviaFromModal()}
-                >
-                  إغلاق وبدء اللعبة
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : null
-      }
     </div >
   )
 }

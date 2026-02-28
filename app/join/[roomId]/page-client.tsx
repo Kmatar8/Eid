@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState, type FormEvent } from "react"
+import { useState, useRef, type FormEvent } from "react"
+import { Camera, ImagePlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { LiveApiError, joinRoom } from "@/lib/client/live-api"
@@ -29,10 +30,29 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
   const existingSession = getPlayerSession(roomId)
   const [name, setName] = useState(existingSession?.playerName ?? "")
   const [avatarEmoji, setAvatarEmoji] = useState("🙂")
+  const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasExistingSession] = useState(Boolean(existingSession))
   const quickAvatars = ["🙂", "😎", "🤩", "🔥", "⭐", "🎉", "🧠", "🚀"]
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("حجم الصورة يجب أن لا يتجاوز 2 ميجابايت.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setAvatarImageUrl(e.target?.result as string)
+      setAvatarEmoji("")
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -40,7 +60,12 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
     setError(null)
 
     try {
-      const response = await joinRoom(roomId, name.trim(), avatarEmoji.trim() || undefined)
+      const response = await joinRoom(
+        roomId,
+        name.trim(),
+        avatarEmoji.trim() || undefined,
+        avatarImageUrl || undefined
+      )
       savePlayerSession({
         roomId,
         playerId: response.player.id,
@@ -74,7 +99,7 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
           </p>
         </header>
 
-        <section className="party-surface-strong rounded-4xl p-6 sm:p-7">
+        <section className="party-surface-strong !bg-black/50 rounded-4xl p-6 sm:p-7 shadow-2xl">
           <form className="space-y-5" onSubmit={handleJoin}>
             <label className="block text-sm font-semibold text-slate-100">
               الاسم المستعار
@@ -89,30 +114,75 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
               />
             </label>
 
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-slate-100">
-                الرمز التعبيري
-                <input
-                  className="mt-2 h-12 w-full rounded-2xl border border-white/20 bg-white/10 px-4 text-2xl transition focus:border-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-300/25"
-                  value={avatarEmoji}
-                  onChange={(event) => setAvatarEmoji(event.target.value)}
-                  maxLength={8}
-                />
-              </label>
-              <div className="grid grid-cols-8 gap-2">
-                {quickAvatars.map((avatar) => (
-                  <button
-                    key={avatar}
-                    type="button"
-                    onClick={() => setAvatarEmoji(avatar)}
-                    className={`h-11 rounded-xl border text-2xl transition hover:scale-105 ${avatarEmoji === avatar
-                      ? "border-amber-300 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.45)]"
-                      : "border-white/20 bg-white/10"
-                      }`}
-                  >
-                    {avatar}
-                  </button>
-                ))}
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <label className="block text-sm font-semibold text-slate-100">صورة العرض أو الرمز التعبيري</label>
+
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <div className="relative flex size-20 shrink-0 flex-col items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-white/30 bg-black/40 text-3xl shadow-inner cursor-pointer hover:border-cyan-400 transition-colors" onClick={() => fileInputRef.current?.click()}>
+                  {avatarImageUrl ? (
+                    <img src={avatarImageUrl} alt="Avatar" className="h-full w-full object-cover" />
+                  ) : avatarEmoji ? (
+                    <span>{avatarEmoji}</span>
+                  ) : (
+                    <Camera className="size-8 text-white/30" />
+                  )}
+                  {avatarImageUrl && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                      <ImagePlus className="size-6 text-white" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-1 flex-col gap-3 w-full">
+                  <div className="grid grid-cols-4 sm:grid-cols-4 md:grid-cols-8 gap-2 w-full">
+                    {quickAvatars.map((avatar) => (
+                      <button
+                        key={avatar}
+                        type="button"
+                        onClick={() => {
+                          setAvatarEmoji(avatar)
+                          setAvatarImageUrl(null)
+                        }}
+                        className={`h-11 rounded-xl border text-2xl transition hover:scale-105 ${!avatarImageUrl && avatarEmoji === avatar
+                            ? "border-amber-300 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.45)]"
+                            : "border-white/20 bg-white/10 hover:bg-white/20"
+                          }`}
+                      >
+                        {avatar}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      title="Upload Image"
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 flex-1 rounded-xl border border-white/20 bg-white/5 text-sm text-white hover:bg-white/10"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <ImagePlus className="mr-2 size-4" />
+                      إرفاق صورة
+                    </Button>
+                    <input
+                      className="h-10 w-20 text-center rounded-xl border border-white/20 bg-white/10 px-2 text-xl transition focus:border-cyan-300 focus:outline-none focus:ring-4 focus:ring-cyan-300/25 hidden sm:block"
+                      value={avatarEmoji}
+                      onChange={(event) => {
+                        setAvatarEmoji(event.target.value)
+                        setAvatarImageUrl(null)
+                      }}
+                      maxLength={2}
+                      placeholder="😁"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
