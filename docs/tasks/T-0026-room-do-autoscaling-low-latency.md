@@ -143,3 +143,19 @@ Deliver a room-sharded realtime architecture that sustains `1,000-5,000` concurr
    - npm command: `npm run load:rooms-100`
    - supports host credential pool, 100-room cap, 20 players/room default, and p50/p95/p99 latency summary.
 16. Updated README with load canary usage and credential requirements for concurrent room runs.
+17. Added client-side invalid-action guards to reduce `INVALID_STATE_TRANSITION` noise during Jeopardy progression:
+   - host UI now blocks unsupported host actions per authoritative room state/phase before API call
+   - host control buttons/shortcuts are phase-gated (team assignment/rename, start trivia, resume, end)
+   - controller answer submit now enforces `canAnswer` guard and triggers fast state re-sync on race conditions (`INVALID_STATE_TRANSITION` / `TRIVIA_INVALID_RESPONDER`)
+18. Reduced intermittent cross-instance stream lag by tightening room shard hydration and stream polling behavior:
+   - room shard hydrate TTL reduced from fixed `1000ms` to configurable `HROOF_ROOM_HYDRATE_TTL_MS` (default `250ms`)
+   - stream hub fallback poll interval is now phase-adaptive (`1000ms` idle, `500ms` board turn, `250ms` active question phases)
+19. Validation run (phase guards + latency tuning):
+   - `npm run lint` (warnings only; no errors)
+   - `npm run build` (success)
+20. Addressed intermittent controller countdown desync observed in live sessions:
+   - stream hub now tolerates short-lived player presence misses before closing controller subscribers (`PLAYER_NOT_FOUND` requires repeated misses)
+   - controller fallback polling now runs even while local action requests are in-flight, reducing stale-screen windows during transient network latency
+21. Validation run (controller desync fix):
+   - `npm run lint` (warnings only; no errors)
+   - `npm run build` (success)

@@ -12,8 +12,8 @@ const GLOBAL_STORE_DO_NAME = "hroof-global-store-v1"
 const ROOM_STORE_DO_PREFIX = "hroof-room-store-v1:"
 const STORE_STATE_URL = "https://hroof-store/state"
 const GLOBAL_HYDRATE_TTL_MS = 350
-const ROOM_HYDRATE_TTL_MS = 1000
 const ROOM_SCOPED_STORE_FLAG = "HROOF_ROOM_SCOPED_DO_STORE"
+const DEFAULT_ROOM_HYDRATE_TTL_MS = 250
 
 type DurableObjectNamespaceLike = {
   idFromName: (name: string) => unknown
@@ -42,6 +42,23 @@ type ScopeSyncState = {
 }
 
 const roomScopeSyncByRoomId = new Map<string, ScopeSyncState>()
+
+function parsePositiveInt(value: string | undefined, fallback: number) {
+  if (!value) {
+    return fallback
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback
+  }
+
+  return parsed
+}
+
+function getRoomHydrateTtlMs() {
+  return parsePositiveInt(process.env.HROOF_ROOM_HYDRATE_TTL_MS, DEFAULT_ROOM_HYDRATE_TTL_MS)
+}
 
 function getRoomScopeSyncState(roomId: string): ScopeSyncState {
   const existing = roomScopeSyncByRoomId.get(roomId)
@@ -191,7 +208,7 @@ export async function hydrateRoomShardFromDurable(roomId: string) {
   }
 
   const syncState = getRoomScopeSyncState(roomId)
-  if (Date.now() - syncState.lastHydratedAt < ROOM_HYDRATE_TTL_MS) {
+  if (Date.now() - syncState.lastHydratedAt < getRoomHydrateTtlMs()) {
     return
   }
 

@@ -26,7 +26,7 @@ This board tracks implementation order, ownership, and execution status.
 | 6 | T-0006 | M4 | Live E2E Testing Surface (Host/Join/Controller/Room) | done | AI-Agent | T-0001, T-0002, T-0003, T-0004 | Host/join/controller/room test surfaces + smoke script delivered |
 | 7 | T-0007 | M4 | Controller UX Simplification + Submit Reliability | done | AI-Agent | T-0006 | Controller simplified; submit reliability hardening deployed |
 | 8 | T-0008 | M4 | Production Host Journey UI (Landing -> Login -> Lobby -> Game -> Celebration) | in_progress | AI-Agent | T-0006, T-0007 | User-approved staged host flow and TV-first UX |
-| 9 | T-0026 | M5 | Room-Scoped DO Autoscaling + Low-Latency Realtime | in_progress | AI-Agent | T-0005 | Phase 2 advanced: DO delta publish, host action idempotency enforcement, per-room host rate limiting, DO ws/alarm groundwork + 100-room load harness |
+| 9 | T-0026 | M5 | Room-Scoped DO Autoscaling + Low-Latency Realtime | in_progress | AI-Agent | T-0005 | Phase 2 advanced: DO delta publish, host idempotency/rate limiting, 100-room harness, Jeopardy action guards, faster stream hydration/polling, controller desync mitigation |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

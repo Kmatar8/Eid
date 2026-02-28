@@ -355,7 +355,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           return
         }
 
-        if (!busy && isPageVisible) {
+        if (isPageVisible) {
           await refreshState()
         }
 
@@ -373,7 +373,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         window.clearTimeout(timer)
       }
     }
-  }, [busy, controllerPollMs, isPageVisible, refreshState, session])
+  }, [controllerPollMs, isPageVisible, refreshState, session])
 
   useEffect(() => {
     if (!session) {
@@ -532,7 +532,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }
 
   const submitAnswer = async (option: string) => {
-    if (!session || !selectedQuestionId || busy) {
+    if (!session || !selectedQuestionId || busy || !canAnswer) {
       return
     }
 
@@ -561,6 +561,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       if (isTerminalControllerSessionError(requestError)) {
         terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
         return
+      }
+      if (
+        requestError instanceof LiveApiError &&
+        (requestError.code === "INVALID_STATE_TRANSITION" || requestError.code === "TRIVIA_INVALID_RESPONDER")
+      ) {
+        setNotice("تم تغيير حالة السؤال قبل إرسال الإجابة. جارٍ مزامنة الحالة...")
+        await refreshState()
       }
       setError(toErrorMessage(requestError))
     } finally {

@@ -20,7 +20,7 @@ import {
   getHostToken,
   setHostRoomId,
 } from "@/lib/client/live-session"
-import type { ClientActionType } from "@/lib/server/protocol-v1"
+import type { HostActionType } from "@/lib/server/protocol-v1"
 import type { RoomSnapshot } from "@/lib/server/types"
 
 const HOST_POLL_IDLE_MS = 1700
@@ -162,6 +162,76 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
   }
 
   return HOST_POLL_IDLE_MS
+}
+
+function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionType): string | null {
+  if (!room) {
+    return "لم يتم تحميل حالة الغرفة بعد."
+  }
+
+  if (isTerminalRoomState(room.state)) {
+    return "تم إنهاء هذه الغرفة ولا يمكن تنفيذ أوامر جديدة."
+  }
+
+  if (
+    room.state === "paused_wait_host" &&
+    action !== "host.resumeSession" &&
+    action !== "host.endSession" &&
+    action !== "host.heartbeat"
+  ) {
+    return "الجلسة متوقفة. اضغط استئناف الجلسة أولًا."
+  }
+
+  if (action === "host.assignPlayerTeam" || action === "host.renameTeam") {
+    return room.state === "lobby_open" || room.state === "lobby_locked" || room.state === "teams_ready"
+      ? null
+      : "تعديل الفرق متاح فقط قبل بدء اللعب."
+  }
+
+  if (action === "host.lockLobby") {
+    return room.state === "lobby_open" ? null : "لا يمكن قفل اللوبي في الحالة الحالية."
+  }
+
+  if (action === "host.startTeams") {
+    return room.state === "lobby_locked" ? null : "ابدأ توزيع الفرق بعد قفل اللوبي."
+  }
+
+  if (action === "host.startTrivia") {
+    return room.state === "teams_ready" || room.state === "between_games"
+      ? null
+      : "بدء الجيوباردي متاح فقط بعد تجهيز الفرق."
+  }
+
+  if (action === "host.selectTriviaClue") {
+    return room.state === "game_live" && room.trivia.status === "in_progress" && room.trivia.phase === "board_turn"
+      ? null
+      : "اختيار السؤال متاح فقط أثناء دور اختيار اللوحة."
+  }
+
+  if (action === "host.selectAnotherResponder") {
+    return room.state === "game_live" &&
+      room.trivia.status === "in_progress" &&
+      (room.trivia.phase === "board_turn" || room.trivia.phase === "answer_active")
+      ? null
+      : "تبديل اللاعب متاح فقط أثناء دور الاختيار أو الإجابة."
+  }
+
+  if (action === "host.nextQuestion") {
+    return room.state === "game_live" &&
+      room.trivia.status === "in_progress" &&
+      (room.trivia.phase === "answer_reveal" ||
+        room.trivia.phase === "countdown" ||
+        room.trivia.phase === "buzzer_open" ||
+        room.trivia.phase === "answer_active")
+      ? null
+      : "الانتقال للسؤال التالي غير متاح في هذه المرحلة."
+  }
+
+  if (action === "host.resumeSession") {
+    return room.state === "paused_wait_host" ? null : "الجلسة ليست في وضع الإيقاف المؤقت."
+  }
+
+  return null
 }
 
 export default function HostStagePage() {
@@ -574,9 +644,18 @@ export default function HostStagePage() {
   }, [hostToken, isPageVisible, roomId, syncServerClock])
 
   const runAction = useCallback(
-    async (type: ClientActionType, payload?: Record<string, unknown>) => {
+    async (type: HostActionType, payload?: Record<string, unknown>) => {
       if (!hostToken || !roomId) {
         throw new LiveApiError(401, "UNAUTHORIZED", "Host session is missing")
+      }
+
+      const guardError = getHostActionGuardError(room, type)
+      if (guardError) {
+        throw new LiveApiError(409, "ACTION_BLOCKED_CLIENT", guardError, {
+          state: room?.state,
+          phase: room?.trivia.phase,
+          action: type,
+        })
       }
 
       setBusyAction(type)
@@ -588,11 +667,19 @@ export default function HostStagePage() {
         syncServerClock(ack.ts)
         setRoom(ack.payload.room)
         return ack.payload.room
+      } catch (requestError) {
+        if (
+          requestError instanceof LiveApiError &&
+          (requestError.code === "INVALID_STATE_TRANSITION" || requestError.code === "ROOM_NOT_ACTIVE")
+        ) {
+          void refreshState()
+        }
+        throw requestError
       } finally {
         setBusyAction(null)
       }
     },
-    [hostToken, roomId, syncServerClock]
+    [hostToken, refreshState, room, roomId, syncServerClock]
   )
 
   const assignPlayer = useCallback(
@@ -779,6 +866,12 @@ export default function HostStagePage() {
 
   const canSelectAnotherResponder =
     trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
+
+  const canManageTeams = room?.state === "lobby_open" || room?.state === "lobby_locked" || room?.state === "teams_ready"
+  const canStartSession = Boolean(canManageTeams && room && room.playerCount > 0)
+  const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
+  const canResumeSession = room?.state === "paused_wait_host"
+  const canEndSession = Boolean(room && !isTerminalRoomState(room.state))
 
   const canSelectClue = trivia?.status === "in_progress" && trivia.phase === "board_turn"
   const canAdvanceFromQuestionModal =
@@ -998,7 +1091,7 @@ export default function HostStagePage() {
                           <Button
                             type="button"
                             size="sm"
-                            disabled={Boolean(busyAction) || isSaving}
+                            disabled={Boolean(busyAction) || isSaving || !canManageTeams}
                             onClick={() => void handleRenameTeam(team.teamId)}
                             className="h-10 rounded-lg bg-white/15 px-3 text-xs font-bold hover:bg-white/25"
                           >
@@ -1014,7 +1107,7 @@ export default function HostStagePage() {
               <Button
                 type="button"
                 className="mt-5 w-full rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
-                disabled={Boolean(busyAction) || room.playerCount === 0}
+                disabled={Boolean(busyAction) || !canStartSession}
                 onClick={() => void handleStartSession()}
               >
                 {busyAction === "host.prepareSession" ? "جاري تجهيز الفرق..." : "ابدأ الفعالية"}
@@ -1061,6 +1154,7 @@ export default function HostStagePage() {
                       <div className="mt-3 flex gap-2">
                         <button
                           type="button"
+                          disabled={Boolean(busyAction) || !canManageTeams}
                           className="flex-1 rounded-lg border border-pink-300/40 bg-pink-500/20 px-2 py-1 text-xs font-semibold text-pink-100 hover:bg-pink-500/30"
                           onClick={() => void assignPlayer(player.playerId, "team_a")}
                         >
@@ -1068,6 +1162,7 @@ export default function HostStagePage() {
                         </button>
                         <button
                           type="button"
+                          disabled={Boolean(busyAction) || !canManageTeams}
                           className="flex-1 rounded-lg border border-cyan-300/40 bg-cyan-500/20 px-2 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/30"
                           onClick={() => void assignPlayer(player.playerId, "team_b")}
                         >
@@ -1168,12 +1263,17 @@ export default function HostStagePage() {
               <Button
                 type="button"
                 className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
-                disabled={Boolean(busyAction)}
+                disabled={Boolean(busyAction) || !canStartTrivia}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
                 ابدأ لعبة الجيوباردي
               </Button>
-              <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(busyAction) || !canEndSession}
+                onClick={() => void handleEndSession()}
+              >
                 إنهاء الجلسة
               </Button>
             </div>
@@ -1192,12 +1292,17 @@ export default function HostStagePage() {
               <Button
                 type="button"
                 className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
-                disabled={Boolean(busyAction)}
+                disabled={Boolean(busyAction) || !canResumeSession}
                 onClick={() => void handleResumeSession()}
               >
                 استئناف الجلسة الآن
               </Button>
-              <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(busyAction) || !canEndSession}
+                onClick={() => void handleEndSession()}
+              >
                 إنهاء الجلسة
               </Button>
             </div>
@@ -1531,12 +1636,17 @@ export default function HostStagePage() {
               <Button
                 type="button"
                 className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-8 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
-                disabled={Boolean(busyAction)}
+                disabled={Boolean(busyAction) || !canStartTrivia}
                 onClick={() => setShowTriviaRulesModal(true)}
               >
                 الانتقال للعبة التالية
               </Button>
-              <Button type="button" variant="outline" onClick={() => void handleEndSession()}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={Boolean(busyAction) || !canEndSession}
+                onClick={() => void handleEndSession()}
+              >
                 إنهاء الفعالية
               </Button>
             </div>
@@ -1553,7 +1663,8 @@ export default function HostStagePage() {
                 onClick={() => void handleEndSession()}
                 aria-label="إنهاء الفعالية"
                 title="إنهاء الفعالية"
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95"
+                disabled={Boolean(busyAction) || !canEndSession}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-red-500/22"
               >
                 <Power className="size-5" />
               </button>
@@ -1618,7 +1729,7 @@ export default function HostStagePage() {
                 <Button
                   type="button"
                   className="rounded-xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 px-6 font-black text-slate-950"
-                  disabled={Boolean(busyAction)}
+                  disabled={Boolean(busyAction) || !canStartTrivia}
                   onClick={() => void handleStartTriviaFromModal()}
                 >
                   إغلاق وبدء اللعبة

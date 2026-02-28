@@ -7,8 +7,11 @@ import type { RoomSnapshot } from "@/lib/server/types"
 
 export const runtime = "nodejs"
 
-const STREAM_FALLBACK_POLL_MS = 1000
+const STREAM_POLL_IDLE_MS = 1000
+const STREAM_POLL_BOARD_MS = 500
+const STREAM_POLL_ACTIVE_MS = 250
 const STREAM_KEEPALIVE_MS = 15000
+const STREAM_PLAYER_NOT_FOUND_MISS_THRESHOLD = 5
 
 type RouteContext = {
   params: Promise<{ roomId: string }>
@@ -21,6 +24,7 @@ type SnapshotReadResult =
 type StreamSubscriber = {
   id: string
   actor: RoomActor
+  playerMissingCount: number
   onState: (snapshot: RoomSnapshot) => void
   onError: (error: {
     status: number
@@ -42,6 +46,22 @@ type RoomStreamHub = {
 
 type GlobalWithRoomHubs = typeof globalThis & {
   __hroofRoomStreamHubs?: Map<string, RoomStreamHub>
+}
+
+function resolveStreamPollMs(snapshot: RoomSnapshot | null) {
+  if (!snapshot) {
+    return STREAM_POLL_IDLE_MS
+  }
+
+  if (snapshot.state !== "game_live" || snapshot.trivia.status !== "in_progress") {
+    return STREAM_POLL_IDLE_MS
+  }
+
+  if (snapshot.trivia.phase === "board_turn") {
+    return STREAM_POLL_BOARD_MS
+  }
+
+  return STREAM_POLL_ACTIVE_MS
 }
 
 function authorizeSnapshotForSubscriber(
@@ -202,6 +222,15 @@ function fanOutSnapshot(hub: RoomStreamHub, snapshot: RoomSnapshot) {
   for (const subscriber of subscribers) {
     const authorized = authorizeSnapshotForSubscriber(snapshot, subscriber.actor)
     if (!authorized.ok) {
+      // A player may be temporarily missing from a stale shard snapshot on this process.
+      // Require repeated misses before force-closing the stream subscriber.
+      if (authorized.code === "PLAYER_NOT_FOUND" && subscriber.actor.role === "player") {
+        subscriber.playerMissingCount += 1
+        if (subscriber.playerMissingCount < STREAM_PLAYER_NOT_FOUND_MISS_THRESHOLD) {
+          continue
+        }
+      }
+
       try {
         subscriber.onError(authorized)
       } catch {
@@ -210,6 +239,8 @@ function fanOutSnapshot(hub: RoomStreamHub, snapshot: RoomSnapshot) {
       hub.subscribers.delete(subscriber.id)
       continue
     }
+
+    subscriber.playerMissingCount = 0
 
     try {
       subscriber.onState(snapshot)
@@ -251,7 +282,7 @@ function scheduleHubPoll(hub: RoomStreamHub, delayMs: number) {
     }
 
     if (hub.inFlight) {
-      scheduleHubPoll(hub, STREAM_FALLBACK_POLL_MS)
+      scheduleHubPoll(hub, resolveStreamPollMs(hub.currentSnapshot))
       return
     }
 
@@ -274,7 +305,7 @@ function scheduleHubPoll(hub: RoomStreamHub, delayMs: number) {
     }
 
     if (hub.subscribers.size > 0) {
-      scheduleHubPoll(hub, STREAM_FALLBACK_POLL_MS)
+      scheduleHubPoll(hub, resolveStreamPollMs(hub.currentSnapshot))
     } else {
       removeRoomStreamHubIfIdle(hub.roomId)
     }
@@ -297,7 +328,7 @@ function subscribeRoomStreamHub(roomId: string, seedSnapshot: RoomSnapshot, subs
     }
   }
 
-  scheduleHubPoll(hub, STREAM_FALLBACK_POLL_MS)
+  scheduleHubPoll(hub, resolveStreamPollMs(hub.currentSnapshot))
 
   return () => {
     const hubs = getRoomStreamHubs()
@@ -403,6 +434,7 @@ export async function GET(request: Request, context: RouteContext) {
       unsubscribe = subscribeRoomStreamHub(roomId, initialSnapshot.snapshot, {
         id: subscriberId,
         actor: actor.actor,
+        playerMissingCount: 0,
         onState: (snapshot) => {
           if (closed) {
             return
