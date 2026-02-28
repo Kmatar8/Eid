@@ -143,11 +143,11 @@ export function FeedbackOverlay({
                       x: Math.cos((angle * Math.PI) / 180) * distance,
                       y: Math.sin((angle * Math.PI) / 180) * distance + (Math.random() * 150),
                       scale: [0, 1.2, 1],
-                      opacity: [0, 1, 0.9, 0],
+                      opacity: [0, 1],
                       rotate: Math.random() * 360 - 180,
                     }}
                     transition={{
-                      duration: 1.8 + Math.random() * 0.5,
+                      duration: 0.8 + Math.random() * 0.4,
                       ease: [0.175, 0.885, 0.32, 1.275], // slight spring ease
                       delay: Math.random() * 0.1,
                     }}
