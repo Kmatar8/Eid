@@ -99,7 +99,7 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
           </p>
         </header>
 
-        <section className="party-surface-strong !bg-black/50 rounded-4xl p-6 sm:p-7 shadow-2xl">
+        <section className="backdrop-blur-2xl bg-black/50 border border-white/10 rounded-4xl p-6 sm:p-7 shadow-2xl">
           <form className="space-y-5" onSubmit={handleJoin}>
             <label className="block text-sm font-semibold text-slate-100">
               الاسم المستعار
@@ -144,8 +144,8 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
                           setAvatarImageUrl(null)
                         }}
                         className={`h-11 rounded-xl border text-2xl transition hover:scale-105 ${!avatarImageUrl && avatarEmoji === avatar
-                            ? "border-amber-300 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.45)]"
-                            : "border-white/20 bg-white/10 hover:bg-white/20"
+                          ? "border-amber-300 bg-amber-400/25 shadow-[0_0_20px_rgba(251,191,36,0.45)]"
+                          : "border-white/20 bg-white/10 hover:bg-white/20"
                           }`}
                       >
                         {avatar}
