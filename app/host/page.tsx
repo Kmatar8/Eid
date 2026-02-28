@@ -1072,7 +1072,7 @@ export default function HostStagePage() {
 
         {room && stage === "lobby" ? (
           <section className="grid gap-4 xl:grid-cols-[37rem_1fr]">
-            <article className="party-surface-strong rounded-3xl p-5">
+            <article className="backdrop-blur-lg bg-black/30 border border-white/10 rounded-3xl p-5 shadow-2xl">
               <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Join QR</p>
               <h2 className="mt-2 text-3xl font-bold">امسح الرمز للانضمام</h2>
               <p className="mt-2 text-base text-slate-200">
@@ -1089,7 +1089,7 @@ export default function HostStagePage() {
                 )}
               </div>
 
-              <div className="mt-4 rounded-xl border border-white/20 bg-white/10 p-3 text-sm">
+              <div className="mt-4 rounded-xl border border-white/20 bg-black/20 p-3 text-sm">
                 <p className="text-slate-300">رابط الانضمام:</p>
                 {joinUrl ? (
                   <a className="break-all text-cyan-200 underline" href={joinUrl} target="_blank" rel="noreferrer">
@@ -1112,7 +1112,7 @@ export default function HostStagePage() {
               </Button>
             </article>
 
-            <article className="party-surface-strong space-y-4 rounded-3xl p-5">
+            <article className="backdrop-blur-lg bg-black/30 border border-white/10 space-y-4 rounded-3xl p-5 shadow-2xl">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Players</p>
                 <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
