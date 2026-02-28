@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { FeedbackOverlay } from "@/components/ui/feedback-animations"
 import { BorderBeam } from "@/components/ui/border-beam"
+import confetti from "canvas-confetti"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import {
@@ -261,6 +262,36 @@ export default function HostStagePage() {
         setFeedbackState(wasCorrect ? "correct" : "wrong")
         setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
         setProcessedFeedbackQuestionId(qId)
+
+        if (wasCorrect) {
+          const end = Date.now() + 3 * 1000 // 3 seconds
+          const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1", "#10b981", "#3b82f6"]
+
+          const frame = () => {
+            if (Date.now() > end) return
+            confetti({
+              particleCount: 3,
+              angle: 60,
+              spread: 60,
+              startVelocity: 65,
+              origin: { x: 0, y: 0.6 },
+              colors: colors,
+              zIndex: 50,
+            })
+            confetti({
+              particleCount: 3,
+              angle: 120,
+              spread: 60,
+              startVelocity: 65,
+              origin: { x: 1, y: 0.6 },
+              colors: colors,
+              zIndex: 50,
+            })
+            requestAnimationFrame(frame)
+          }
+
+          frame()
+        }
       }
     }
     // Reset tracker when return to board
@@ -1269,8 +1300,8 @@ export default function HostStagePage() {
                         disabled={Boolean(busyAction) || !canSelectClue || isUsed}
                         onClick={() => void handleSelectTriviaClue(clue.questionId)}
                         className={`group relative flex h-full min-h-0 items-center justify-center overflow-hidden rounded-xl border-2 text-3xl font-black transition-all duration-200 lg:text-4xl ${isUsed
-                            ? "border-transparent bg-slate-900/40 text-slate-700 shadow-inner backdrop-blur-sm"
-                            : "border-indigo-500/30 bg-gradient-to-b from-indigo-900/80 to-slate-900/90 text-amber-400 shadow-sm backdrop-blur-md hover:-translate-y-1 hover:border-indigo-400/60 hover:from-indigo-800/90 hover:to-slate-800/90 hover:text-amber-300 hover:shadow-[0_8px_20px_rgba(79,70,229,0.25)] active:translate-y-0 active:scale-95"
+                          ? "border-transparent bg-slate-900/40 text-slate-700 shadow-inner backdrop-blur-sm"
+                          : "border-indigo-500/30 bg-gradient-to-b from-indigo-900/80 to-slate-900/90 text-amber-400 shadow-sm backdrop-blur-md hover:-translate-y-1 hover:border-indigo-400/60 hover:from-indigo-800/90 hover:to-slate-800/90 hover:text-amber-300 hover:shadow-[0_8px_20px_rgba(79,70,229,0.25)] active:translate-y-0 active:scale-95"
                           } ${isSelected ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-900" : ""}`}
                       >
                         {!isUsed && (
