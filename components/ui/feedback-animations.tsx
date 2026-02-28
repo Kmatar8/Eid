@@ -15,10 +15,12 @@ export function FeedbackOverlay({
   currentStatus,
   scoreDelta,
   onComplete,
+  showStickers = true,
 }: {
   currentStatus: FeedbackType
   scoreDelta?: number | null
   onComplete?: () => void
+  showStickers?: boolean
 }) {
   useEffect(() => {
     if (!currentStatus) {
@@ -162,7 +164,7 @@ export function FeedbackOverlay({
               </div>
 
               {/* Massive spread of Wrong Answer Stickers */}
-              {wrongStickers.map(({ i, emoji, size, x, y, rotate, duration, delay }) => (
+              {showStickers && wrongStickers.map(({ i, emoji, size, x, y, rotate, duration, delay }) => (
                 <motion.div
                   key={`wrong-sticker-${i}`}
                   className="absolute z-10"

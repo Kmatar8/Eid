@@ -584,6 +584,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       <FeedbackOverlay
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
+        showStickers={false}
         onComplete={() => {
           setFeedbackState(null)
           setFeedbackScoreDelta(null)
