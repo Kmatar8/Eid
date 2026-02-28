@@ -49,7 +49,7 @@ function toErrorMessage(error: unknown) {
     return error.message
   }
 
-  return "Unknown error"
+  return "خطأ غير معروف"
 }
 
 function optionLetter(index: number) {
@@ -423,7 +423,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const myTeam = myTeamId ? teamById.get(myTeamId) ?? null : null
   const responderId = room?.trivia.currentResponderPlayerId ?? null
   const responderTeamId = room?.trivia.currentResponderTeamId ?? null
-  const responderName = responderId ? playerNameById.get(responderId) ?? "Player" : null
+  const responderName = responderId ? playerNameById.get(responderId) ?? "لاعب" : null
   const responderTeam = responderTeamId ? teamById.get(responderTeamId) ?? null : null
   const activeTone = getTeamTone(responderTeamId ?? myTeamId)
 
@@ -471,9 +471,9 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
     if (room.trivia.phase === "board_turn") {
       const pickerName = room.trivia.currentPickerPlayerId
-        ? playerNameById.get(room.trivia.currentPickerPlayerId) ?? "Player"
-        : "Player"
-      const pickerTeam = room.trivia.currentTeamId ? teamById.get(room.trivia.currentTeamId)?.name ?? "Team" : "Team"
+        ? playerNameById.get(room.trivia.currentPickerPlayerId) ?? "لاعب"
+        : "لاعب"
+      const pickerTeam = room.trivia.currentTeamId ? teamById.get(room.trivia.currentTeamId)?.name ?? "فريق" : "فريق"
       return `${pickerName} من ${pickerTeam} يختار السؤال الآن.`
     }
 
@@ -487,11 +487,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
     if (room.trivia.phase === "answer_active") {
       if (canAnswer) {
-        return `${session.playerName}, this question is for you.`
+        return `هذا السؤال لك يا ${session.playerName}.`
       }
-      const teamName = responderTeam?.name ?? "Team"
-      const playerName = responderName ?? "Player"
-      return `Question for ${playerName} from ${teamName}.`
+      const teamName = responderTeam?.name ?? "فريق"
+      const playerName = responderName ?? "لاعب"
+      return `السؤال للاعب ${playerName} من ${teamName}.`
     }
 
     if (room.trivia.phase === "answer_reveal" && room.trivia.lastResult) {
@@ -540,7 +540,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     setBusy(true)
     setSubmittedQuestionId(selectedQuestionId)
     setError(null)
-    setNotice(`Submitting ${option}...`)
+    setNotice(`جاري إرسال الإجابة: ${option}...`)
 
     try {
       let ack: Awaited<ReturnType<typeof sendAction>>
@@ -555,7 +555,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
       syncServerClock(ack.ts)
       setRoom(ack.payload.room)
-      setNotice(`Answer submitted: ${option}`)
+      setNotice(`تم إرسال الإجابة: ${option}`)
     } catch (requestError) {
       setSubmittedQuestionId(null)
       if (isTerminalControllerSessionError(requestError)) {
@@ -574,26 +574,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setBusy(false)
     }
   }
-
-  const phaseLabel = (() => {
-    const phase = room?.trivia.phase
-    if (!phase || room?.trivia.status !== "in_progress") {
-      return "Waiting"
-    }
-    if (phase === "board_turn") return "Board Turn"
-    if (phase === "countdown") return "Countdown"
-    if (phase === "buzzer_open") return "Buzzer"
-    if (phase === "answer_active") return "Answer"
-    if (phase === "answer_reveal") return "Reveal"
-    return phase
-  })()
-
-  const phaseToneClass =
-    phaseLabel === "Buzzer"
-      ? "border-rose-300/50 bg-rose-500/20 text-rose-100"
-      : phaseLabel === "Answer"
-        ? "border-cyan-300/50 bg-cyan-500/20 text-cyan-100"
-        : "border-white/25 bg-white/10 text-slate-100"
 
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
@@ -623,7 +603,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
             <h1 className="text-2xl font-black">لا يوجد اتصال لاعب محفوظ</h1>
             <p className="mt-2 text-sm text-slate-200">ابدأ الانضمام أولًا ثم ارجع لوحدة التحكم.</p>
             <p className="mt-3 text-sm text-slate-300">
-              Join first via{" "}
+              ابدأ الانضمام عبر{" "}
               <Link className="font-semibold text-cyan-300 underline" href={`/join/${roomId}`}>
                 /join/{roomId}
               </Link>
@@ -633,13 +613,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           </section>
         ) : (
           <article className={`party-surface-strong rounded-4xl border p-6 sm:p-7 ${activeTone.border} ${activeTone.bg}`}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               <div>
                 <h1 className="text-3xl font-black">{session.playerName}</h1>
-                <p className="mt-1 text-sm text-slate-200">{myTeam ? `Team: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
-              </div>
-              <div className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${phaseToneClass}`}>
-                {phaseLabel}
+                <p className="mt-1 text-sm text-slate-200">{myTeam ? `فريق: ${myTeam.name}` : "بانتظار إسناد فريقك."}</p>
               </div>
             </div>
 
@@ -692,7 +669,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 {canAnswer ? (
                   <>
                     <p className={`rounded-xl border px-4 py-2 text-sm font-semibold ${activeTone.border} ${activeTone.bg}`}>
-                      {session.playerName}, this question is for you.
+                      هذا السؤال لك يا {session.playerName}.
                     </p>
                     <p className="text-sm text-slate-200">الوقت المتبقي للإجابة: {answerSeconds} ثانية</p>
                     <div className="grid gap-2.5">
@@ -718,7 +695,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                   </>
                 ) : (
                   <p className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-slate-100">
-                    {responderName ?? "Player"} من {responderTeam?.name ?? "Team"} يجيب الآن.
+                    {responderName ?? "لاعب"} من {responderTeam?.name ?? "فريق"} يجيب الآن.
                   </p>
                 )}
               </div>
@@ -735,17 +712,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           </article>
         )}
 
-        <div className="mt-4 flex gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => void hydrateState()}
-            disabled={!session || busy}
-            className="h-11 rounded-xl border-white/30 bg-white/10 text-slate-100 hover:bg-white/20"
-          >
-            تحديث
-          </Button>
-        </div>
       </main>
     </div>
   )

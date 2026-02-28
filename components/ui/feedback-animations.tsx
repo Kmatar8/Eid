@@ -36,18 +36,29 @@ export function FeedbackOverlay({
     if (currentStatus !== "wrong") return []
 
     const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
-    const distanceMultiplier = isMobile ? 0.45 : 1
     const sizeMultiplier = isMobile ? 0.6 : 1
 
     return [...Array(36)].map((_, i) => {
       const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
-      const distance = (140 + Math.random() * 450) * distanceMultiplier
+
+      // Push the minimum distance out so they clear the 150px central icon
+      const minDistance = isMobile ? 180 : 280
+      const spread = isMobile ? 150 : 350
+      const distance = minDistance + Math.random() * spread
+
       const size = (2.5 + Math.random() * 3.5) * sizeMultiplier
       const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
       const emoji = emojis[i % emojis.length]
 
-      const x = Math.cos((angle * Math.PI) / 180) * distance
-      const y = Math.sin((angle * Math.PI) / 180) * distance + Math.random() * 150 * distanceMultiplier
+      const rad = (angle * Math.PI) / 180
+      const x = Math.cos(rad) * distance
+
+      // If the particle is falling downwards, push it even further down to clear the huge score text
+      let y = Math.sin(rad) * distance
+      if (y > 0) {
+        y += isMobile ? 110 : 180
+      }
+
       const rotate = Math.random() * 360 - 180
       const duration = 0.8 + Math.random() * 0.4
       const delay = Math.random() * 0.1

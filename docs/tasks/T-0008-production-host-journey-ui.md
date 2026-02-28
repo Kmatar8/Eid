@@ -29,6 +29,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 11. Enforce dark-mode-only runtime UI and disable light-mode toggle.
 12. Simplify trivia live-status card by removing auxiliary lines and enlarging primary command text.
 13. Vertically center the trivia live-status command text within its card.
+14. Simplify controller runtime chrome by removing phase pill/update button and localizing feedback text to Arabic.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -68,6 +69,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 12. Force dark theme at app shell level and disable theme toggle interactions.
 13. Trim trivia live-status block to a single large command line.
 14. Center trivia live-status command text vertically in the middle card.
+15. Remove controller phase-status pill and bottom update button; localize controller feedback/status copy to Arabic.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -84,6 +86,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 12. Runtime pages render dark mode by default with no light-mode switch.
 13. Trivia live-status card no longer shows heading/usage lines and displays larger primary status text.
 14. Trivia live-status command text is vertically centered inside the card.
+15. Controller no longer shows phase pill/update button, and player feedback text is Arabic.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -99,6 +102,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: no theme toggle is shown and runtime remains dark after reload.
 - [ ] Manual: trivia live-status card shows only large primary command text.
 - [ ] Manual: trivia live-status command text is vertically centered.
+- [ ] Manual: controller has no phase pill/update button and shows Arabic feedback copy.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -111,6 +115,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 7. Updated runtime theme policy to dark-only and removed light-mode switching.
 8. Removed trivia live-status heading/detail/usage lines and increased primary status text size.
 9. Centered trivia live-status command text vertically in the status card.
+10. Removed controller phase pill/update button and localized controller feedback/status messages to Arabic.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.
