@@ -258,6 +258,7 @@ export default function HostStagePage() {
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
   const streamConnectedRef = useRef(false)
+  const correctAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -284,6 +285,32 @@ export default function HostStagePage() {
       setNowTs(Date.now() + serverClockOffsetRef.current)
     }, CLOCK_TICK_MS)
     return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const audio = new Audio("/sounds/correct-answer.mp3")
+    audio.preload = "auto"
+    correctAnswerAudioRef.current = audio
+
+    return () => {
+      audio.pause()
+      correctAnswerAudioRef.current = null
+    }
+  }, [])
+
+  const playCorrectAnswerSound = useCallback(() => {
+    const audio = correctAnswerAudioRef.current
+    if (!audio) {
+      return
+    }
+
+    audio.currentTime = 0
+    const playPromise = audio.play()
+    if (playPromise) {
+      void playPromise.catch(() => {
+        // Browser autoplay policy may block playback before first user interaction.
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -334,6 +361,8 @@ export default function HostStagePage() {
         setProcessedFeedbackQuestionId(qId)
 
         if (wasCorrect) {
+          playCorrectAnswerSound()
+
           const end = Date.now() + 3 * 1000 // 3 seconds
           const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1", "#10b981", "#3b82f6"]
 
@@ -370,7 +399,13 @@ export default function HostStagePage() {
       setFeedbackState(null)
       setFeedbackScoreDelta(null)
     }
-  }, [room?.trivia?.phase, room?.trivia?.lastResult, room?.trivia?.selectedClue?.questionId, processedFeedbackQuestionId])
+  }, [
+    playCorrectAnswerSound,
+    processedFeedbackQuestionId,
+    room?.trivia?.lastResult,
+    room?.trivia?.phase,
+    room?.trivia?.selectedClue?.questionId,
+  ])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
