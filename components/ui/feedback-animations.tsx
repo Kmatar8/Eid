@@ -7,6 +7,15 @@ import { Check, X } from "lucide-react"
 
 type FeedbackType = "correct" | "wrong" | null
 
+const WRONG_STICKER_BURSTS = [
+  { x: -210, y: -110, width: 110, rotate: -20, delay: 0.02 },
+  { x: -175, y: 85, width: 92, rotate: -8, delay: 0.08 },
+  { x: -30, y: -165, width: 88, rotate: -12, delay: 0.14 },
+  { x: 150, y: -130, width: 120, rotate: 14, delay: 0.04 },
+  { x: 205, y: 10, width: 96, rotate: 10, delay: 0.11 },
+  { x: 120, y: 125, width: 104, rotate: 7, delay: 0.18 },
+] as const
+
 function formatScoreDelta(score: number) {
   return score >= 0 ? `+${score}` : `${score}`
 }
@@ -122,30 +131,51 @@ export function FeedbackOverlay({
             transition={{ duration: 0.5, type: "spring" }}
             className="relative z-10 flex flex-col items-center justify-center gap-4"
           >
-            <div className="relative flex items-center justify-center">
-              {wrongStickerSrc ? (
-                <div className="relative">
-                  <div className="absolute -inset-8 rounded-full bg-red-600/20 blur-2xl" />
-                  <Image
-                    src={wrongStickerSrc}
-                    alt="Wrong answer sticker"
-                    width={512}
-                    height={448}
-                    priority
-                    className="relative h-auto w-[clamp(220px,36vw,380px)] drop-shadow-[0_12px_40px_rgba(255,31,61,0.45)]"
-                  />
-                  <div className="absolute -right-3 -top-3 rounded-full border-2 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-2 shadow-[0_0_18px_rgba(239,68,68,0.5)]">
-                    <X className="h-6 w-6 text-white" strokeWidth={3} />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
-                  <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
-                    <X className="h-20 w-20 text-white" strokeWidth={4} />
-                  </div>
-                </>
-              )}
+            <div className="relative flex h-[360px] w-[520px] items-center justify-center">
+              <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
+              <div className="relative z-10 rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+                <X className="h-20 w-20 text-white" strokeWidth={4} />
+              </div>
+
+              {wrongStickerSrc
+                ? WRONG_STICKER_BURSTS.map((burst, index) => {
+                    const stickerHeight = Math.round((burst.width * 448) / 512)
+                    return (
+                      <motion.div
+                        key={`wrong-sticker-${index}`}
+                        className="absolute z-20"
+                        initial={{
+                          opacity: 0,
+                          scale: 0.2,
+                          x: 0,
+                          y: 0,
+                          rotate: burst.rotate - 18,
+                        }}
+                        animate={{
+                          opacity: [0, 1, 1, 0.92],
+                          scale: [0.2, 1.08, 1, 0.98],
+                          x: burst.x,
+                          y: burst.y,
+                          rotate: [burst.rotate - 18, burst.rotate + 5, burst.rotate],
+                        }}
+                        transition={{
+                          duration: 0.6,
+                          delay: burst.delay,
+                          ease: "easeOut",
+                        }}
+                      >
+                        <Image
+                          src={wrongStickerSrc}
+                          alt=""
+                          width={burst.width}
+                          height={stickerHeight}
+                          priority
+                          className="h-auto drop-shadow-[0_10px_26px_rgba(255,31,61,0.45)]"
+                        />
+                      </motion.div>
+                    )
+                  })
+                : null}
             </div>
 
             {typeof scoreDelta === "number" ? (

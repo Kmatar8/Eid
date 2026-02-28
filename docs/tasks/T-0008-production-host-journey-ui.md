@@ -25,7 +25,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 7. Improve trivia controller clarity with team color coding and explicit responder text.
 8. Add host fallback action to randomly select another responder from the same active team.
 9. Play host-only sound effects when answer reveal is correct or wrong.
-10. Show wrong-answer sticker graphic in overlay feedback.
+10. Show wrong-answer sticker graphics around the existing wrong icon/score feedback.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -61,7 +61,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 8. Update controller question card to show explicit responder text and team cue styling.
 9. Validate with lint/build + live smoke flow and capture evidence.
 10. Add host-only audio preload/playback path for correct/wrong answer reveal feedback.
-11. Add sticker-based wrong-answer overlay presentation.
+11. Add sticker pop animations (varied positions/sizes) around the wrong icon without replacing it.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -74,7 +74,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 8. Controller clearly shows "this question is for you" for active responder and team/player context for others.
 9. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
 10. Host screen plays configured sound once per reveal result (`correct` or `wrong`).
-11. Wrong-answer overlay displays the configured sticker asset.
+11. Wrong-answer overlay keeps the central wrong icon and displays configured sticker pops around it.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -86,7 +86,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: controller shows clear responder/team context with team color cues.
 - [ ] Manual: trivia completion -> winner celebration -> next game CTA.
 - [ ] Manual: host plays correct/wrong sound exactly once for each scored reveal.
-- [ ] Manual: wrong-answer overlay shows sticker correctly (host/controller).
+- [ ] Manual: wrong-answer overlay keeps icon + score and shows sticker pops in varied positions/sizes (host/controller).
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -95,7 +95,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 3. Live deploy completed to `https://hroof-app.k-matar.workers.dev` with version `83f5ed74-acf4-407c-983f-bf25cf357722`.
 4. `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh` passed full host/join/trivia/reconnect/end flow.
 5. Added host-only answer-reveal sound playback hooks using `/sounds/correct-answer.mp3` and `/sounds/wrong-answer.mp3`.
-6. Added wrong-answer overlay sticker support using `/images/stickers/wrong-sticker.png`.
+6. Added wrong-answer overlay sticker support using `/images/stickers/wrong-sticker.png` around the central wrong icon.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.
