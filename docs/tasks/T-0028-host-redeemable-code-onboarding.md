@@ -123,6 +123,9 @@ Replace host entry from pre-generated username/password to a redeemable-code onb
 13. Manual revocation check:
    - started local dev with seeded host having past `accessExpiresAt` (`946684800000` / Jan 1, 2000 UTC).
    - `POST /api/auth/host/login` for that host returned `401 INVALID_CREDENTIALS` as expected.
+14. Seed availability fix:
+   - added bundled fallback seed file `lib/server/redeem-codes.generated.json` to ensure deploy runtimes can resolve generated codes without filesystem CSV access.
+   - seed precedence now: `HROOF_REDEEM_CODES_JSON` env -> bundled JSON -> CSV file -> demo fallback.
 
 ## Rollback Plan
 1. Revert PRD auth section changes.

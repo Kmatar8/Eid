@@ -4,6 +4,7 @@ import { resolve } from "node:path"
 
 import { hashPassword, verifyPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
+import bundledRedeemCodeSeeds from "@/lib/server/redeem-codes.generated.json"
 import { TRIVIA_CATEGORY_ORDER, TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
 import type {
   AvatarType,
@@ -676,24 +677,57 @@ function parseRedeemCodeCsvFromFile(): RedeemCodeSeedInput[] {
   }
 }
 
+function parseBundledRedeemCodeSeeds(): RedeemCodeSeedInput[] {
+  if (!Array.isArray(bundledRedeemCodeSeeds)) {
+    return []
+  }
+
+  const parsed: RedeemCodeSeedInput[] = []
+  for (const item of bundledRedeemCodeSeeds) {
+    if (!item || typeof item !== "object") {
+      continue
+    }
+
+    const candidate = item as Record<string, unknown>
+    const code = typeof candidate.code === "string" ? normalizeRedeemCode(candidate.code) : undefined
+    const codeHash = typeof candidate.codeHash === "string" ? candidate.codeHash.trim() : undefined
+    const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : null
+    const expiresAt = parseTimestampValue(candidate.expiresAt)
+
+    if (!code && !codeHash) {
+      continue
+    }
+
+    parsed.push({ code, codeHash, email, expiresAt })
+  }
+
+  return parsed
+}
+
+function getFallbackRedeemCodeSeeds(): RedeemCodeSeedInput[] {
+  const bundledSeeds = parseBundledRedeemCodeSeeds()
+  if (bundledSeeds.length > 0) {
+    return bundledSeeds
+  }
+
+  const csvSeeds = parseRedeemCodeCsvFromFile()
+  if (csvSeeds.length > 0) {
+    return csvSeeds
+  }
+
+  return [{ code: "Q7M4ZP9X2L" }]
+}
+
 function parseRedeemCodeSeedInputs(): RedeemCodeSeedInput[] {
   const raw = process.env.HROOF_REDEEM_CODES_JSON
   if (!raw) {
-    const csvSeeds = parseRedeemCodeCsvFromFile()
-    if (csvSeeds.length > 0) {
-      return csvSeeds
-    }
-    return [{ code: "Q7M4ZP9X2L" }]
+    return getFallbackRedeemCodeSeeds()
   }
 
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) {
-      const csvSeeds = parseRedeemCodeCsvFromFile()
-      if (csvSeeds.length > 0) {
-        return csvSeeds
-      }
-      return [{ code: "Q7M4ZP9X2L" }]
+      return getFallbackRedeemCodeSeeds()
     }
 
     const safeInputs: RedeemCodeSeedInput[] = []
@@ -716,20 +750,12 @@ function parseRedeemCodeSeedInputs(): RedeemCodeSeedInput[] {
     }
 
     if (safeInputs.length === 0) {
-      const csvSeeds = parseRedeemCodeCsvFromFile()
-      if (csvSeeds.length > 0) {
-        return csvSeeds
-      }
-      return [{ code: "Q7M4ZP9X2L" }]
+      return getFallbackRedeemCodeSeeds()
     }
 
     return safeInputs
   } catch {
-    const csvSeeds = parseRedeemCodeCsvFromFile()
-    if (csvSeeds.length > 0) {
-      return csvSeeds
-    }
-    return [{ code: "Q7M4ZP9X2L" }]
+    return getFallbackRedeemCodeSeeds()
   }
 }
 
