@@ -310,116 +310,135 @@ export default function Home() {
             "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
             isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
           )}>
-            اختر لعبة الليلة
+            ليلة العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
           </h1>
           <p className={cn(
             "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
             isTVMode ? "text-2xl sm:text-3xl lg:text-4xl opacity-100" : "text-base sm:text-xl"
           )}>
-            صممت للشاشات الكبيرة. تسلسل فعاليات الليلة جاهز، اضغط ابدأ للبدء.
+            جاهزين للمنافسة؟ اجمع العائلة، وزع الفرق، وابدأ التحدي الآن على الشاشة الكبيرة.
           </p>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.4 }}
-            className="pt-6"
-          >
-            <Button
-              size="lg"
-              onClick={startSequence}
-              className={cn(
-                "rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 font-bold text-slate-950 shadow-[0_20px_50px_-15px_rgba(139,92,246,0.5)] transition-all hover:scale-105 hover:shadow-fuchsia-500/40 active:scale-95",
-                isTVMode ? "h-24 px-16 text-4xl" : "h-16 px-12 text-2xl"
-              )}
-            >
-              <Sparkles className="mr-2 size-6" />
-              ابدأ الفعالية الآن
-            </Button>
-          </motion.div>
         </motion.header>
 
-        <section className="mt-12">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
-            {games.map((game, index) => {
-              const isSelected = game.id === TRIVIA_GAME_ID
+        {/* Hero Game Section (Family Trivia) */}
+        <motion.section
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2 }}
+          className="mt-12 w-full max-w-5xl mx-auto"
+        >
+          <div className="relative group rounded-[2.5rem] overflow-hidden border border-white/20 bg-slate-900/40 p-1 sm:p-2 backdrop-blur-xl shadow-[0_0_80px_rgba(14,165,233,0.15)] transition-all hover:shadow-[0_0_100px_rgba(14,165,233,0.3)]">
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-indigo-500/10 to-purple-500/10 opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
 
+            <div className="relative rounded-[2rem] overflow-hidden bg-slate-950/50 backdrop-blur-2xl border border-white/10 flex flex-col md:flex-row shadow-inner">
+
+              {/* Image Side */}
+              <div className="relative w-full md:w-1/2 h-64 md:h-auto overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-l from-slate-950/90 to-transparent z-10" />
+                <div
+                  className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 group-hover:scale-110"
+                  style={{ backgroundImage: `url(/images/zizo.jpg)` }}
+                />
+
+                {/* Floating Elements on Image */}
+                <div className="absolute top-6 left-6 z-20">
+                  <span className="px-4 py-1.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold tracking-widest uppercase backdrop-blur-md">
+                    اللعبة الرئيسية
+                  </span>
+                </div>
+              </div>
+
+              {/* Content Side */}
+              <div className="relative w-full md:w-1/2 p-8 sm:p-12 flex flex-col justify-center space-y-6 z-20">
+                <div>
+                  <h2 className={cn(
+                    "font-cairo font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-indigo-400 tracking-tight drop-shadow-sm mb-2",
+                    isTVMode ? "text-5xl" : "text-4xl"
+                  )}>
+                    مسابقات العائلة
+                  </h2>
+                  <p className="text-xl text-indigo-200/80 font-cairo font-medium">قصص، ذكريات، ومفاجآت</p>
+                </div>
+
+                <p className="text-slate-300 font-cairo leading-relaxed text-lg">
+                  اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/10">
+                    <div className="p-2 rounded-full bg-cyan-500/20 text-cyan-300">
+                      <Users className="size-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 font-cairo">اللاعبين</p>
+                      <p className="text-sm font-bold text-slate-100">3-20 شخص</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/10">
+                    <div className="p-2 rounded-full bg-indigo-500/20 text-indigo-300">
+                      <Timer className="size-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 font-cairo">المدة</p>
+                      <p className="text-sm font-bold text-slate-100">10-15 دقيقة</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <Button
+                    size="lg"
+                    onClick={startSequence}
+                    className={cn(
+                      "w-full rounded-2xl bg-gradient-to-r from-cyan-500 hover:from-cyan-400 to-indigo-600 hover:to-indigo-500 text-white font-bold shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] active:scale-[0.98] border border-cyan-400/30 overflow-hidden relative",
+                      isTVMode ? "h-20 text-3xl" : "h-16 text-xl"
+                    )}
+                  >
+                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
+                    <Sparkles className="mr-3 size-6 text-cyan-100" />
+                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-md font-cairo">ابدأ اللعبة الآن</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Coming Soon Section */}
+        <section className="mt-24 mb-12">
+          <div className="flex items-center gap-4 mb-8">
+            <h3 className="text-2xl font-black text-slate-100 font-cairo">ألعاب قريباً</h3>
+            <div className="h-px flex-1 bg-gradient-to-r from-white/20 to-transparent" />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {games.filter(g => g.id !== TRIVIA_GAME_ID).map((game, index) => {
               return (
                 <motion.div
                   key={game.id}
                   className="text-right"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 + index * 0.05, duration: 0.35 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ y: -5 }}
+                  transition={{ delay: 0.4 + index * 0.05, duration: 0.4 }}
                 >
                   <Card
-                    className={cn(
-                      "relative h-[30rem] overflow-hidden border-glass-border bg-glass-bg py-0 text-foreground backdrop-blur-xl shadow-xl",
-                      isSelected
-                        ? "border-primary/60 ring-2 ring-primary/20 bg-glass-bg"
-                        : ""
-                    )}
+                    className="relative h-[16rem] overflow-hidden border border-white/5 bg-slate-900/30 text-foreground backdrop-blur-md shadow-lg"
                   >
-                    <div className="h-[42%] overflow-hidden relative">
-                      <div className="absolute right-4 top-4 z-20 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-2xl font-black text-white backdrop-blur-md border border-glass-border shadow-lg">
-                        {index + 1}
+                    <div className="absolute inset-0 opacity-20 transition-opacity duration-300 group-hover:opacity-40" style={{ backgroundImage: game.gradient }} />
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-[2px]" />
+
+                    <div className="relative h-full flex flex-col p-6 z-10">
+                      <div className="flex justify-between items-start mb-4">
+                        <game.icon className="size-8 text-white/50" />
+                        <span className="px-2 py-1 rounded-md bg-white/10 text-[10px] font-bold tracking-wider uppercase text-white/60">قريباً</span>
                       </div>
 
-                      {game.image ? (
-                        <div
-                          className="h-full w-full bg-cover bg-center"
-                          style={{ backgroundImage: `url(${game.image})` }}
-                        />
-                      ) : (
-                        <div className="h-full w-full bg-[linear-gradient(135deg,rgba(255,255,255,0.16),rgba(255,255,255,0.04))] flex items-center justify-center">
-                          <game.icon className="size-16 opacity-30" />
-                        </div>
-                      )}
-
-                      <div
-                        className="pointer-events-none absolute inset-0"
-                        style={{
-                          backgroundImage: `linear-gradient(to bottom, transparent 20%, var(--glass-bg) 70%, var(--card) 100%)`,
-                        }}
-                      />
+                      <div className="mt-auto">
+                        <h4 className="font-cairo font-black text-xl text-slate-200 mb-1">{game.title}</h4>
+                        <p className="text-slate-400 text-sm font-cairo line-clamp-2">{game.description}</p>
+                      </div>
                     </div>
-
-                    <div className="relative h-1 w-full" style={{ backgroundImage: game.gradient }} />
-
-                    <CardHeader className="gap-2 pt-6 pb-2">
-                      <CardTitle className={cn(
-                        "font-cairo font-black transition-all duration-300 tracking-tight",
-                        isTVMode ? "text-4xl" : "text-3xl"
-                      )}>{game.title}</CardTitle>
-                      <CardDescription className={cn(
-                        "text-violet-200/90 font-cairo transition-all duration-300 font-medium",
-                        isTVMode ? "text-xl" : "text-base"
-                      )}>{game.tagline}</CardDescription>
-                    </CardHeader>
-
-                    <CardContent className={cn(
-                      "pb-8 text-foreground/90 font-cairo transition-all duration-300 leading-relaxed",
-                      isTVMode ? "text-lg" : "text-base"
-                    )}>
-                      <p className="line-clamp-2 opacity-80">{game.description}</p>
-
-                      <div className="mt-8 grid grid-cols-2 gap-4">
-                        <div className="rounded-xl bg-glass-bg p-3 border border-glass-border backdrop-blur-md">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Users className="size-4 text-primary" />
-                            <p className="text-xs opacity-60">اللاعبين</p>
-                          </div>
-                          <p className="text-lg font-bold text-foreground">{game.players}</p>
-                        </div>
-                        <div className="rounded-xl bg-glass-bg p-3 border border-glass-border backdrop-blur-md">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Timer className="size-4 text-cyan-500" />
-                            <p className="text-xs opacity-60">المدة</p>
-                          </div>
-                          <p className="text-lg font-bold text-foreground">{game.duration}</p>
-                        </div>
-                      </div>
-                    </CardContent>
                   </Card>
                 </motion.div>
               )
