@@ -10,7 +10,7 @@ Implement host inactivity handling so active sessions move to `paused_wait_host`
 ## Scope
 ### In
 1. Add host presence heartbeat action (`host.heartbeat`).
-2. Detect host inactivity during active non-lobby stages and transition room to `paused_wait_host`.
+2. Detect host inactivity during active non-lobby stages and transition room to `paused_wait_host` (threshold: `10 minutes`).
 3. Add host resume action (`host.resumeSession`) to restore pre-pause room state.
 4. Enforce `paused_wait_host` grace expiry (`20 minutes`) to `expired`.
 5. Add host UI paused state messaging + resume CTA.
@@ -46,7 +46,7 @@ Implement host inactivity handling so active sessions move to `paused_wait_host`
 7. Validate with lint/build and live smoke flow.
 
 ## Acceptance Criteria
-1. If host is inactive beyond threshold while room is active (non-lobby), room transitions to `paused_wait_host`.
+1. If host is inactive for `10 minutes` while room is active (non-lobby), room transitions to `paused_wait_host`.
 2. Host can resume room via `host.resumeSession` before grace expiry.
 3. If pause lasts beyond `20 minutes`, room expires.
 4. Host screen clearly shows paused state and resume action.
@@ -70,6 +70,8 @@ Implement host inactivity handling so active sessions move to `paused_wait_host`
      - `pausedState: paused_wait_host`
      - `resumedState: teams_ready`
      - `expiredState: expired`
+4. Policy update: `PRD.md` section `7.3` now specifies host inactivity detection threshold as `10 minutes`.
+5. Runtime update: `lib/server/store.ts` `HOST_INACTIVITY_MS` set to `10 * 60 * 1000`.
 
 ## Rollback Plan
 1. Revert protocol additions (`host.heartbeat`, `host.resumeSession`).
@@ -80,3 +82,6 @@ Implement host inactivity handling so active sessions move to `paused_wait_host`
 ## Notes / Risks
 1. Inactivity detection is polling/heartbeat based, not socket-presence based.
 2. If no clients poll the room, timeout transitions happen on next request boundary.
+
+## Progress Notes
+1. Tuning update (2026-02-28): increase host inactivity threshold from `1 minute` to `10 minutes` before transitioning room to `paused_wait_host`.

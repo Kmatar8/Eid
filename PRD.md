@@ -95,10 +95,11 @@ Room becomes inactive when:
 
 ## 7.3 Timeouts (recommended)
 1. `lobby_open` idle timeout: `45 minutes`.
-2. `paused_wait_host` grace: `20 minutes`.
+2. Host inactivity detection threshold (active non-lobby states): `10 minutes`.
+3. `paused_wait_host` grace: `20 minutes`.
    - Triggered after host inactivity detection while room is in active non-lobby game/setup states.
    - Host can resume session before grace expiry.
-3. Hard cap: `4 hours` from room creation.
+4. Hard cap: `4 hours` from room creation.
 
 ## 8. Trivia v1 Functional Spec (Jeopardy Style)
 ## 8.1 Board structure
