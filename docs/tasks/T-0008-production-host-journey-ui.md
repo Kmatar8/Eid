@@ -26,6 +26,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 8. Add host fallback action to randomly select another responder from the same active team.
 9. Play host-only sound effects when answer reveal is correct or wrong.
 10. Show wrong-answer sticker graphics around the existing wrong icon/score feedback.
+11. Enforce dark-mode-only runtime UI and disable light-mode toggle.
 
 ### Out
 1. New backend game engines beyond current trivia implementation.
@@ -62,6 +63,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 9. Validate with lint/build + live smoke flow and capture evidence.
 10. Add host-only audio preload/playback path for correct/wrong answer reveal feedback.
 11. Add sticker pop animations (varied positions/sizes) around the wrong icon without replacing it.
+12. Force dark theme at app shell level and disable theme toggle interactions.
 
 ## Acceptance Criteria
 1. Landing CTA navigates to `/host/login`.
@@ -75,6 +77,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 9. End-of-trivia celebration view announces winner/scores and exposes next-game CTA.
 10. Host screen plays configured sound once per reveal result (`correct` or `wrong`).
 11. Wrong-answer overlay keeps the central wrong icon and displays configured sticker pops around it.
+12. Runtime pages render dark mode by default with no light-mode switch.
 
 ## Validation Checklist
 - [x] Lint/typecheck pass.
@@ -87,6 +90,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 - [ ] Manual: trivia completion -> winner celebration -> next game CTA.
 - [ ] Manual: host plays correct/wrong sound exactly once for each scored reveal.
 - [ ] Manual: wrong-answer overlay keeps icon + score and shows sticker pops in varied positions/sizes (host/controller).
+- [ ] Manual: no theme toggle is shown and runtime remains dark after reload.
 - [x] Live smoke script still passes.
 
 ## Validation Evidence
@@ -96,6 +100,7 @@ Implement a production-oriented host journey that starts from landing CTA and ru
 4. `BASE_URL=https://hroof-app.k-matar.workers.dev scripts/smoke-live.sh` passed full host/join/trivia/reconnect/end flow.
 5. Added host-only answer-reveal sound playback hooks using `/sounds/correct-answer.mp3` and `/sounds/wrong-answer.mp3`.
 6. Added wrong-answer overlay sticker support using `/images/stickers/wrong-sticker.png` around the central wrong icon.
+7. Updated runtime theme policy to dark-only and removed light-mode switching.
 
 ## Rollback Plan
 1. Revert `/host` and `/host/login` UI refactor to prior host control page.

@@ -31,12 +31,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" className="dark">
       <body className={`${cairo.className} antialiased bg-background text-foreground selection:bg-amber-500/30 selection:text-amber-200 overflow-x-hidden transition-colors duration-500`}>
         <ThemeProvider
           attribute="class"
+          forcedTheme="dark"
           defaultTheme="dark"
-          enableSystem
+          enableSystem={false}
           disableTransitionOnChange
         >
           {children}

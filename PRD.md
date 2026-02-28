@@ -72,6 +72,10 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
 4. For non-active players, controller shows who should answer and from which team.
 5. During buzzer phase, all players see a buzzer control and no answer choices until responder lock.
 
+### 6.3 Theme Policy
+1. Runtime UI is dark-mode only in v1.
+2. Light-mode switching is disabled across host, join, and controller surfaces.
+
 ## 7. Room Lifecycle
 ## 7.1 Room states
 1. `lobby_open`
