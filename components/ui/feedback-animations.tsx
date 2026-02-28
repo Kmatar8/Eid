@@ -7,15 +7,6 @@ import { Check, X } from "lucide-react"
 
 type FeedbackType = "correct" | "wrong" | null
 
-const WRONG_STICKER_BURSTS = [
-  { x: -210, y: -110, width: 110, rotate: -20, delay: 0.02 },
-  { x: -175, y: 85, width: 92, rotate: -8, delay: 0.08 },
-  { x: -30, y: -165, width: 88, rotate: -12, delay: 0.14 },
-  { x: 150, y: -130, width: 120, rotate: 14, delay: 0.04 },
-  { x: 205, y: 10, width: 96, rotate: 10, delay: 0.11 },
-  { x: 120, y: 125, width: 104, rotate: 7, delay: 0.18 },
-] as const
-
 function formatScoreDelta(score: number) {
   return score >= 0 ? `+${score}` : `${score}`
 }
@@ -24,12 +15,10 @@ export function FeedbackOverlay({
   currentStatus,
   scoreDelta,
   onComplete,
-  wrongStickerSrc = "/images/stickers/wrong-sticker.png",
 }: {
   currentStatus: FeedbackType
   scoreDelta?: number | null
   onComplete?: () => void
-  wrongStickerSrc?: string | null
 }) {
   useEffect(() => {
     if (!currentStatus) {
@@ -133,49 +122,48 @@ export function FeedbackOverlay({
           >
             <div className="relative flex h-[360px] w-[520px] items-center justify-center">
               <div className="absolute -inset-10 rounded-full bg-red-600/20 blur-2xl" />
-              <div className="relative z-10 rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)]">
+              <div className="rounded-full border-4 border-red-100 bg-gradient-to-br from-red-500 to-rose-700 p-8 shadow-[0_0_50px_rgba(239,68,68,0.5)] z-20">
                 <X className="h-20 w-20 text-white" strokeWidth={4} />
               </div>
 
-              {wrongStickerSrc
-                ? WRONG_STICKER_BURSTS.map((burst, index) => {
-                    const stickerHeight = Math.round((burst.width * 448) / 512)
-                    return (
-                      <motion.div
-                        key={`wrong-sticker-${index}`}
-                        className="absolute z-20"
-                        initial={{
-                          opacity: 0,
-                          scale: 0.2,
-                          x: 0,
-                          y: 0,
-                          rotate: burst.rotate - 18,
-                        }}
-                        animate={{
-                          opacity: [0, 1, 1, 0.92],
-                          scale: [0.2, 1.08, 1, 0.98],
-                          x: burst.x,
-                          y: burst.y,
-                          rotate: [burst.rotate - 18, burst.rotate + 5, burst.rotate],
-                        }}
-                        transition={{
-                          duration: 0.6,
-                          delay: burst.delay,
-                          ease: "easeOut",
-                        }}
-                      >
-                        <Image
-                          src={wrongStickerSrc}
-                          alt=""
-                          width={burst.width}
-                          height={stickerHeight}
-                          priority
-                          className="h-auto drop-shadow-[0_10px_26px_rgba(255,31,61,0.45)]"
-                        />
-                      </motion.div>
-                    )
-                  })
-                : null}
+              {/* Massive spread of Wrong Answer Stickers */}
+              {[...Array(36)].map((_, i) => {
+                const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
+                const distance = 140 + Math.random() * 450 // Much larger spread across overlay
+                const size = 2.5 + Math.random() * 3.5 // Bigger sticker sizes
+                const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
+                const emoji = emojis[i % emojis.length]
+
+                return (
+                  <motion.div
+                    key={`wrong-sticker-${i}`}
+                    className="absolute z-10"
+                    initial={{ x: 0, y: 0, scale: 0, opacity: 0, rotate: 0 }}
+                    animate={{
+                      x: Math.cos((angle * Math.PI) / 180) * distance,
+                      y: Math.sin((angle * Math.PI) / 180) * distance + (Math.random() * 150),
+                      scale: [0, 1.2, 1],
+                      opacity: [0, 1, 0.9, 0],
+                      rotate: Math.random() * 360 - 180,
+                    }}
+                    transition={{
+                      duration: 1.8 + Math.random() * 0.5,
+                      ease: [0.175, 0.885, 0.32, 1.275], // slight spring ease
+                      delay: Math.random() * 0.1,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: `${size}rem`,
+                        filter: "drop-shadow(0px 8px 16px rgba(0,0,0,0.6))",
+                        display: "block",
+                      }}
+                    >
+                      {emoji}
+                    </span>
+                  </motion.div>
+                )
+              })}
             </div>
 
             {typeof scoreDelta === "number" ? (
