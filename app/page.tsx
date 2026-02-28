@@ -11,6 +11,7 @@ import {
   MoonStar,
   Paintbrush2,
   Share2,
+  ShoppingCart,
   Sparkles,
   Timer,
   Users,
@@ -364,28 +365,23 @@ export default function Home() {
                   اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
                 </p>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/10">
-                    <div className="p-2 rounded-full bg-cyan-500/20 text-cyan-300">
-                      <Users className="size-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400 font-cairo">اللاعبين</p>
-                      <p className="text-sm font-bold text-slate-100">3-20 شخص</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-2xl bg-white/5 p-4 border border-white/10">
-                    <div className="p-2 rounded-full bg-indigo-500/20 text-indigo-300">
-                      <Timer className="size-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-slate-400 font-cairo">المدة</p>
-                      <p className="text-sm font-bold text-slate-100">10-15 دقيقة</p>
-                    </div>
-                  </div>
-                </div>
+                <div className="pt-4 flex flex-col gap-4">
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      // TODO: Add purchase link here when provided by the user
+                      window.open('#', '_blank')
+                    }}
+                    className={cn(
+                      "w-full rounded-2xl bg-gradient-to-r from-amber-500 hover:from-amber-400 to-orange-600 hover:to-orange-500 text-white font-bold shadow-[0_10px_30px_-10px_rgba(245,158,11,0.6)] transition-all hover:scale-[1.02] active:scale-[0.98] border border-amber-400/30 overflow-hidden relative",
+                      isTVMode ? "h-20 text-3xl" : "h-16 text-xl"
+                    )}
+                  >
+                    <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%,100%_100%] animate-[shimmer_2s_infinite]" />
+                    <ShoppingCart className="mr-3 size-6 text-amber-100" />
+                    <span className="relative z-10 flex-1 text-center pr-9 drop-shadow-md font-cairo">شراء اللعبة</span>
+                  </Button>
 
-                <div className="pt-4">
                   <Button
                     size="lg"
                     onClick={startSequence}
