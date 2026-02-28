@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import Image from "next/image"
 import { Check, X } from "lucide-react"
@@ -31,6 +31,30 @@ export function FeedbackOverlay({
 
     return () => window.clearTimeout(timer)
   }, [currentStatus, onComplete])
+
+  const wrongStickers = useMemo(() => {
+    if (currentStatus !== "wrong") return []
+
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
+    const distanceMultiplier = isMobile ? 0.45 : 1
+    const sizeMultiplier = isMobile ? 0.6 : 1
+
+    return [...Array(36)].map((_, i) => {
+      const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
+      const distance = (140 + Math.random() * 450) * distanceMultiplier
+      const size = (2.5 + Math.random() * 3.5) * sizeMultiplier
+      const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
+      const emoji = emojis[i % emojis.length]
+
+      const x = Math.cos((angle * Math.PI) / 180) * distance
+      const y = Math.sin((angle * Math.PI) / 180) * distance + Math.random() * 150 * distanceMultiplier
+      const rotate = Math.random() * 360 - 180
+      const duration = 0.8 + Math.random() * 0.4
+      const delay = Math.random() * 0.1
+
+      return { i, emoji, size, x, y, rotate, duration, delay }
+    })
+  }, [currentStatus])
 
   return (
     <AnimatePresence>
@@ -127,46 +151,36 @@ export function FeedbackOverlay({
               </div>
 
               {/* Massive spread of Wrong Answer Stickers */}
-              {[...Array(36)].map((_, i) => {
-                const angle = (i * 360) / 36 + (Math.random() * 20 - 10)
-                const isMobile = typeof window !== "undefined" && window.innerWidth <= 768
-                const distanceMultiplier = isMobile ? 0.45 : 1
-                const sizeMultiplier = isMobile ? 0.6 : 1
-                const distance = (140 + Math.random() * 450) * distanceMultiplier
-                const size = (2.5 + Math.random() * 3.5) * sizeMultiplier
-                const emojis = ["❌", "😭", "💔", "👎", "🫠", "🚫", "🤦", "☠️", "🚨", "💥"]
-                const emoji = emojis[i % emojis.length]
-
-                return (
-                  <motion.div
-                    key={`wrong-sticker-${i}`}
-                    className="absolute z-10"
-                    initial={{ x: 0, y: 0, scale: 0, opacity: 0, rotate: 0 }}
-                    animate={{
-                      x: Math.cos((angle * Math.PI) / 180) * distance,
-                      y: Math.sin((angle * Math.PI) / 180) * distance + (Math.random() * 150 * distanceMultiplier),
-                      scale: [0, 1.2, 1],
-                      opacity: [0, 1],
-                      rotate: Math.random() * 360 - 180,
-                    }}
-                    transition={{
-                      duration: 0.8 + Math.random() * 0.4,
-                      ease: [0.175, 0.885, 0.32, 1.275], // slight spring ease
-                      delay: Math.random() * 0.1,
+              {wrongStickers.map(({ i, emoji, size, x, y, rotate, duration, delay }) => (
+                <motion.div
+                  key={`wrong-sticker-${i}`}
+                  className="absolute z-10"
+                  initial={{ x: 0, y: 0, scale: 0, opacity: 0, rotate: 0 }}
+                  animate={{
+                    x,
+                    y,
+                    scale: [0, 1.2, 1],
+                    opacity: [0, 1],
+                    rotate,
+                  }}
+                  transition={{
+                    duration,
+                    ease: [0.175, 0.885, 0.32, 1.275], // slight spring ease
+                    delay,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: `${size}rem`,
+                      filter: "drop-shadow(0px 8px 16px rgba(0,0,0,0.6))",
+                      display: "block",
                     }}
                   >
-                    <span
-                      style={{
-                        fontSize: `${size}rem`,
-                        filter: "drop-shadow(0px 8px 16px rgba(0,0,0,0.6))",
-                        display: "block",
-                      }}
-                    >
-                      {emoji}
-                    </span>
-                  </motion.div>
-                )
-              })}
+                    {emoji}
+                  </span>
+                </motion.div>
+              )
+              )}
             </div>
 
             {typeof scoreDelta === "number" ? (

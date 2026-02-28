@@ -1326,7 +1326,9 @@ export default function HostStagePage() {
                 </article>
               ) : null}
 
-              <article className={`party-surface relative overflow-hidden rounded-2xl border p-4 text-center shadow-xl ${currentTone.border} ${currentTone.bg}`}>
+              <article
+                className={`party-surface relative flex h-full items-center justify-center overflow-hidden rounded-2xl border p-4 text-center shadow-xl ${currentTone.border} ${currentTone.bg}`}
+              >
                 <BorderBeam
                   duration={6}
                   size={400}
