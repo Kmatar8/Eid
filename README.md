@@ -20,10 +20,18 @@ After deployment, use these routes:
 3. `/controller/<roomId>` for player controller + answer submission.
 4. `/room/<roomId>` for TV/host display view.
 
-Default seeded host credentials (unless overridden via `HROOF_HOST_CREDENTIALS_JSON`):
+Host credentials are seeded from:
 
-- Username: `host-demo`
-- Password: `demo1234`
+1. `HROOF_HOST_CREDENTIALS_JSON` (if provided), else
+2. `lib/server/host-credentials.generated.json` (generated from CSV).
+
+Regenerate credential pool (500 rows by default):
+
+```bash
+npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 12 lib/server/host-credentials.generated.json
+```
+
+CSV format is `code,password` and login uses `code` as username.
 
 ## Deployed Smoke Test
 
@@ -35,8 +43,9 @@ BASE_URL=https://<your-deployed-domain> scripts/smoke-live.sh
 
 Optional env vars:
 
-- `HOST_USER` (default `host-demo`)
-- `HOST_PASS` (default `demo1234`)
+- `HOST_USER` (optional; defaults to first CSV row username when available)
+- `HOST_PASS` (optional; defaults to first CSV row password when available)
+- `HOST_CREDENTIALS_CSV` (optional; defaults to `docs/seeds/host-redeem-codes.csv`)
 
 The script validates login, room creation, join flow, host lifecycle actions, responder answer submission, reconnect, and session end behavior.
 

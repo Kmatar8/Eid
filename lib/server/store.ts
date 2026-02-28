@@ -4,7 +4,7 @@ import { resolve } from "node:path"
 
 import { hashPassword, verifyPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
-import bundledRedeemCodeSeeds from "@/lib/server/redeem-codes.generated.json"
+import bundledHostCredentialSeeds from "@/lib/server/host-credentials.generated.json"
 import { TRIVIA_CATEGORY_ORDER, TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
 import type {
   AvatarType,
@@ -191,8 +191,13 @@ function getStore(): InMemoryStore {
     seedHosts(store)
     seedRedeemCodes(store)
     store.seeded = true
+    return store
   }
 
+  // Keep host/redeem seed sync idempotent so newly generated CSV/JSON credentials
+  // are imported even when the shared store was already hydrated from Durable Objects.
+  seedHosts(store)
+  seedRedeemCodes(store)
   return store
 }
 
@@ -549,13 +554,13 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
 function parseHostSeedInputs(): HostSeedInput[] {
   const raw = process.env.HROOF_HOST_CREDENTIALS_JSON
   if (!raw) {
-    return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
+    return getFallbackHostSeedInputs()
   }
 
   try {
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) {
-      return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
+      return getFallbackHostSeedInputs()
     }
 
     const safeInputs: HostSeedInput[] = []
@@ -579,12 +584,12 @@ function parseHostSeedInputs(): HostSeedInput[] {
     }
 
     if (safeInputs.length === 0) {
-      return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
+      return getFallbackHostSeedInputs()
     }
 
     return safeInputs
   } catch {
-    return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
+    return getFallbackHostSeedInputs()
   }
 }
 
@@ -623,6 +628,104 @@ function parseTimestampValue(input: unknown): number | null {
   }
 
   return null
+}
+
+function parseHostSeedCsv(raw: string): HostSeedInput[] {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length <= 1) {
+    return []
+  }
+
+  const header = lines[0]?.split(",").map((value) => value.trim().toLowerCase()) ?? []
+  const codeIndex = header.indexOf("code")
+  const usernameIndex = header.indexOf("username")
+  const passwordIndex = header.indexOf("password")
+  const emailIndex = header.indexOf("email")
+  const accessExpiresAtIndex = Math.max(header.indexOf("accessexpiresat"), header.indexOf("access_expires_at"))
+  if ((codeIndex < 0 && usernameIndex < 0) || passwordIndex < 0) {
+    return []
+  }
+
+  const parsed: HostSeedInput[] = []
+  for (let index = 1; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (!line) {
+      continue
+    }
+
+    const columns = line.split(",").map((value) => value.trim())
+    const usernameValue =
+      usernameIndex >= 0 ? columns[usernameIndex] : codeIndex >= 0 ? columns[codeIndex] : undefined
+    const username = typeof usernameValue === "string" ? usernameValue.trim() : ""
+    const password = columns[passwordIndex]
+    const email = emailIndex >= 0 && columns[emailIndex] ? normalizeEmail(columns[emailIndex]) : undefined
+    const accessExpiresAt =
+      accessExpiresAtIndex >= 0 ? parseTimestampValue(columns[accessExpiresAtIndex]) : null
+
+    if (!username || !password) {
+      continue
+    }
+
+    parsed.push({ username, password, email, accessExpiresAt })
+  }
+
+  return parsed
+}
+
+function parseHostSeedCsvFromFile(): HostSeedInput[] {
+  const filePath = process.env.HROOF_HOST_CREDENTIALS_CSV_PATH ?? "docs/seeds/host-redeem-codes.csv"
+  try {
+    const absolutePath = resolve(process.cwd(), filePath)
+    const raw = readFileSync(absolutePath, "utf8")
+    return parseHostSeedCsv(raw)
+  } catch {
+    return []
+  }
+}
+
+function parseBundledHostSeedInputs(): HostSeedInput[] {
+  if (!Array.isArray(bundledHostCredentialSeeds)) {
+    return []
+  }
+
+  const parsed: HostSeedInput[] = []
+  for (const item of bundledHostCredentialSeeds) {
+    if (!item || typeof item !== "object") {
+      continue
+    }
+
+    const candidate = item as Record<string, unknown>
+    const username = typeof candidate.username === "string" ? candidate.username.trim() : ""
+    const passwordHash = typeof candidate.passwordHash === "string" ? candidate.passwordHash : undefined
+    const password = typeof candidate.password === "string" ? candidate.password : undefined
+    const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : undefined
+    const accessExpiresAt = parseTimestampValue(candidate.accessExpiresAt)
+
+    if (!username || (!passwordHash && !password)) {
+      continue
+    }
+
+    parsed.push({ username, passwordHash, password, email, accessExpiresAt })
+  }
+
+  return parsed
+}
+
+function getFallbackHostSeedInputs(): HostSeedInput[] {
+  const bundledSeeds = parseBundledHostSeedInputs()
+  if (bundledSeeds.length > 0) {
+    return bundledSeeds
+  }
+
+  const csvSeeds = parseHostSeedCsvFromFile()
+  if (csvSeeds.length > 0) {
+    return csvSeeds
+  }
+
+  return [{ username: "host-demo", email: "host-demo@hroof.local", password: "demo1234" }]
 }
 
 function parseRedeemCodeCsv(raw: string): RedeemCodeSeedInput[] {
@@ -677,39 +780,7 @@ function parseRedeemCodeCsvFromFile(): RedeemCodeSeedInput[] {
   }
 }
 
-function parseBundledRedeemCodeSeeds(): RedeemCodeSeedInput[] {
-  if (!Array.isArray(bundledRedeemCodeSeeds)) {
-    return []
-  }
-
-  const parsed: RedeemCodeSeedInput[] = []
-  for (const item of bundledRedeemCodeSeeds) {
-    if (!item || typeof item !== "object") {
-      continue
-    }
-
-    const candidate = item as Record<string, unknown>
-    const code = typeof candidate.code === "string" ? normalizeRedeemCode(candidate.code) : undefined
-    const codeHash = typeof candidate.codeHash === "string" ? candidate.codeHash.trim() : undefined
-    const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : null
-    const expiresAt = parseTimestampValue(candidate.expiresAt)
-
-    if (!code && !codeHash) {
-      continue
-    }
-
-    parsed.push({ code, codeHash, email, expiresAt })
-  }
-
-  return parsed
-}
-
 function getFallbackRedeemCodeSeeds(): RedeemCodeSeedInput[] {
-  const bundledSeeds = parseBundledRedeemCodeSeeds()
-  if (bundledSeeds.length > 0) {
-    return bundledSeeds
-  }
-
   const csvSeeds = parseRedeemCodeCsvFromFile()
   if (csvSeeds.length > 0) {
     return csvSeeds
@@ -761,6 +832,7 @@ function parseRedeemCodeSeedInputs(): RedeemCodeSeedInput[] {
 
 function seedHosts(store: InMemoryStore) {
   const seeds = parseHostSeedInputs()
+  let insertedCount = 0
 
   for (const seed of seeds) {
     const username = seed.username.trim()
@@ -789,12 +861,18 @@ function seedHosts(store: InMemoryStore) {
     if (host.email) {
       store.hostsByEmail.set(host.email, host.id)
     }
+    insertedCount += 1
+  }
+
+  if (insertedCount > 0) {
+    store.revision += insertedCount
   }
 }
 
 function seedRedeemCodes(store: InMemoryStore) {
   const seeds = parseRedeemCodeSeedInputs()
   const now = nowMs()
+  let insertedCount = 0
 
   for (const seed of seeds) {
     const codeHash = seed.codeHash || (seed.code ? hashRedeemCode(seed.code) : "")
@@ -815,6 +893,11 @@ function seedRedeemCodes(store: InMemoryStore) {
     }
 
     store.redeemCodesByHash.set(record.codeHash, record)
+    insertedCount += 1
+  }
+
+  if (insertedCount > 0) {
+    store.revision += insertedCount
   }
 }
 
@@ -1630,7 +1713,10 @@ export function resolveHostTokenTtlSeconds(host: HostRecord) {
 
 export function authenticateHost(username: string, password: string): HostRecord | null {
   const store = getStore()
-  const hostId = store.hostsByUsername.get(username)
+  const normalizedUsername = username.trim()
+  const hostId =
+    store.hostsByUsername.get(normalizedUsername) ??
+    store.hostsByUsername.get(normalizeRedeemCode(normalizedUsername))
   if (!hostId) {
     return null
   }
@@ -1642,6 +1728,11 @@ export function authenticateHost(username: string, password: string): HostRecord
 
   if (!verifyPassword(password, host.passwordHash)) {
     return null
+  }
+
+  if (typeof host.accessExpiresAt !== "number") {
+    host.accessExpiresAt = nowMs() + HOST_ACCESS_DURATION_MS
+    store.revision += 1
   }
 
   if (isHostAccessExpired(host)) {

@@ -174,12 +174,6 @@ export type HostLoginResult = {
   }
 }
 
-export type HostRedeemResult = {
-  setupToken: string
-  prefillEmail: string | null
-  expiresInSeconds: number
-}
-
 export type CreateRoomResult = {
   room: RoomSnapshot
   joinUrl: string
@@ -251,20 +245,6 @@ export function hostLogin(username: string, password: string) {
   return requestJson<HostLoginResult>("/api/auth/host/login", {
     method: "POST",
     body: { username, password },
-  })
-}
-
-export function hostRedeemCode(code: string) {
-  return requestJson<HostRedeemResult>("/api/auth/host/redeem", {
-    method: "POST",
-    body: { code },
-  })
-}
-
-export function hostRegisterFromRedeem(setupToken: string, email: string, username: string, password: string) {
-  return requestJson<HostLoginResult>("/api/auth/host/register", {
-    method: "POST",
-    body: { setupToken, email, username, password },
   })
 }
 

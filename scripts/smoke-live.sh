@@ -8,6 +8,18 @@ if [[ -z "$BASE_URL" ]]; then
   exit 1
 fi
 
+HOST_USER="${HOST_USER:-}"
+HOST_PASS="${HOST_PASS:-}"
+HOST_CREDENTIALS_CSV="${HOST_CREDENTIALS_CSV:-docs/seeds/host-redeem-codes.csv}"
+
+if [[ -z "$HOST_USER" || -z "$HOST_PASS" ]] && [[ -f "$HOST_CREDENTIALS_CSV" ]]; then
+  FIRST_SEED_LINE="$(sed -n '2p' "$HOST_CREDENTIALS_CSV" || true)"
+  if [[ "$FIRST_SEED_LINE" == *,* ]]; then
+    HOST_USER="${HOST_USER:-${FIRST_SEED_LINE%%,*}}"
+    HOST_PASS="${HOST_PASS:-${FIRST_SEED_LINE#*,}}"
+  fi
+fi
+
 HOST_USER="${HOST_USER:-host-demo}"
 HOST_PASS="${HOST_PASS:-demo1234}"
 
