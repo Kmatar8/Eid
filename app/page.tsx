@@ -346,48 +346,48 @@ export default function Home() {
                 اللعبة الرئيسية
               </span>
 
-              <div className="max-w-2xl rounded-3xl border border-white/25 bg-black/60 p-5 shadow-2xl backdrop-blur-md sm:p-8">
-                <h2
+              <h2
+                className={cn(
+                  "max-w-2xl font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 drop-shadow-[0_8px_22px_rgba(0,0,0,0.55)]",
+                  isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
+                )}
+              >
+                مسابقات العائلة
+              </h2>
+              <p className="max-w-2xl text-lg font-medium text-cyan-100/95 drop-shadow-[0_8px_22px_rgba(0,0,0,0.6)] sm:text-xl">
+                قصص، ذكريات، ومفاجآت
+              </p>
+              <p className="max-w-2xl text-base leading-relaxed text-slate-100/95 drop-shadow-[0_8px_20px_rgba(0,0,0,0.62)] sm:text-lg">
+                اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
+              </p>
+
+              <div className="mt-2 grid max-w-2xl gap-3 sm:grid-cols-2">
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    // TODO: Add purchase link here when provided by the user
+                    window.open("#", "_blank")
+                  }}
                   className={cn(
-                    "font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300",
-                    isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
+                    "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
+                    isTVMode ? "text-2xl" : ""
                   )}
                 >
-                  مسابقات العائلة
-                </h2>
-                <p className="mt-2 text-lg font-medium text-cyan-100/90 sm:text-xl">قصص، ذكريات، ومفاجآت</p>
-                <p className="mt-3 text-base leading-relaxed text-slate-100/90 sm:text-lg">
-                  اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
-                </p>
+                  <ShoppingCart className="mr-2 size-6 text-slate-900" />
+                  شراء اللعبة
+                </Button>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  <Button
-                    size="lg"
-                    onClick={() => {
-                      // TODO: Add purchase link here when provided by the user
-                      window.open("#", "_blank")
-                    }}
-                    className={cn(
-                      "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
-                      isTVMode ? "text-2xl" : ""
-                    )}
-                  >
-                    <ShoppingCart className="mr-2 size-6 text-slate-900" />
-                    شراء اللعبة
-                  </Button>
-
-                  <Button
-                    size="lg"
-                    onClick={startSequence}
-                    className={cn(
-                      "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
-                      isTVMode ? "text-2xl" : ""
-                    )}
-                  >
-                    <Sparkles className="mr-2 size-6 text-cyan-100" />
-                    ابدأ الفعالية الآن
-                  </Button>
-                </div>
+                <Button
+                  size="lg"
+                  onClick={startSequence}
+                  className={cn(
+                    "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
+                    isTVMode ? "text-2xl" : ""
+                  )}
+                >
+                  <Sparkles className="mr-2 size-6 text-cyan-100" />
+                  ابدأ الفعالية الآن
+                </Button>
               </div>
             </div>
           </div>
