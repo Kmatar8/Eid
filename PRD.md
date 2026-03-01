@@ -68,6 +68,9 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
    - Manual fallback control to randomly select another responder from the same team.
 7. When Trivia ends, host sees a celebration/winner screen with scores and a CTA to move to the next game.
 8. During Haraj rounds, host sees product image, submission progress, reveal ranking, and team score updates.
+9. Host has a persistent bottom-corner game-switch button that opens left-side game pills and can switch active game runtime.
+10. If host switches away from a non-completed game, that game's progress is preserved and resumed when switching back.
+11. Completed games are shown with a checkmark in the switch pills and are locked from re-entry.
 
 ### 6.2 Controller Clarity Requirements (Trivia)
 1. Controller view must clearly indicate whether the current question is for the current player or another player.
@@ -189,6 +192,14 @@ Per round:
 5. Example: two-way tie for second shares `(30 + 10) / 2 = 20` each.
 6. Players outside top 3 point slots receive `0`.
 
+## 8.7 Multi-Game Switching Policy
+1. Room runtime has a server-authoritative `activeGame` pointer (`trivia` or `haraj`) during `game_live`.
+2. Host can switch active game using host action while session is active, and controllers follow server-selected game.
+3. Switching does not reset team scores or game-specific progress.
+4. If target game is `idle`, switching can initialize/start that game; if `in_progress`, switching resumes last progress.
+5. Completed games are non-switchable and rendered as locked with checkmark in host switch UI.
+6. To avoid fairness issues, switching is blocked during active timed answer/collect windows.
+
 ## 9. Reconnect Behavior
 1. Player gets signed `playerSessionToken` after successful join.
 2. On reopen, client attempts reconnect automatically.
@@ -244,6 +255,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - `host.startTeams`
 - `host.startGame`
 - `host.startTrivia`
+- `host.switchGame`
 - `host.selectTriviaClue`
 - `host.nextQuestion`
 - `host.startHaraj`
