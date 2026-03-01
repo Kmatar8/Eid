@@ -27,9 +27,9 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 ## 5. Users and Access
 ### 5.1 Host
 - Receives a pre-issued credential `code` only (no pre-shared password distribution).
-- On first login attempt, activates the code by setting a password inside `/host/login`.
-- After activation, authenticates using `code + password` (code acts as username).
-- Host account access is revoked `60 days` after activation timestamp.
+- Authenticates using the credential `code` directly on `/host/login` (no password setup).
+- First successful code login activates access.
+- Host account access is revoked `60 days` after first successful code login.
 - Constraint: one host can run only one active room at a time.
 - Constraint: one host can have only one active authenticated device session at a time; new login invalidates prior host tokens.
 - Controls room lifecycle and game progression.
@@ -54,7 +54,6 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 1. Landing primary CTA (`ابدأ الفعالية`) routes to a dedicated host login page.
 2. Host login page uses festive visual style and captures only:
    - credential code
-   - password (first-time setup for non-activated codes, regular login for activated codes)
 3. After login, host enters a TV-first lobby view that includes:
    - Large join QR code and join URL.
    - Live list of joined players.
@@ -227,8 +226,7 @@ Single app routes:
 - `/room/:roomId` (legacy/diagnostic host display; may mirror `/host` behavior)
 
 Primary host auth APIs:
-- `POST /api/auth/host/activate` (first-time code activation + password set)
-- `POST /api/auth/host/login` (activated code login)
+- `POST /api/auth/host/login` (code-based direct login + first-login activation)
 
 Controller UI switches by real-time state payload from Durable Object.
 
@@ -238,7 +236,7 @@ Host UI also switches by room/game stage payload, preserving server authority fo
 Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case if WebSocket hibernation and room lifecycle controls are implemented to control duration costs.
 
 ## 11. Data Model (high-level)
-1. `host_access_codes` (credential code, password hash, activation/redeem status, activation/expiry timestamps, active host session nonce)
+1. `host_access_codes` (credential code inventory, activation/redeem status, activation/expiry timestamps, active host session nonce)
 2. `hosts` (runtime host identity, active room pointer)
 3. `rooms` (state, host, timestamps, timeout fields)
 4. `players` (identity, avatar/emoji, connection metadata)
@@ -289,7 +287,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - `room.error`
 
 ## 13. Security Requirements
-1. Store host passwords hashed using modern KDF.
+1. Keep host credential inventory server-authoritative and never expose privileged auth state to clients.
 2. Sign host/player tokens with expiration and room binding.
 3. Enforce role-based action authorization in Durable Object.
 4. Validate all client actions server-side.

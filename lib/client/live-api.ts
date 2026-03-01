@@ -241,17 +241,10 @@ export function makeRequestId() {
   return `req-${Date.now()}-${Math.floor(Math.random() * 100000)}`
 }
 
-export function hostLogin(username: string, password: string) {
+export function hostLogin(username: string) {
   return requestJson<HostLoginResult>("/api/auth/host/login", {
     method: "POST",
-    body: { username, password },
-  })
-}
-
-export function hostActivate(username: string, password: string) {
-  return requestJson<HostLoginResult>("/api/auth/host/activate", {
-    method: "POST",
-    body: { username, password },
+    body: { username },
   })
 }
 

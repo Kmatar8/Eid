@@ -26,20 +26,20 @@ Generate host credential pool (500 rows by default):
 npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 lib/server/host-credentials.generated.json
 ```
 
-Sync generated codes to D1 (placeholder hashes are inserted until first activation):
+Sync generated codes to D1:
 
 ```bash
 # remote D1
 npm run sync:host-codes:d1 -- docs/seeds/host-redeem-codes.csv --remote
 ```
 
-CSV format is `code` only. First-time host login must activate the code by setting a password.
+CSV format is `code` only. Host login uses the code directly.
 Credential tracking is stored in `host_access_codes` (D1):
 - `active` before first login
 - `redeemed` after first successful login
 - `expired` after access expiry
 
-Access window is `60 days` from first successful activation.
+Access window is `60 days` from first successful login.
 
 ## Deployed Smoke Test
 
@@ -52,7 +52,6 @@ BASE_URL=https://<your-deployed-domain> scripts/smoke-live.sh
 Optional env vars:
 
 - `HOST_USER` (optional; defaults to first CSV row username when available)
-- `HOST_PASS` (optional; defaults to first CSV row password when available)
 - `HOST_CREDENTIALS_CSV` (optional; defaults to `docs/seeds/host-redeem-codes.csv`)
 
 The script validates login, room creation, join flow, host lifecycle actions, responder answer submission, reconnect, and session end behavior.
@@ -69,7 +68,7 @@ Important notes:
 
 - The script requires one unique host credential per concurrently active room.
 - Provide credential pool via `HOST_CREDENTIALS_JSON`:
-  - `HOST_CREDENTIALS_JSON='[{"username":"host-1","password":"..."} ... ]'`
+  - `HOST_CREDENTIALS_JSON='[{"username":"host-1"}, ... ]'`
 - Defaults are `LOAD_ROOMS=100` and `PLAYERS_PER_ROOM=20`.
 - The script outputs p50/p95/p99 latency for login, create, joins, host actions, state reads, and end-session.
 

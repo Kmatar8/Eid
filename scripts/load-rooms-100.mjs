@@ -41,10 +41,9 @@ function readHostCredentials() {
             const candidate = entry
             return {
               username: typeof candidate.username === "string" ? candidate.username.trim() : "",
-              password: typeof candidate.password === "string" ? candidate.password : "",
             }
           })
-          .filter((entry) => entry.username.length > 0 && entry.password.length > 0)
+          .filter((entry) => entry.username.length > 0)
         if (normalized.length > 0) {
           return normalized
         }
@@ -55,8 +54,7 @@ function readHostCredentials() {
   }
 
   const username = process.env.HOST_USER ?? "host-demo"
-  const password = process.env.HOST_PASS ?? "demo1234"
-  return [{ username, password }]
+  return [{ username }]
 }
 
 function buildConfig() {
@@ -101,8 +99,8 @@ function printUsage() {
   console.log("  BASE_URL=https://<deployment> npm run load:rooms-100")
   console.log("")
   console.log("Optional env vars:")
-  console.log("  HOST_CREDENTIALS_JSON='[{\"username\":\"h1\",\"password\":\"p1\"}, ...]'")
-  console.log("  HOST_USER=host-demo HOST_PASS=demo1234")
+  console.log("  HOST_CREDENTIALS_JSON='[{\"username\":\"h1\"}, ...]'")
+  console.log("  HOST_USER=host-demo")
   console.log("  LOAD_ROOMS=100 PLAYERS_PER_ROOM=20")
   console.log("  LOGIN_CONCURRENCY=20 CREATE_CONCURRENCY=20 ROOM_CONCURRENCY=20 END_CONCURRENCY=20")
   console.log("  JOIN_CONCURRENCY_PER_ROOM=5 HOLD_MS=15000 REQUEST_TIMEOUT_MS=15000")
@@ -231,7 +229,6 @@ async function loginHost(baseUrl, host, timeoutMs) {
     timeoutMs,
     body: {
       username: host.username,
-      password: host.password,
     },
   })
 
