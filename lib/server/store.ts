@@ -2188,7 +2188,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         .trim()
         .replace(/\s+/g, " ")
 
-      if (!teamId || normalizedName.length < 2 || normalizedName.length > 24) {
+      if (!teamId || normalizedName.length < 1 || normalizedName.length > 24) {
         return { ok: false, code: "INVALID_TEAM_NAME" }
       }
 

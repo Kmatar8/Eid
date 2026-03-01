@@ -173,7 +173,7 @@ export async function POST(request: Request, context: RouteContext) {
       }
 
       if (applied.code === "INVALID_TEAM_NAME") {
-        return errorResponse(400, "INVALID_TEAM_NAME", "Team name must be between 2 and 24 characters")
+        return errorResponse(400, "INVALID_TEAM_NAME", "Team name must be between 1 and 24 characters")
       }
 
       if (applied.code === "INVALID_DELTA") {

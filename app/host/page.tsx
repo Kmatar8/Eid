@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { LogOut, Power, X } from "lucide-react"
+import { LogOut, Plus, Power, X } from "lucide-react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
@@ -129,6 +129,35 @@ function getTeamTone(teamId: string | null | undefined): TeamTone {
   )
 }
 
+function isDefaultTeamName(teamId: string, name: string) {
+  const normalized = name.trim().toLowerCase()
+  if (!normalized) {
+    return true
+  }
+
+  if (teamId === "team_a") {
+    return normalized === "team a" || normalized === "اسم الفريق"
+  }
+
+  if (teamId === "team_b") {
+    return normalized === "team b" || normalized === "اسم الفريق"
+  }
+
+  return false
+}
+
+function getTeamColorLabel(teamId: string) {
+  if (teamId === "team_a") {
+    return "الوردي"
+  }
+
+  if (teamId === "team_b") {
+    return "السماوي"
+  }
+
+  return "الفريق"
+}
+
 function remainingSeconds(targetTs: number | null, nowTs: number) {
   if (!targetTs) {
     return 0
@@ -249,8 +278,8 @@ export default function HostStagePage() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [isBootstrappingRoom, setIsBootstrappingRoom] = useState(false)
   const [bootstrapBlocked, setBootstrapBlocked] = useState(false)
-  const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null)
-  const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null)
+  const [teamPickerPlayerId, setTeamPickerPlayerId] = useState<string | null>(null)
+  const [startValidationHints, setStartValidationHints] = useState<string[] | null>(null)
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -366,6 +395,20 @@ export default function HostStagePage() {
       window.clearTimeout(timeout)
     }
   }, [notice])
+
+  useEffect(() => {
+    if (!startValidationHints) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setStartValidationHints(null)
+    }, 10000)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [startValidationHints])
 
   useEffect(() => {
     const currentQId = room?.trivia?.selectedClue?.questionId ?? null
@@ -529,6 +572,41 @@ export default function HostStagePage() {
 
     return grouped
   }, [assignmentByPlayer, room])
+
+  const startSessionReadiness = useMemo(() => {
+    const hints: string[] = []
+
+    if (!room) {
+      return { canStart: false, hints: ["في انتظار تحميل الغرفة."] }
+    }
+
+    if (room.playerCount <= 0) {
+      hints.push("انتظر انضمام لاعب واحد على الأقل قبل البدء.")
+    }
+
+    const hasInvalidTeamName = room.teams.some((team) => {
+      const draftName = teamNameDrafts[team.teamId] ?? team.name ?? ""
+      const trimmed = draftName.trim()
+      return (
+        trimmed === "" ||
+        trimmed.length < 1 ||
+        trimmed.length > 24 ||
+        trimmed === "اسم الفريق" ||
+        trimmed === "Team A" ||
+        trimmed === "Team B"
+      )
+    })
+
+    if (hasInvalidTeamName) {
+      hints.push("أدخل اسمًا لكل فريق (حرف واحد على الأقل).")
+    }
+
+    if (playersByTeam.unassigned.length > 0) {
+      hints.push(`وزّع جميع اللاعبين على الفرق. المتبقي الآن: ${playersByTeam.unassigned.length}.`)
+    }
+
+    return { canStart: hints.length === 0, hints }
+  }, [playersByTeam.unassigned.length, room, teamNameDrafts])
 
   useEffect(() => {
     if (!room) {
@@ -785,8 +863,8 @@ export default function HostStagePage() {
       const name = draft
         .trim()
         .replace(/\s+/g, " ")
-      if (name.length < 2 || name.length > 24) {
-        setError("اسم الفريق يجب أن يكون بين حرفين و24 حرفًا.")
+      if (name.length < 1 || name.length > 24) {
+        setError("اسم الفريق يجب أن يكون بين حرف واحد و24 حرفًا.")
         return
       }
 
@@ -803,28 +881,18 @@ export default function HostStagePage() {
     [runAction, teamNameDrafts]
   )
 
-  const handleDropOnTeam = useCallback(
-    async (teamId: string, event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      const draggedPlayerId = event.dataTransfer.getData("text/plain") || draggingPlayerId
-      setDropTargetTeamId(null)
-      setDraggingPlayerId(null)
-
-      if (!draggedPlayerId) {
-        return
-      }
-
-      await assignPlayer(draggedPlayerId, teamId)
-    },
-    [assignPlayer, draggingPlayerId]
-  )
-
   const handleStartSession = useCallback(async () => {
     if (!hostToken || !roomId || !room) {
       return
     }
 
+    if (!startSessionReadiness.canStart) {
+      setStartValidationHints(startSessionReadiness.hints)
+      return
+    }
+
     setBusyAction("host.prepareSession")
+    setStartValidationHints(null)
     setError(null)
     setNotice(null)
 
@@ -833,7 +901,7 @@ export default function HostStagePage() {
       for (const team of room.teams) {
         const draft = teamNameDrafts[team.teamId] ?? ""
         const name = draft.trim().replace(/\s+/g, " ")
-        if (name.length >= 2 && name.length <= 24) {
+        if (name.length >= 1 && name.length <= 24) {
           try {
             await sendAction(roomId, hostToken, "host.renameTeam", { teamId: team.teamId, name })
           } catch (err) {
@@ -867,7 +935,19 @@ export default function HostStagePage() {
     } finally {
       setBusyAction(null)
     }
-  }, [hostToken, refreshState, room, roomId, teamNameDrafts])
+  }, [hostToken, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
+
+  const handleAssignPlayerFromPicker = useCallback(
+    async (teamId: string) => {
+      if (!teamPickerPlayerId) {
+        return
+      }
+
+      await assignPlayer(teamPickerPlayerId, teamId)
+      setTeamPickerPlayerId(null)
+    },
+    [assignPlayer, teamPickerPlayerId]
+  )
 
   const handleStartTrivia = useCallback(async () => {
     try {
@@ -966,13 +1046,7 @@ export default function HostStagePage() {
     trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
 
   const canManageTeams = room?.state === "lobby_open" || room?.state === "lobby_locked" || room?.state === "teams_ready"
-
-  const allTeamsNamed = room?.teams.every((t) => {
-    const draftName = teamNameDrafts[t.teamId] ?? t.name ?? ""
-    const trimmed = draftName.trim()
-    return trimmed !== "" && trimmed !== "اسم الفريق" && trimmed !== "Team A" && trimmed !== "Team B" && trimmed.length >= 2
-  })
-  const canStartSession = Boolean(canManageTeams && room && room.playerCount > 0 && allTeamsNamed)
+  const canStartSession = Boolean(canManageTeams && startSessionReadiness.canStart)
 
   const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
   const canResumeSession = room?.state === "paused_wait_host"
@@ -1051,6 +1125,13 @@ export default function HostStagePage() {
   const orderedTeams = useMemo(() => {
     return [...(room?.teams ?? [])].sort((a, b) => a.order - b.order)
   }, [room?.teams])
+  const teamPickerPlayer = useMemo(() => {
+    if (!room || !teamPickerPlayerId) {
+      return null
+    }
+
+    return room.players.find((player) => player.playerId === teamPickerPlayerId) ?? null
+  }, [room, teamPickerPlayerId])
   const isTriviaStage = Boolean(room && stage === "trivia")
   const fireworksBasePopulation = isTriviaStage ? 0.5 : 1
   const fireworksDemoPopulation = 1
@@ -1086,6 +1167,25 @@ export default function HostStagePage() {
           }`}
       >
         {error ? <p className="party-status-error mb-3 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
+        <AnimatePresence>
+          {startValidationHints ? (
+            <motion.div
+              initial={{ opacity: 0, y: -10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.96 }}
+              className="fixed inset-x-0 top-4 z-[70] mx-auto w-[min(52rem,95vw)] rounded-2xl border border-amber-200/40 bg-slate-950/95 p-4 shadow-2xl backdrop-blur-md"
+            >
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-amber-300">لا يمكن بدء الفعالية الآن</p>
+              <p className="mt-1 text-sm text-slate-100">أكمل الإجراءات التالية قبل الضغط على ابدأ الفعالية:</p>
+              <ul className="mt-2 list-disc space-y-1 pr-5 text-sm text-slate-200">
+                {startValidationHints.map((hint) => (
+                  <li key={hint}>{hint}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-amber-100/90">هذه الرسالة ستختفي تلقائيًا خلال 10 ثوانٍ.</p>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         {!room ? (
           <section className="party-surface-strong rounded-3xl p-10 text-center">
@@ -1129,8 +1229,8 @@ export default function HostStagePage() {
 
               <Button
                 type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} mt-5 w-full text-lg`}
-                disabled={Boolean(busyAction) || !canStartSession}
+                className={`${HOST_ACTION_BUTTON_CLASS} mt-5 w-full text-lg ${canStartSession ? "" : "ring-2 ring-amber-200/45"}`}
+                disabled={Boolean(busyAction)}
                 onClick={() => void handleStartSession()}
               >
                 {busyAction === "host.prepareSession" ? "جاري تجهيز الفرق..." : "ابدأ الفعالية"}
@@ -1141,7 +1241,9 @@ export default function HostStagePage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Players</p>
                 <h2 className="mt-2 text-3xl font-bold">اللاعبون المنضمون</h2>
-                <p className="mt-2 text-base text-slate-200">اسحب اللاعبين إلى أعمدة الفرق أدناه.</p>
+                <p className="mt-2 text-base text-slate-200">
+                  اضغط زر <span className="font-bold">+</span> فوق صورة اللاعب ثم اختر الفريق المناسب.
+                </p>
               </div>
 
               {/* Team Names Inputs (Moved here to be in the same block) */}
@@ -1156,7 +1258,6 @@ export default function HostStagePage() {
                         <label className="mb-1 block text-xs text-slate-300">{team.teamId === "team_a" ? "الفريق الأول" : "الفريق الثاني"}</label>
                         <div className="flex items-center gap-2">
                           <input
-                            placeholder="اسم الفريق"
                             value={teamNameDrafts[team.teamId] ?? ""}
                             onChange={(event) => {
                               const value = event.target.value
@@ -1183,28 +1284,29 @@ export default function HostStagePage() {
                       {room.players.map((player) => {
                         const teamId = assignmentByPlayer.get(player.playerId) ?? null
                         const tone = getTeamTone(teamId)
+                        const isPickerOpen = teamPickerPlayerId === player.playerId
                         return (
-                          <Avatar
-                            key={player.playerId}
-                            draggable
-                            onDragStart={(event) => {
-                              setDraggingPlayerId(player.playerId)
-                              event.dataTransfer.setData("text/plain", player.playerId)
-                            }}
-                            onDragEnd={() => {
-                              setDraggingPlayerId(null)
-                              setDropTargetTeamId(null)
-                            }}
-                            className={`border-2 cursor-grab shadow-xl hover:z-50 size-16 sm:size-20 ${teamId ? tone.border : "border-slate-500"}`}
-                          >
-                            {player.avatarValue ? (
-                              <AvatarImage src={player.avatarValue} className="object-cover" />
-                            ) : null}
-                            <AvatarFallback className={`${teamId ? tone.bg : "bg-slate-700"} text-2xl`}>
-                              {player.avatarType === "emoji" ? player.avatarValue : "🙂"}
-                            </AvatarFallback>
-                            <AvatarGroupTooltip>{player.displayName}</AvatarGroupTooltip>
-                          </Avatar>
+                          <div key={player.playerId} className="relative">
+                            <Avatar
+                              className={`size-16 border-2 shadow-xl hover:z-50 sm:size-20 ${teamId ? tone.border : "border-slate-500"} ${isPickerOpen ? "ring-2 ring-amber-300/60" : ""}`}
+                            >
+                              {player.avatarValue ? (
+                                <AvatarImage src={player.avatarValue} className="object-cover" />
+                              ) : null}
+                              <AvatarFallback className={`${teamId ? tone.bg : "bg-slate-700"} text-2xl`}>
+                                {player.avatarType === "emoji" ? player.avatarValue : "🙂"}
+                              </AvatarFallback>
+                              <AvatarGroupTooltip>{player.displayName}</AvatarGroupTooltip>
+                            </Avatar>
+                            <button
+                              type="button"
+                              onClick={() => setTeamPickerPlayerId(player.playerId)}
+                              className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-amber-300 text-slate-950 shadow-lg transition hover:scale-105 active:scale-95 animate-[pulse_1s_ease-in-out_infinite]"
+                              aria-label={`تعيين ${player.displayName} إلى فريق`}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
                         )
                       })}
                     </AvatarGroup>
@@ -1216,23 +1318,11 @@ export default function HostStagePage() {
                 {room.teams.map((team) => {
                   const tone = getTeamTone(team.teamId)
                   const teamPlayers = team.teamId === "team_a" ? playersByTeam.team_a : playersByTeam.team_b
-                  const isDropActive = dropTargetTeamId === team.teamId
 
                   return (
                     <div
                       key={team.teamId}
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        setDropTargetTeamId(team.teamId)
-                      }}
-                      onDragEnter={(event) => {
-                        event.preventDefault()
-                        setDropTargetTeamId(team.teamId)
-                      }}
-                      onDragLeave={() => setDropTargetTeamId(null)}
-                      onDrop={(event) => void handleDropOnTeam(team.teamId, event)}
-                      className={`min-h-52 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg} ${isDropActive ? "ring-2 ring-white/30" : ""
-                        }`}
+                      className={`min-h-52 rounded-2xl border-2 p-4 transition-all ${tone.border} ${tone.bg}`}
                     >
                       <div className="mb-3 flex items-center justify-between">
                         <p className={`text-xl font-bold ${tone.text}`}>{team.name}</p>
@@ -1242,22 +1332,13 @@ export default function HostStagePage() {
                       <div className="space-y-2">
                         {teamPlayers.length === 0 ? (
                           <p className="rounded-lg border border-dashed border-white/25 p-3 text-sm text-slate-300">
-                            اسحب لاعبًا إلى هنا
+                            لا يوجد لاعب في هذا الفريق بعد.
                           </p>
                         ) : null}
 
                         {teamPlayers.map((player) => (
                           <div
                             key={`${team.teamId}-${player.playerId}`}
-                            draggable
-                            onDragStart={(event) => {
-                              setDraggingPlayerId(player.playerId)
-                              event.dataTransfer.setData("text/plain", player.playerId)
-                            }}
-                            onDragEnd={() => {
-                              setDraggingPlayerId(null)
-                              setDropTargetTeamId(null)
-                            }}
                             className="rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-sm"
                           >
                             {player.displayName}
@@ -1271,6 +1352,64 @@ export default function HostStagePage() {
             </article>
           </section>
         ) : null}
+
+        <AnimatePresence>
+          {room && stage === "lobby" && teamPickerPlayer ? (
+            <div
+              className="fixed inset-0 z-[75] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+              onClick={() => setTeamPickerPlayerId(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 12 }}
+                className="w-full max-w-xl rounded-3xl border border-white/20 bg-slate-950 p-5 shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="mb-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-200">Choose Team</p>
+                    <h3 className="mt-1 text-2xl font-black text-white">اختر الفريق</h3>
+                    <p className="mt-1 text-sm text-slate-200">
+                      اختر فريق اللاعب <span className="font-bold text-amber-200">{teamPickerPlayer.displayName}</span>.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={() => setTeamPickerPlayerId(null)}
+                    className="rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {orderedTeams.map((team) => {
+                    const tone = getTeamTone(team.teamId)
+                    const colorLabel = getTeamColorLabel(team.teamId)
+                    const showTeamName = !isDefaultTeamName(team.teamId, team.name)
+                    return (
+                      <button
+                        key={`picker-team-${team.teamId}`}
+                        type="button"
+                        onClick={() => void handleAssignPlayerFromPicker(team.teamId)}
+                        className={`rounded-2xl border p-4 text-right transition hover:-translate-y-0.5 hover:brightness-110 ${tone.border} ${tone.bg}`}
+                      >
+                        <p className={`text-lg font-black ${tone.text}`}>
+                          {showTeamName ? team.name : `الفريق ${colorLabel}`}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-200">
+                          {showTeamName ? `اللون: ${colorLabel}` : "الاعتماد على اللون فقط"}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            </div>
+          ) : null}
+        </AnimatePresence>
 
         {room && stage === "overview" ? (
           <section className="flex min-h-[calc(100dvh-8.5rem)] items-center justify-center">
