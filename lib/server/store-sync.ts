@@ -14,6 +14,8 @@ const STORE_STATE_URL = "https://hroof-store/state"
 const GLOBAL_HYDRATE_TTL_MS = 350
 const ROOM_SCOPED_STORE_FLAG = "HROOF_ROOM_SCOPED_DO_STORE"
 const DEFAULT_ROOM_HYDRATE_TTL_MS = 250
+const DEFAULT_STORE_FETCH_TIMEOUT_MS = 450
+const DEFAULT_STORE_NAMESPACE_CACHE_TTL_MS = 5000
 
 type DurableObjectNamespaceLike = {
   idFromName: (name: string) => unknown
@@ -33,6 +35,8 @@ let lastHydratedAt = 0
 let lastPersistedRevision = -1
 let hydrateInFlight: Promise<void> | null = null
 let persistInFlight: Promise<void> | null = null
+let cachedRoomsNamespace: DurableObjectNamespaceLike | null | undefined
+let cachedRoomsNamespaceAt = 0
 
 type ScopeSyncState = {
   lastHydratedAt: number
@@ -58,6 +62,68 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
 
 function getRoomHydrateTtlMs() {
   return parsePositiveInt(process.env.HROOF_ROOM_HYDRATE_TTL_MS, DEFAULT_ROOM_HYDRATE_TTL_MS)
+}
+
+function getStoreFetchTimeoutMs() {
+  return parsePositiveInt(process.env.HROOF_STORE_SYNC_FETCH_TIMEOUT_MS, DEFAULT_STORE_FETCH_TIMEOUT_MS)
+}
+
+function getStoreNamespaceCacheTtlMs() {
+  return parsePositiveInt(process.env.HROOF_STORE_SYNC_NAMESPACE_CACHE_TTL_MS, DEFAULT_STORE_NAMESPACE_CACHE_TTL_MS)
+}
+
+async function fetchWithTimeout(
+  stub: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
+  input: RequestInfo | URL,
+  init?: RequestInit
+) {
+  const controller = new AbortController()
+  const timeoutMs = getStoreFetchTimeoutMs()
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  try {
+    const fetchPromise = stub.fetch(input, {
+      ...(init ?? {}),
+      signal: controller.signal,
+    })
+
+    const timeoutPromise = new Promise<Response>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error("STORE_SYNC_TIMEOUT"))
+      }, timeoutMs)
+    })
+
+    return await Promise.race([fetchPromise, timeoutPromise])
+  } finally {
+    if (timer) {
+      clearTimeout(timer)
+    }
+  }
+}
+
+async function getRoomsNamespace() {
+  const now = Date.now()
+  if (
+    cachedRoomsNamespace !== undefined &&
+    now - cachedRoomsNamespaceAt < getStoreNamespaceCacheTtlMs()
+  ) {
+    return cachedRoomsNamespace
+  }
+
+  try {
+    const context = await getCloudflareContext({ async: true })
+    const namespace = (context?.env as unknown as { ROOMS_DO?: unknown } | undefined)?.ROOMS_DO as
+      | DurableObjectNamespaceLike
+      | undefined
+    cachedRoomsNamespace = namespace ?? null
+    cachedRoomsNamespaceAt = now
+    return cachedRoomsNamespace
+  } catch {
+    cachedRoomsNamespace = null
+    cachedRoomsNamespaceAt = now
+    return null
+  }
 }
 
 function getRoomScopeSyncState(roomId: string): ScopeSyncState {
@@ -91,15 +157,10 @@ export function isRoomScopedStoreEnabled() {
 
 async function getStoreStubByName(storeName: string) {
   try {
-    const context = await getCloudflareContext({ async: true })
-    const namespace = (context?.env as unknown as { ROOMS_DO?: unknown } | undefined)?.ROOMS_DO as
-      | DurableObjectNamespaceLike
-      | undefined
-
+    const namespace = await getRoomsNamespace()
     if (!namespace) {
       return null
     }
-
     const id = namespace.idFromName(storeName)
     return namespace.get(id)
   } catch {
@@ -133,7 +194,7 @@ export async function hydrateSharedStoreFromDurable() {
     }
 
     try {
-      const response = await stub.fetch(STORE_STATE_URL)
+      const response = await fetchWithTimeout(stub, STORE_STATE_URL)
       if (!response.ok) {
         return
       }
@@ -178,7 +239,7 @@ export async function persistSharedStoreToDurable() {
     }
 
     try {
-      await stub.fetch(STORE_STATE_URL, {
+      await fetchWithTimeout(stub, STORE_STATE_URL, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -225,7 +286,7 @@ export async function hydrateRoomShardFromDurable(roomId: string) {
     }
 
     try {
-      const response = await stub.fetch(STORE_STATE_URL)
+      const response = await fetchWithTimeout(stub, STORE_STATE_URL)
       if (!response.ok) {
         return
       }
@@ -281,7 +342,7 @@ export async function persistRoomShardToDurable(roomId: string) {
     }
 
     try {
-      await stub.fetch(STORE_STATE_URL, {
+      await fetchWithTimeout(stub, STORE_STATE_URL, {
         method: "POST",
         headers: {
           "content-type": "application/json",

@@ -248,6 +248,7 @@ export default function HostStagePage() {
   const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [isBootstrappingRoom, setIsBootstrappingRoom] = useState(false)
+  const [bootstrapBlocked, setBootstrapBlocked] = useState(false)
   const [draggingPlayerId, setDraggingPlayerId] = useState<string | null>(null)
   const [dropTargetTeamId, setDropTargetTeamId] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState(() => Date.now())
@@ -275,6 +276,7 @@ export default function HostStagePage() {
     clearHostRoomId()
     setRoomId(null)
     setRoom(null)
+    setBootstrapBlocked(false)
     if (message) {
       setNotice(message)
     }
@@ -584,6 +586,7 @@ export default function HostStagePage() {
     }
 
     setIsBootstrappingRoom(true)
+    setBootstrapBlocked(false)
     setError(null)
     setNotice(null)
 
@@ -606,6 +609,7 @@ export default function HostStagePage() {
       }
 
       setError(toErrorMessage(requestError))
+      setBootstrapBlocked(true)
     } finally {
       setIsBootstrappingRoom(false)
     }
@@ -617,12 +621,15 @@ export default function HostStagePage() {
     }
 
     if (!roomId) {
+      if (bootstrapBlocked) {
+        return
+      }
       void bootstrapRoom()
       return
     }
 
     void refreshState()
-  }, [bootstrapRoom, hostToken, refreshState, roomId])
+  }, [bootstrapBlocked, bootstrapRoom, hostToken, refreshState, roomId])
 
   useEffect(() => {
     if (!hostToken || !roomId || !isPageVisible) {

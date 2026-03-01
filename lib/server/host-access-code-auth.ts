@@ -1,3 +1,5 @@
+import { createHash } from "crypto"
+
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
 import { verifyPassword } from "@/lib/server/password"
@@ -33,6 +35,7 @@ type HostAccessCodeRow = {
 export type HostAccessCodeAuthSuccess = {
   ok: true
   code: string
+  hostId: string
   passwordHash: string
   activatedAt: number
   accessExpiresAt: number
@@ -58,6 +61,12 @@ function nowMs() {
 
 function normalizeCode(input: string) {
   return input.trim().toUpperCase()
+}
+
+export function deriveHostIdFromCode(codeInput: string) {
+  const normalized = normalizeCode(codeInput)
+  const digest = createHash("sha256").update(normalized).digest("hex")
+  return `host_code_${digest.slice(0, 24)}`
 }
 
 function addUtcMonths(fromMs: number, months: number) {
@@ -168,6 +177,7 @@ export async function authenticateHostAccessCode(
     return {
       ok: true,
       code: row.code,
+      hostId: deriveHostIdFromCode(row.code),
       passwordHash: row.password_hash,
       activatedAt,
       accessExpiresAt,

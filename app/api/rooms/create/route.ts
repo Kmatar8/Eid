@@ -1,4 +1,4 @@
-import { buildRoomSnapshot, createRoomForHost } from "@/lib/server/store"
+import { buildRoomSnapshot, createRoomForHost, ensureHostSessionRecord } from "@/lib/server/store"
 import { errorResponse, getBearerToken, jsonResponse } from "@/lib/server/http"
 import { withSharedStore } from "@/lib/server/store-sync"
 import { isHostToken, verifyToken } from "@/lib/server/token"
@@ -18,6 +18,11 @@ export async function POST(request: Request) {
     }
 
     const hostId = claims.hostId ?? claims.sub
+    const username = claims.username ?? hostId
+    if (hostId && username) {
+      ensureHostSessionRecord({ hostId, username })
+    }
+
     const created = createRoomForHost(hostId)
 
     if (!created.ok) {

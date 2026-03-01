@@ -33,6 +33,7 @@ const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 const REDEEMED_CODE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 30
 const HOST_ACCESS_DURATION_MONTHS = 2
 const DEFAULT_HOST_TOKEN_TTL_SECONDS = 60 * 60 * 12
+const HOST_SESSION_PLACEHOLDER_PASSWORD_HASH = hashPassword("host-session-placeholder")
 
 type InMemoryStore = {
   seeded: boolean
@@ -1730,31 +1731,32 @@ export function resolveHostTokenTtlSeconds(host: HostRecord) {
   return Math.min(DEFAULT_HOST_TOKEN_TTL_SECONDS, remainingSeconds)
 }
 
-export function upsertHostCredentialRecord(input: {
-  username: string
-  passwordHash: string
-  accessExpiresAt: number | null
-}): HostRecord {
+export function ensureHostSessionRecord(input: { hostId: string; username: string }): HostRecord {
   const store = getStore()
+  const hostId = input.hostId.trim()
   const normalizedUsername = normalizeRedeemCode(input.username)
-  const existingHostId = store.hostsByUsername.get(normalizedUsername)
   const now = nowMs()
 
-  if (existingHostId) {
-    const existing = store.hosts.get(existingHostId)
-    if (existing) {
-      existing.passwordHash = input.passwordHash
-      existing.accessExpiresAt = input.accessExpiresAt
-      return existing
+  if (!hostId || !normalizedUsername) {
+    throw new Error("hostId and username are required")
+  }
+
+  const existingById = store.hosts.get(hostId)
+  if (existingById) {
+    if (existingById.username !== normalizedUsername) {
+      store.hostsByUsername.set(normalizedUsername, existingById.id)
+      existingById.username = normalizedUsername
+      store.revision += 1
     }
+    return existingById
   }
 
   const host: HostRecord = {
-    id: `host_${randomUUID()}`,
+    id: hostId,
     username: normalizedUsername,
     email: null,
-    passwordHash: input.passwordHash,
-    accessExpiresAt: input.accessExpiresAt,
+    passwordHash: HOST_SESSION_PLACEHOLDER_PASSWORD_HASH,
+    accessExpiresAt: null,
     activeRoomId: null,
     createdAt: now,
   }
