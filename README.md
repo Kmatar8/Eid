@@ -80,3 +80,23 @@ npm run lint
 npm run build
 npm run deploy
 ```
+
+## Landing Chatbot (Gemini + Markdown KB)
+
+The landing page includes an Arabic support chatbot backed by:
+
+- API route: `/api/chat/support`
+- Gemini model: `gemini-2.5-flash` (default)
+- Server env var: `HROOF_GEMINI_API_KEY`
+
+Editable chatbot content lives in:
+
+- `public/chatbot/knowledge-base.md`
+- `public/chatbot/system-instructions.md`
+- `public/chatbot/fallback-message.md`
+
+Update flow:
+
+1. Edit files in `public/chatbot/`.
+2. Local `npm run dev`: changes apply to new chat requests immediately.
+3. Deployed environment: push changes and run `npm run deploy`.

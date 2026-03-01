@@ -27,6 +27,7 @@ This board tracks implementation order, ownership, and execution status.
 | 7 | T-0007 | M4 | Controller UX Simplification + Submit Reliability | done | AI-Agent | T-0006 | Controller simplified; submit reliability hardening deployed |
 | 8 | T-0008 | M4 | Production Host Journey UI (Landing -> Login -> Lobby -> Game -> Celebration) | in_progress | AI-Agent | T-0006, T-0007 | User-approved staged host flow and TV-first UX |
 | 9 | T-0026 | M5 | Room-Scoped DO Autoscaling + Low-Latency Realtime | in_progress | AI-Agent | T-0005 | Phase 2 advanced: DO delta publish, host idempotency/rate limiting, 100-room harness, Jeopardy action guards, faster stream hydration/polling, controller desync mitigation |
+| 10 | T-0034 | M1 | Landing AI KB Chatbot (Arabic, Gemini) | done | AI-Agent | T-0008 | Landing widget + server API + KB/prompt folder |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

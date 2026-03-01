@@ -25,6 +25,7 @@ import { FireworksBackground } from "@/components/ui/fireworks"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { BorderBeam } from "@/components/ui/border-beam"
+import { LandingChatbotWidget } from "@/components/landing/landing-chatbot-widget"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -436,6 +437,8 @@ export default function Home() {
           </p>
         </motion.footer>
       </main>
+
+      <LandingChatbotWidget />
 
       <AnimatePresence>
         {showInstallPrompt && (
