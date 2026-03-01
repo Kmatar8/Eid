@@ -111,6 +111,15 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 2. If player attempts submit with missing required identity fields, page shows a modal-style overlay guidance message.
 3. Join page should not surface host-only navigation hints or room-id debug block in the player-facing UX.
 
+### 6.6 Landing Hero Social Row
+1. Landing hero social/profile chip and festive event pill are displayed beside each other in a single responsive row.
+
+### 6.7 Host Mobile Mirror Guidance
+1. When `/host` is opened on mobile devices, host should receive an in-app helper popup with clear setup guidance for TV mirroring use.
+2. If mobile host is in portrait orientation, UI should show a guidance alert to switch to landscape for better TV readability.
+3. Host UI on mobile must support a compact display mode that scales down the host canvas for mirrored/cast TV scenarios where the default layout appears oversized.
+4. Compact mode and helper-dismiss preference should persist per browser session/local storage without server persistence.
+
 ## 7. Room Lifecycle
 ## 7.1 Room states
 1. `lobby_open`

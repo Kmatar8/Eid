@@ -276,7 +276,7 @@ export default function Home() {
           transition={{ duration: 0.6 }}
           className="space-y-4 text-center mt-2 relative z-50 pt-4"
         >
-          <div className="mx-auto mb-6 w-fit relative z-50">
+          <div className="mx-auto mb-6 flex w-fit flex-wrap items-center justify-center gap-3 relative z-50">
             <a
               href="https://www.tiktok.com/@happytiime"
               target="_blank"
@@ -300,12 +300,12 @@ export default function Home() {
               </svg>
               @happytiime
             </a>
-          </div>
 
-          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
-            <MoonStar className="size-4" />
-            جمعة العيد العائلية
-            <Sparkles className="size-4" />
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
+              <MoonStar className="size-4" />
+              جمعة العيد العائلية
+              <Sparkles className="size-4" />
+            </div>
           </div>
 
           <div className="absolute left-6 top-6 z-50 flex items-center gap-3">

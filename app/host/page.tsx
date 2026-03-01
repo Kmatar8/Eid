@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Gamepad2, LogOut, Plus, Power, X } from "lucide-react"
@@ -39,6 +39,11 @@ const HOST_LOGOUT_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
 const HOST_SWITCH_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/22 text-amber-100 shadow-lg transition hover:scale-105 hover:bg-amber-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-amber-500/22"
+const MOBILE_HELP_DISMISSED_KEY = "hroof:host:mobile-helper-dismissed:v1"
+const MOBILE_COMPACT_MODE_KEY = "hroof:host:mobile-compact-mode:v1"
+const MOBILE_VIEWPORT_MAX_WIDTH = 1024
+const MOBILE_LANDSCAPE_SCALE = 0.78
+const MOBILE_PORTRAIT_SCALE = 0.64
 
 type FeedbackType = "correct" | "wrong" | null
 type HostStage = "lobby" | "overview" | "trivia" | "haraj" | "haraj_overview" | "celebration" | "paused"
@@ -216,6 +221,18 @@ function isDocumentVisible() {
   }
 
   return document.visibilityState === "visible"
+}
+
+function readViewportSize() {
+  if (typeof window === "undefined") {
+    return { width: 1280, height: 720 }
+  }
+
+  return { width: window.innerWidth, height: window.innerHeight }
+}
+
+function isLikelyMobileViewport(width: number, height: number) {
+  return width <= MOBILE_VIEWPORT_MAX_WIDTH || Math.min(width, height) <= 768
 }
 
 function resolveHostPollMs(room: RoomSnapshot | null) {
@@ -399,6 +416,9 @@ export default function HostStagePage() {
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [showMobileHelperModal, setShowMobileHelperModal] = useState(false)
+  const [compactMobileModeEnabled, setCompactMobileModeEnabled] = useState(false)
+  const [viewportSize, setViewportSize] = useState(() => readViewportSize())
   const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
   const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
@@ -417,6 +437,9 @@ export default function HostStagePage() {
   const lastHarajSnapshotRef = useRef<RoomSnapshot["haraj"] | null>(null)
   const processedHarajRevealRoundKeyRef = useRef<string | null>(null)
   const playedHarajRevealConfettiRoundKeyRef = useRef<string | null>(null)
+
+  const isMobileViewport = isLikelyMobileViewport(viewportSize.width, viewportSize.height)
+  const isLandscapeViewport = viewportSize.width >= viewportSize.height
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -536,6 +559,39 @@ export default function HostStagePage() {
       document.removeEventListener("visibilitychange", handleVisibility)
     }
   }, [])
+
+  useEffect(() => {
+    const syncViewport = () => {
+      setViewportSize(readViewportSize())
+    }
+
+    syncViewport()
+    window.addEventListener("resize", syncViewport)
+    window.addEventListener("orientationchange", syncViewport)
+    return () => {
+      window.removeEventListener("resize", syncViewport)
+      window.removeEventListener("orientationchange", syncViewport)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      setShowMobileHelperModal(false)
+      setCompactMobileModeEnabled(false)
+      return
+    }
+
+    const compactPreference = window.localStorage.getItem(MOBILE_COMPACT_MODE_KEY)
+    if (compactPreference === null) {
+      window.localStorage.setItem(MOBILE_COMPACT_MODE_KEY, "1")
+      setCompactMobileModeEnabled(true)
+    } else {
+      setCompactMobileModeEnabled(compactPreference === "1")
+    }
+
+    const dismissed = window.localStorage.getItem(MOBILE_HELP_DISMISSED_KEY) === "1"
+    setShowMobileHelperModal(!dismissed)
+  }, [isMobileViewport])
 
   useEffect(() => {
     if (!notice) {
@@ -1268,6 +1324,20 @@ export default function HostStagePage() {
     }
   }, [releaseRoomBinding, runAction])
 
+  const handleCompactMobileModeToggle = useCallback(() => {
+    const next = !compactMobileModeEnabled
+    setCompactMobileModeEnabled(next)
+    window.localStorage.setItem(MOBILE_COMPACT_MODE_KEY, next ? "1" : "0")
+    setNotice(next ? "تم تفعيل وضع العرض المصغر للجوال." : "تم إلغاء وضع العرض المصغر للجوال.")
+  }, [compactMobileModeEnabled])
+
+  const handleMobileHelperClose = useCallback((rememberChoice: boolean) => {
+    if (rememberChoice) {
+      window.localStorage.setItem(MOBILE_HELP_DISMISSED_KEY, "1")
+    }
+    setShowMobileHelperModal(false)
+  }, [])
+
   const handleLogout = () => {
     clearHostSession()
     setHostTokenState(null)
@@ -1493,6 +1563,18 @@ export default function HostStagePage() {
   const showBackgroundFireworks = !isActiveGameStage
   const fireworksBasePopulation = 1
   const fireworksExplosionHeight = { min: 0, max: 0.15 }
+  const showMobileOrientationHint = isMobileViewport && !isLandscapeViewport
+  const effectiveMobileScale =
+    isMobileViewport && compactMobileModeEnabled ? (isLandscapeViewport ? MOBILE_LANDSCAPE_SCALE : MOBILE_PORTRAIT_SCALE) : 1
+  const hostMainScaleStyle: CSSProperties | undefined =
+    effectiveMobileScale < 1
+      ? {
+        transform: `scale(${effectiveMobileScale})`,
+        transformOrigin: "top center",
+        width: `${100 / effectiveMobileScale}%`,
+        minHeight: isActiveGameStage ? `calc(100dvh / ${effectiveMobileScale})` : undefined,
+      }
+      : undefined
 
   return (
     <div className={`relative overflow-hidden text-foreground ${isActiveGameStage ? "h-[100dvh]" : "min-h-screen"}`}>
@@ -1525,6 +1607,7 @@ export default function HostStagePage() {
       <main
         className={`relative z-10 mx-auto w-full max-w-[1820px] px-4 sm:px-8 ${isActiveGameStage ? "h-full overflow-hidden pb-4 pt-4" : "min-h-screen pb-28 pt-5"
           }`}
+        style={hostMainScaleStyle}
       >
         {error ? <p className="party-status-error mb-3 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
         <AnimatePresence>
@@ -1543,6 +1626,20 @@ export default function HostStagePage() {
                 ))}
               </ul>
               <p className="mt-2 text-xs text-amber-100/90">هذه الرسالة ستختفي تلقائيًا خلال 10 ثوانٍ.</p>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showMobileOrientationHint ? (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              className="fixed inset-x-0 top-4 z-[68] mx-auto w-[min(44rem,95vw)] rounded-2xl border border-cyan-300/45 bg-slate-950/92 px-4 py-3 shadow-2xl backdrop-blur-md"
+            >
+              <p className="text-sm font-black text-cyan-200">لأفضل عرض على التلفزيون: حوّل الجوال للوضع الأفقي.</p>
+              <p className="mt-1 text-xs text-slate-200">فعّل دوران الشاشة ويفضّل تشغيل عرض سطح المكتب من المتصفح.</p>
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -2360,6 +2457,53 @@ export default function HostStagePage() {
             </div>
           </section>
         ) : null}
+
+        <AnimatePresence>
+          {showMobileHelperModal ? (
+            <div
+              className="fixed inset-0 z-[78] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+              onClick={() => handleMobileHelperClose(false)}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 16, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                className="w-full max-w-2xl rounded-3xl border border-white/20 bg-slate-950 p-5 shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-amber-200">Mobile Host Guide</p>
+                <h3 className="mt-2 text-3xl font-black text-white">طريقة الاستخدام من الجوال</h3>
+                <ul className="mt-4 list-disc space-y-2 pr-5 text-sm text-slate-100">
+                  <li>حوّل الجوال للوضع الأفقي قبل بدء الفعالية.</li>
+                  <li>فعّل عرض سطح المكتب من المتصفح للحصول على مساحة أكبر.</li>
+                  <li>استخدم زر تفعيل العرض المصغر إذا كان العرض كبيرًا عند البث على التلفزيون.</li>
+                  <li>ثبت الجوال على نفس شبكة الواي فاي مع الشاشة لتقليل التأخير.</li>
+                </ul>
+                <div className="mt-5 rounded-xl border border-cyan-300/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                  تلميح: يمكنك فتح هذا الدليل لاحقًا من شريط Mobile Host Helper.
+                </div>
+
+                <div className="mt-6 flex flex-wrap justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-white/25 bg-white/10 text-slate-100 hover:bg-white/20"
+                    onClick={() => handleMobileHelperClose(false)}
+                  >
+                    إغلاق
+                  </Button>
+                  <Button
+                    type="button"
+                    className={HOST_ACTION_BUTTON_CLASS}
+                    onClick={() => handleMobileHelperClose(true)}
+                  >
+                    تم - لا تظهر مرة أخرى
+                  </Button>
+                </div>
+              </motion.div>
+            </div>
+          ) : null}
+        </AnimatePresence>
       </main>
 
       <div className="fixed bottom-4 left-[max(0.375rem,calc((100vw-1820px)/2-3.25rem))] z-30">
@@ -2455,6 +2599,30 @@ export default function HostStagePage() {
         </div>
       </div>
 
+      {isMobileViewport ? (
+        <div className="fixed bottom-4 right-4 z-[42] flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowMobileHelperModal(true)}
+            className="rounded-full border border-cyan-300/40 bg-slate-950/88 px-4 py-2 text-xs font-black text-cyan-100 shadow-xl backdrop-blur transition hover:brightness-110 active:scale-[0.98]"
+          >
+            دليل الجوال
+          </button>
+          <button
+            type="button"
+            onClick={handleCompactMobileModeToggle}
+            className="rounded-full border border-amber-300/45 bg-slate-950/88 px-4 py-2 text-xs font-black text-amber-100 shadow-xl backdrop-blur transition hover:brightness-110 active:scale-[0.98]"
+          >
+            {compactMobileModeEnabled ? "إيقاف العرض المصغر" : "تفعيل العرض المصغر"}
+          </button>
+          {compactMobileModeEnabled ? (
+            <span className="rounded-full border border-white/20 bg-black/70 px-3 py-1 text-[0.65rem] font-semibold text-slate-200">
+              وضع مصغر {Math.round(effectiveMobileScale * 100)}%
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <AnimatePresence>
         {notice ? (
           <motion.div
@@ -2463,7 +2631,7 @@ export default function HostStagePage() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ duration: 0.2 }}
-            className="party-status-success fixed bottom-4 right-4 z-40 max-w-md rounded-xl px-4 py-3 text-sm font-medium shadow-2xl"
+            className={`party-status-success fixed right-4 z-40 max-w-md rounded-xl px-4 py-3 text-sm font-medium shadow-2xl ${isMobileViewport ? "bottom-24" : "bottom-4"}`}
             role="status"
             aria-live="polite"
           >
