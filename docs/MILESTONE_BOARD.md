@@ -29,6 +29,7 @@ This board tracks implementation order, ownership, and execution status.
 | 9 | T-0026 | M5 | Room-Scoped DO Autoscaling + Low-Latency Realtime | in_progress | AI-Agent | T-0005 | Phase 2 advanced: DO delta publish, host idempotency/rate limiting, 100-room harness, Jeopardy action guards, faster stream hydration/polling, controller desync mitigation |
 | 10 | T-0034 | M1 | Landing AI KB Chatbot (Arabic, Gemini) | done | AI-Agent | T-0008 | Landing widget + server API + KB/prompt folder |
 | 11 | T-0039 | M1 | Landing Chatbot Copy Refresh | done | AI-Agent | T-0034 | Requested title/greeting/subtitle text updates |
+| 12 | T-0040 | M1 | Chatbot Host Knowledge Base + Saudi Tone Instructions | done | AI-Agent | T-0034 | Host workflow KB enrichment and tone rules update |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

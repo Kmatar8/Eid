@@ -161,7 +161,7 @@ function getTeamColorLabel(teamId: string) {
 }
 
 function getGameLabel(gameId: ActiveGame) {
-  return gameId === "trivia" ? "الجيوباردي" : "الحراج"
+  return gameId === "trivia" ? "تحدي الأسئلة" : "الحراج"
 }
 
 function isTriviaTimedPhase(phase: RoomSnapshot["trivia"]["phase"]) {
@@ -1225,7 +1225,7 @@ export default function HostStagePage() {
     }
 
     const base = [
-      { gameId: "trivia" as const, label: "الجيوباردي", status: room.trivia.status },
+      { gameId: "trivia" as const, label: "تحدي الأسئلة", status: room.trivia.status },
       { gameId: "haraj" as const, label: "الحراج", status: room.haraj.status },
     ]
     return base.map((entry) => {
