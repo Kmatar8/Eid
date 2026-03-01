@@ -1,5 +1,4 @@
 import { FireworksBackground } from "@/components/ui/fireworks";
-import FireworksBackgroundDemo from "@/components/fireworks-demo";
 
 export default function EidCelebrationPage() {
     return (
@@ -11,8 +10,6 @@ export default function EidCelebrationPage() {
                 particleSpeed={3}
                 className="absolute inset-0 z-0"
             />
-            {/* Monochrome Fireworks Demo Layer */}
-            <FireworksBackgroundDemo population={0.5} />
 
             {/* Content Overlay */}
             <div className="relative z-10 flex flex-col items-center justify-center min-h-screen text-center p-4">

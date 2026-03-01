@@ -22,7 +22,6 @@ import {
 } from "lucide-react"
 
 import { FireworksBackground } from "@/components/ui/fireworks"
-import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { BorderBeam } from "@/components/ui/border-beam"
 import { LandingChatbotWidget } from "@/components/landing/landing-chatbot-widget"
@@ -251,7 +250,6 @@ export default function Home() {
         explosionHeight={{ min: 0, max: 0.15 }}
         className="absolute inset-0 z-0 pointer-events-none opacity-80"
       />
-      <FireworksBackgroundDemo population={1.5} />
 
       {festiveSymbols.map((item) => (
         <motion.span

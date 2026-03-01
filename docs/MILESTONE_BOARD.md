@@ -40,6 +40,8 @@ This board tracks implementation order, ownership, and execution status.
 | 20 | T-0048 | M4 | Haraj Products from CSV + Image Path Standardization | done | AI-Agent | T-0033 | Generate product bank from `haraj.csv` and standardize image folder path |
 | 21 | T-0049 | M4 | Haraj Image Asset Resolution + Mixed Size Display Hardening | done | AI-Agent | T-0048 | Resolve `.jpg/.jpeg` mismatches and improve host image fit for mixed dimensions |
 | 22 | T-0050 | M4 | Haraj Image WebP Optimization Pipeline | done | AI-Agent | T-0049 | Add batch WebP conversion and make generated catalog prefer WebP assets |
+| 23 | T-0051 | M4 | Join Page Validation Overlay + Player UI Cleanup | done | AI-Agent | T-0006 | Overlay guidance for missing name/avatar and remove room-id/host hints from join page |
+| 24 | T-0052 | M4 | Host Overview Actions + Haraj Reveal Polish | done | AI-Agent | T-0047 | Remove overview end buttons, widen next-round CTA, add reveal confetti + winner row colors |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

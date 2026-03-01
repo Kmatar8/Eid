@@ -1,6 +1,5 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState, useRef, type FormEvent } from "react"
 import { Camera, ImagePlus } from "lucide-react"
@@ -29,8 +28,9 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
   const router = useRouter()
   const existingSession = getPlayerSession(roomId)
   const [name, setName] = useState(existingSession?.playerName ?? "")
-  const [avatarEmoji, setAvatarEmoji] = useState("🙂")
+  const [avatarEmoji, setAvatarEmoji] = useState("")
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(null)
+  const [validationOverlayMessage, setValidationOverlayMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasExistingSession] = useState(Boolean(existingSession))
@@ -56,13 +56,31 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
 
   const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    setBusy(true)
     setError(null)
+    const trimmedName = name.trim()
+    const hasAvatarSelection = Boolean(avatarImageUrl || avatarEmoji.trim())
+
+    if (!trimmedName && !hasAvatarSelection) {
+      setValidationOverlayMessage("اكتب اسمك واختر رمز تعبيري أو صورة قبل الدخول.")
+      return
+    }
+
+    if (!trimmedName) {
+      setValidationOverlayMessage("اكتب اسمك قبل الدخول.")
+      return
+    }
+
+    if (!hasAvatarSelection) {
+      setValidationOverlayMessage("اختر رمز تعبيري أو ارفع صورة قبل الدخول.")
+      return
+    }
+
+    setBusy(true)
 
     try {
       const response = await joinRoom(
         roomId,
-        name.trim(),
+        trimmedName,
         avatarEmoji.trim() || undefined,
         avatarImageUrl || undefined
       )
@@ -94,21 +112,16 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
           </p>
           <h1 className="mt-3 text-4xl font-black sm:text-5xl">جاهز تدخل اللعبة؟</h1>
           <p className="mt-2 text-base text-slate-200">اكتب اسمك واختر رمزك ثم ادخل مباشرة إلى وحدة التحكم.</p>
-          <p className="mx-auto mt-3 inline-flex rounded-full border border-white/20 bg-black/20 px-4 py-1.5 text-sm font-medium text-slate-100">
-            Room ID: <span className="ml-2 font-mono text-amber-200">{roomId}</span>
-          </p>
         </header>
 
         <section className="backdrop-blur-lg bg-black/10 border border-white/20 rounded-4xl p-6 sm:p-7 shadow-2xl">
-          <form className="space-y-5" onSubmit={handleJoin}>
+          <form className="space-y-5" onSubmit={handleJoin} noValidate>
             <label className="block text-sm font-semibold text-slate-100">
               الاسم المستعار
               <input
                 className="mt-2 h-12 w-full rounded-2xl border border-white/20 bg-white/10 px-4 text-base text-white placeholder:text-slate-300/70 transition focus:border-amber-300 focus:outline-none focus:ring-4 focus:ring-amber-300/25"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="مثال: خالد السريع"
-                required
                 minLength={2}
                 maxLength={40}
               />
@@ -210,14 +223,23 @@ export default function JoinRoomClientPage({ roomId }: JoinRoomClientPageProps) 
             <p className="party-status-error mt-4 rounded-xl px-4 py-3 text-sm font-medium">{error}</p>
           ) : null}
         </section>
-
-        <p className="mt-6 text-center text-sm text-slate-200">
-          لوحة تحكم المضيف:{" "}
-          <Link className="font-bold text-cyan-200 underline underline-offset-2" href="/host">
-            /host
-          </Link>
-        </p>
       </main>
+
+      {validationOverlayMessage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-amber-300/45 bg-slate-950/95 p-6 text-center shadow-2xl">
+            <p className="text-xl font-black text-amber-200">تنبيه</p>
+            <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-100">{validationOverlayMessage}</p>
+            <Button
+              type="button"
+              className="mt-5 h-11 w-full rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 font-black text-slate-950"
+              onClick={() => setValidationOverlayMessage(null)}
+            >
+              فهمت
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

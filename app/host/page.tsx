@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Gamepad2, LogOut, Plus, Power, X } from "lucide-react"
-import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { FeedbackOverlay, type FeedbackOverlayContext } from "@/components/ui/feedback-animations"
@@ -177,6 +176,38 @@ function remainingSeconds(targetTs: number | null, nowTs: number) {
     return 0
   }
   return Math.max(0, Math.ceil((targetTs - nowTs) / 1000))
+}
+
+function getHarajWinnerRowClasses(rank: number | null, pointsAwarded: number) {
+  if (pointsAwarded <= 0) {
+    return {
+      row: "border-white/10",
+      player: "",
+      points: "text-amber-200",
+    }
+  }
+
+  if (rank === 1) {
+    return {
+      row: "border-emerald-300/45 bg-emerald-500/12",
+      player: "text-emerald-100",
+      points: "text-emerald-200",
+    }
+  }
+
+  if (rank === 2) {
+    return {
+      row: "border-cyan-300/45 bg-cyan-500/12",
+      player: "text-cyan-100",
+      points: "text-cyan-200",
+    }
+  }
+
+  return {
+    row: "border-fuchsia-300/40 bg-fuchsia-500/10",
+    player: "text-fuchsia-100",
+    points: "text-fuchsia-200",
+  }
 }
 
 function isDocumentVisible() {
@@ -385,6 +416,7 @@ export default function HostStagePage() {
   const wrongAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
   const lastHarajSnapshotRef = useRef<RoomSnapshot["haraj"] | null>(null)
   const processedHarajRevealRoundKeyRef = useRef<string | null>(null)
+  const playedHarajRevealConfettiRoundKeyRef = useRef<string | null>(null)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -600,6 +632,7 @@ export default function HostStagePage() {
     if (!currentHaraj) {
       lastHarajSnapshotRef.current = null
       processedHarajRevealRoundKeyRef.current = null
+      playedHarajRevealConfettiRoundKeyRef.current = null
       setHarajRevealCountdownRoundKey(null)
       setHarajRevealCountdownEndsAt(null)
       return
@@ -631,13 +664,17 @@ export default function HostStagePage() {
       } else {
         setHarajRevealCountdownRoundKey(null)
         setHarajRevealCountdownEndsAt(null)
+        if (!currentHaraj.lastReveal?.skipped && playedHarajRevealConfettiRoundKeyRef.current !== currentRevealKey) {
+          launchCelebrationConfetti(2200)
+          playedHarajRevealConfettiRoundKeyRef.current = currentRevealKey
+        }
       }
 
       processedHarajRevealRoundKeyRef.current = currentRevealKey
     }
 
     lastHarajSnapshotRef.current = currentHaraj
-  }, [room?.haraj])
+  }, [launchCelebrationConfetti, room?.haraj])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
@@ -1354,10 +1391,27 @@ export default function HostStagePage() {
       return
     }
 
+    const shouldFireConfetti =
+      currentHarajRevealRoundKey &&
+      currentHarajRevealRoundKey === harajRevealCountdownRoundKey &&
+      !haraj?.lastReveal?.skipped &&
+      playedHarajRevealConfettiRoundKeyRef.current !== currentHarajRevealRoundKey
+
     setHarajRevealCountdownRoundKey(null)
     setHarajRevealCountdownEndsAt(null)
-    launchCelebrationConfetti(2200)
-  }, [harajRevealCountdownEndsAt, harajRevealCountdownRoundKey, launchCelebrationConfetti, nowTs])
+
+    if (shouldFireConfetti && currentHarajRevealRoundKey) {
+      launchCelebrationConfetti(2200)
+      playedHarajRevealConfettiRoundKeyRef.current = currentHarajRevealRoundKey
+    }
+  }, [
+    currentHarajRevealRoundKey,
+    haraj?.lastReveal?.skipped,
+    harajRevealCountdownEndsAt,
+    harajRevealCountdownRoundKey,
+    launchCelebrationConfetti,
+    nowTs,
+  ])
 
   const celebrationTitle = useMemo(() => {
     if (!room || room.state !== "between_games") {
@@ -1432,7 +1486,6 @@ export default function HostStagePage() {
   const isActiveGameStage = isTriviaStage || isHarajStage
   const showBackgroundFireworks = !isActiveGameStage
   const fireworksBasePopulation = 1
-  const fireworksDemoPopulation = 1
   const fireworksExplosionHeight = { min: 0, max: 0.15 }
 
   return (
@@ -1456,7 +1509,6 @@ export default function HostStagePage() {
             explosionHeight={fireworksExplosionHeight}
             className="absolute inset-0 z-0 pointer-events-none opacity-80"
           />
-          <FireworksBackgroundDemo population={fireworksDemoPopulation} />
         </>
       ) : null}
       <div className="party-stage-bg" />
@@ -1747,14 +1799,6 @@ export default function HostStagePage() {
                   onClick={() => void handleStartTrivia()}
                 >
                   ابدأ اللعبة
-                </Button>
-                <Button
-                  type="button"
-                  className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                  disabled={Boolean(busyAction) || !canEndSession}
-                  onClick={() => void handleEndSession()}
-                >
-                  إنهاء الجلسة
                 </Button>
               </div>
             </div>
@@ -2146,13 +2190,23 @@ export default function HostStagePage() {
                 <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
                 <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
                 <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_1fr] lg:items-start">
-                  <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:h-[30rem]">
-                    <img
-                      src={haraj.lastReveal.imageUrl}
-                      alt={haraj.lastReveal.productName}
-                      className="max-h-full w-full rounded-xl object-contain"
-                      decoding="async"
-                    />
+                  <div className="space-y-4">
+                    <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:h-[30rem]">
+                      <img
+                        src={haraj.lastReveal.imageUrl}
+                        alt={haraj.lastReveal.productName}
+                        className="max-h-full w-full rounded-xl object-contain"
+                        decoding="async"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      className={`${HOST_ACTION_BUTTON_CLASS} h-12 w-full text-lg`}
+                      disabled={Boolean(busyAction) || !canAdvanceHarajRound || isHarajRevealCountdownActive}
+                      onClick={() => void handleNextHarajRound()}
+                    >
+                      الجولة التالية
+                    </Button>
                   </div>
 
                   <div className="space-y-4">
@@ -2180,33 +2234,25 @@ export default function HostStagePage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {haraj.lastReveal.results.map((result) => (
-                              <tr key={`haraj-result-${result.playerId}`} className="border-t border-white/10">
-                                <td className="px-3 py-2 font-semibold">{result.playerName}</td>
-                                <td className="px-3 py-2">
-                                  {result.estimate} {haraj.lastReveal?.currency}
-                                </td>
-                                <td className="px-3 py-2">{result.difference}</td>
-                                <td className="px-3 py-2">{result.rank ?? "-"}</td>
-                                <td className="px-3 py-2 font-black text-amber-200">{result.pointsAwarded}</td>
-                              </tr>
-                            ))}
+                            {haraj.lastReveal.results.map((result) => {
+                              const tone = getHarajWinnerRowClasses(result.rank, result.pointsAwarded)
+                              return (
+                                <tr key={`haraj-result-${result.playerId}`} className={`border-t ${tone.row}`}>
+                                  <td className={`px-3 py-2 font-semibold ${tone.player}`}>{result.playerName}</td>
+                                  <td className="px-3 py-2">
+                                    {result.estimate} {haraj.lastReveal?.currency}
+                                  </td>
+                                  <td className="px-3 py-2">{result.difference}</td>
+                                  <td className="px-3 py-2">{result.rank ?? "-"}</td>
+                                  <td className={`px-3 py-2 font-black ${tone.points}`}>{result.pointsAwarded}</td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button
-                    type="button"
-                    className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                    disabled={Boolean(busyAction) || !canAdvanceHarajRound || isHarajRevealCountdownActive}
-                    onClick={() => void handleNextHarajRound()}
-                  >
-                    الجولة التالية
-                  </Button>
                 </div>
 
                 {isHarajRevealCountdownActive ? (
@@ -2263,14 +2309,6 @@ export default function HostStagePage() {
                   ابدأ لعبة الحراج
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                disabled={Boolean(busyAction) || !canEndSession}
-                onClick={() => void handleEndSession()}
-              >
-                إنهاء الفعالية
-              </Button>
             </div>
           </section>
         ) : null}

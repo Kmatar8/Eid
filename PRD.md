@@ -73,6 +73,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 9. Host has a persistent bottom-corner game-switch button that opens left-side game pills and can switch active game runtime.
 10. If host switches away from a non-completed game, that game's progress is preserved and resumed when switching back.
 11. Completed games are shown with a checkmark in the switch pills and are locked from re-entry.
+12. Game overview screens are start/progression surfaces and should not render a primary "end session" action button inside overview content cards.
 
 ### 6.2 Controller Clarity Requirements (Trivia)
 1. Controller view must clearly indicate whether the current question is for the current player or another player.
@@ -102,6 +103,11 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
     - TV mirroring options and troubleshooting
 12. Follow-up clarification prompts (for example: "كيف يعني؟") should use recent customer message context before resolving to fallback.
 13. WhatsApp escalation contact for chatbot fallback is `0576216613`.
+
+### 6.5 Join Page UX (Controller Entry)
+1. Join page requires both player display name and avatar choice (emoji or uploaded image) before allowing entry.
+2. If player attempts submit with missing required identity fields, page shows a modal-style overlay guidance message.
+3. Join page should not surface host-only navigation hints or room-id debug block in the player-facing UX.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states
@@ -188,6 +194,8 @@ Per round:
 10. Closest estimates receive points (`50` for rank 1, `30` for rank 2, `10` for rank 3), credited to player teams.
 11. If all eligible players submit before timeout, host sees a `5`-second overlay countdown before reveal details are shown.
 12. Haraj reveal layout on host is split: product image on the left and player guesses table on the right, with a large `السعر الحقيقي` headline above the table.
+13. On reveal, host plays a celebratory confetti effect when the real price is shown.
+14. Reveal results table visually highlights only players who gained points, using rank-based winner colors.
 
 ## 8.6.2 Haraj round phases
 1. `haraj_intro`

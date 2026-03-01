@@ -4,7 +4,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState, type FormEvent } from "react"
 
-import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { LiveApiError, hostLogin } from "@/lib/client/live-api"
@@ -54,7 +53,6 @@ export default function HostLoginPage() {
   return (
     <div className="relative min-h-screen overflow-hidden text-white">
       <FireworksBackground population={1} particleSpeed={3} className="absolute inset-0 z-0 opacity-70" />
-      <FireworksBackgroundDemo population={0.5} />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.2),transparent_45%),linear-gradient(160deg,#09090b_0%,#1f1b4b_50%,#09090b_100%)]" />
 
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-8">

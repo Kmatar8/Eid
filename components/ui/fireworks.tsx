@@ -108,6 +108,7 @@ function createFirework(
     size: number,
     particleSpeed: { min: number; max: number } | number,
     particleSize: { min: number; max: number } | number,
+    particleCountRange: { min: number; max: number },
     onExplode: (particles: ParticleType[]) => void,
 ): FireworkType {
     const angle = -Math.PI / 2 + rand(-0.3, 0.3);
@@ -144,7 +145,10 @@ function createFirework(
             return true;
         },
         explode() {
-            const numParticles = randInt(50, 150);
+            const numParticles = randInt(
+                particleCountRange.min,
+                particleCountRange.max + 1,
+            );
             const particles: ParticleType[] = [];
             for (let i = 0; i < numParticles; i++) {
                 const particleAngle = rand(0, Math.PI * 2);
@@ -204,7 +208,13 @@ const DEFAULT_FIREWORK_SPEED = Object.freeze({ min: 4, max: 8 });
 const DEFAULT_FIREWORK_SIZE = Object.freeze({ min: 2, max: 5 });
 const DEFAULT_PARTICLE_SPEED = Object.freeze({ min: 2, max: 7 });
 const DEFAULT_PARTICLE_SIZE = Object.freeze({ min: 1, max: 5 });
+const DEFAULT_PARTICLE_COUNT = Object.freeze({ min: 24, max: 70 });
 const DEFAULT_EXPLOSION_HEIGHT = Object.freeze({ min: 0.1, max: 0.4 });
+const MAX_DEVICE_PIXEL_RATIO = 1.5;
+const BASE_MAX_FIREWORKS = 10;
+const BASE_MAX_PARTICLES = 720;
+const LOW_END_MAX_FIREWORKS = 6;
+const LOW_END_MAX_PARTICLES = 360;
 
 type FireworksBackgroundProps = Omit<React.ComponentProps<'div'>, 'color'> & {
     canvasProps?: React.ComponentProps<'canvas'>;
@@ -252,7 +262,15 @@ function FireworksBackground({
 
         let maxX = 0;
         let maxY = 0;
-        const devicePixelRatio = window.devicePixelRatio || 1;
+        const devicePixelRatio = Math.min(window.devicePixelRatio || 1, MAX_DEVICE_PIXEL_RATIO);
+        const reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        let reducedMotionEnabled = reducedMotionQuery.matches;
+        const hostNavigator = navigator as Navigator & { deviceMemory?: number };
+        const hardwareConcurrency = hostNavigator.hardwareConcurrency ?? 4;
+        const deviceMemory = hostNavigator.deviceMemory ?? 4;
+        const isVeryWeakDevice = hardwareConcurrency <= 2 || deviceMemory <= 2;
+        const isWeakDevice = isVeryWeakDevice || hardwareConcurrency <= 4 || deviceMemory <= 4;
+        const deviceLoadFactor = isVeryWeakDevice ? 0 : isWeakDevice ? 0.55 : 1;
 
         const resolvedFireworkSpeed =
             fireworkSpeedMin === fireworkSpeedMax
@@ -288,16 +306,45 @@ function FireworksBackground({
 
         const explosions: ParticleType[] = [];
         const fireworks: FireworkType[] = [];
-        const effectivePopulation = Math.max(0.2, population);
+        const effectivePopulation = Math.max(0.2, population * deviceLoadFactor);
+        const maxFireworks = Math.max(
+            2,
+            Math.round((isWeakDevice ? LOW_END_MAX_FIREWORKS : BASE_MAX_FIREWORKS) * effectivePopulation),
+        );
+        const maxParticles = Math.max(
+            140,
+            Math.round((isWeakDevice ? LOW_END_MAX_PARTICLES : BASE_MAX_PARTICLES) * effectivePopulation),
+        );
+        const particleCountRange = isWeakDevice
+            ? { min: 12, max: 36 }
+            : DEFAULT_PARTICLE_COUNT;
         let launchTimeoutId: number | null = null;
+        let animationFrameId: number | null = null;
+        let isHidden = document.visibilityState === 'hidden';
         let disposed = false;
+
+        const canRunAnimation = () =>
+            !disposed && !isHidden && !reducedMotionEnabled && !isVeryWeakDevice;
+
+        const trimToMax = <T,>(items: T[], maxItems: number) => {
+            const overflow = items.length - maxItems;
+            if (overflow > 0) {
+                items.splice(0, overflow);
+            }
+        };
 
         const handleExplosion = (particles: ParticleType[]) => {
             explosions.push(...particles);
+            trimToMax(explosions, maxParticles);
+        };
+
+        const pushFirework = (firework: FireworkType) => {
+            fireworks.push(firework);
+            trimToMax(fireworks, maxFireworks);
         };
 
         const launchFirework = () => {
-            if (disposed) {
+            if (!canRunAnimation()) {
                 return;
             }
             const x = rand(maxX * 0.1, maxX * 0.9);
@@ -306,7 +353,7 @@ function FireworksBackground({
             const fireworkColor = getColor(color);
             const speed = getValueByRange(resolvedFireworkSpeed);
             const size = getValueByRange(resolvedFireworkSize);
-            fireworks.push(
+            pushFirework(
                 createFirework(
                     x,
                     y,
@@ -316,28 +363,27 @@ function FireworksBackground({
                     size,
                     resolvedParticleSpeed,
                     resolvedParticleSize,
+                    particleCountRange,
                     handleExplosion,
                 ),
             );
         };
 
         const scheduleNextLaunch = () => {
-            if (disposed) {
+            if (!canRunAnimation()) {
                 return;
             }
             const timeout = rand(300, 800) / effectivePopulation;
             launchTimeoutId = window.setTimeout(() => {
+                launchTimeoutId = null;
                 launchFirework();
                 scheduleNextLaunch();
             }, timeout);
         };
 
-        launchFirework();
-        scheduleNextLaunch();
-
-        let animationFrameId: number;
         const animate = () => {
-            if (disposed) {
+            if (!canRunAnimation()) {
+                animationFrameId = null;
                 return;
             }
             ctx.clearRect(0, 0, maxX, maxY);
@@ -364,9 +410,65 @@ function FireworksBackground({
             animationFrameId = requestAnimationFrame(animate);
         };
 
-        animate();
+        const stopAnimation = (clearState = false) => {
+            if (launchTimeoutId !== null) {
+                window.clearTimeout(launchTimeoutId);
+                launchTimeoutId = null;
+            }
+            if (animationFrameId !== null) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            if (clearState) {
+                fireworks.length = 0;
+                explosions.length = 0;
+                ctx.clearRect(0, 0, maxX, maxY);
+            }
+        };
+
+        const startAnimation = () => {
+            if (!canRunAnimation()) {
+                return;
+            }
+            if (launchTimeoutId === null) {
+                launchFirework();
+                scheduleNextLaunch();
+            }
+            if (animationFrameId === null) {
+                animationFrameId = requestAnimationFrame(animate);
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            isHidden = document.visibilityState === 'hidden';
+            if (isHidden) {
+                stopAnimation(true);
+                return;
+            }
+            startAnimation();
+        };
+
+        const handleMotionPreferenceChange = (event: MediaQueryListEvent) => {
+            reducedMotionEnabled = event.matches;
+            if (reducedMotionEnabled) {
+                stopAnimation(true);
+                return;
+            }
+            startAnimation();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        if (typeof reducedMotionQuery.addEventListener === 'function') {
+            reducedMotionQuery.addEventListener('change', handleMotionPreferenceChange);
+        } else {
+            reducedMotionQuery.addListener(handleMotionPreferenceChange);
+        }
+        startAnimation();
 
         const handleClick = (event: MouseEvent) => {
+            if (!canRunAnimation()) {
+                return;
+            }
             const rect = container.getBoundingClientRect();
             const x = event.clientX - rect.left;
             const y = maxY;
@@ -374,7 +476,7 @@ function FireworksBackground({
             const fireworkColor = getColor(color);
             const speed = getValueByRange(resolvedFireworkSpeed);
             const size = getValueByRange(resolvedFireworkSize);
-            fireworks.push(
+            pushFirework(
                 createFirework(
                     x,
                     y,
@@ -384,6 +486,7 @@ function FireworksBackground({
                     size,
                     resolvedParticleSpeed,
                     resolvedParticleSize,
+                    particleCountRange,
                     handleExplosion,
                 ),
             );
@@ -395,10 +498,13 @@ function FireworksBackground({
             disposed = true;
             window.removeEventListener('resize', setCanvasSize);
             container.removeEventListener('click', handleClick);
-            if (launchTimeoutId !== null) {
-                window.clearTimeout(launchTimeoutId);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            if (typeof reducedMotionQuery.removeEventListener === 'function') {
+                reducedMotionQuery.removeEventListener('change', handleMotionPreferenceChange);
+            } else {
+                reducedMotionQuery.removeListener(handleMotionPreferenceChange);
             }
-            cancelAnimationFrame(animationFrameId);
+            stopAnimation();
         };
     }, [
         population,
