@@ -48,6 +48,7 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
         <article className="rounded-xl border border-white/20 bg-white/10 p-4">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-300">State</p>
           <p className="mt-1 text-lg font-semibold">{stateLabel(room.state)}</p>
+          <p className="mt-2 text-xs text-slate-400">Active Game: {room.activeGame ?? "-"}</p>
           <p className="mt-2 text-xs text-slate-400">Version: {room.version}</p>
         </article>
         <article className="rounded-xl border border-white/20 bg-white/10 p-4">

@@ -9,6 +9,8 @@ export type RoomState =
   | "expired"
   | "superseded"
 
+export type ActiveGame = "trivia" | "haraj"
+
 export type AvatarType = "none" | "emoji" | "image"
 
 export type HostRecord = {
@@ -38,6 +40,7 @@ export type RoomRecord = {
   id: string
   hostId: string
   state: RoomState
+  activeGame: ActiveGame | null
   version: number
   createdAt: number
   updatedAt: number
@@ -188,6 +191,7 @@ export type RoomSnapshot = {
   roomId: string
   hostId: string
   state: RoomState
+  activeGame: ActiveGame | null
   version: number
   createdAt: number
   updatedAt: number

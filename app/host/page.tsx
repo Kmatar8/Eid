@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { LogOut, Plus, Power, X } from "lucide-react"
+import { Check, Gamepad2, LogOut, Plus, Power, X } from "lucide-react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
@@ -23,7 +23,7 @@ import {
   setHostRoomId,
 } from "@/lib/client/live-session"
 import type { HostActionType } from "@/lib/server/protocol-v1"
-import type { RoomSnapshot } from "@/lib/server/types"
+import type { ActiveGame, RoomSnapshot } from "@/lib/server/types"
 
 const HOST_POLL_IDLE_MS = 1700
 const HOST_POLL_BOARD_MS = 850
@@ -38,6 +38,8 @@ const HOST_END_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-red-300/35 bg-red-500/22 text-red-100 shadow-lg transition hover:scale-105 hover:bg-red-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-red-500/22"
 const HOST_LOGOUT_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
+const HOST_SWITCH_ICON_BUTTON_CLASS =
+  "flex h-11 w-11 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/22 text-amber-100 shadow-lg transition hover:scale-105 hover:bg-amber-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-amber-500/22"
 
 type FeedbackType = "correct" | "wrong" | null
 type HostStage = "lobby" | "overview" | "trivia" | "haraj" | "celebration" | "paused"
@@ -158,6 +160,18 @@ function getTeamColorLabel(teamId: string) {
   return "الفريق"
 }
 
+function getGameLabel(gameId: ActiveGame) {
+  return gameId === "trivia" ? "الجيوباردي" : "الحراج"
+}
+
+function isTriviaTimedPhase(phase: RoomSnapshot["trivia"]["phase"]) {
+  return phase === "countdown" || phase === "buzzer_open" || phase === "answer_active"
+}
+
+function isHarajTimedPhase(phase: RoomSnapshot["haraj"]["phase"]) {
+  return phase === "haraj_collecting"
+}
+
 function remainingSeconds(targetTs: number | null, nowTs: number) {
   if (!targetTs) {
     return 0
@@ -182,7 +196,7 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
     return HOST_POLL_IDLE_MS
   }
 
-  if (room.trivia.status === "in_progress") {
+  if (room.activeGame === "trivia" && room.trivia.status === "in_progress") {
     if (room.trivia.phase === "board_turn") {
       return HOST_POLL_BOARD_MS
     }
@@ -195,6 +209,27 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
       return HOST_POLL_ACTIVE_MS
     }
     return HOST_POLL_IDLE_MS
+  }
+
+  if (room.activeGame === "haraj" && room.haraj.status === "in_progress") {
+    if (room.haraj.phase === "haraj_collecting" || room.haraj.phase === "haraj_reveal") {
+      return HOST_POLL_ACTIVE_MS
+    }
+    return HOST_POLL_BOARD_MS
+  }
+
+  if (room.trivia.status === "in_progress") {
+    if (room.trivia.phase === "board_turn") {
+      return HOST_POLL_BOARD_MS
+    }
+    if (
+      room.trivia.phase === "countdown" ||
+      room.trivia.phase === "buzzer_open" ||
+      room.trivia.phase === "answer_active" ||
+      room.trivia.phase === "answer_reveal"
+    ) {
+      return HOST_POLL_ACTIVE_MS
+    }
   }
 
   if (room.haraj.status === "in_progress") {
@@ -240,6 +275,9 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
   }
 
   if (action === "host.startTrivia") {
+    if (room.trivia.status === "completed") {
+      return "لعبة الجيوباردي مكتملة ولا يمكن إعادة تشغيلها."
+    }
     return room.state === "teams_ready" || room.state === "between_games"
       ? null
       : "بدء اللعبة متاح فقط بعد تجهيز الفرق."
@@ -252,7 +290,24 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
     if (room.trivia.status !== "completed") {
       return "لا يمكن بدء الحراج قبل اكتمال لعبة الجيوباردي."
     }
+    if (room.haraj.status === "completed") {
+      return "لعبة الحراج مكتملة بالفعل."
+    }
     return null
+  }
+
+  if (action === "host.switchGame") {
+    if (room.state !== "teams_ready" && room.state !== "game_live" && room.state !== "between_games") {
+      return "تبديل اللعبة متاح بعد تجهيز الفرق أو أثناء الجلسة."
+    }
+
+    if (room.activeGame === "trivia" && room.trivia.status === "in_progress" && isTriviaTimedPhase(room.trivia.phase)) {
+      return "لا يمكن التبديل أثناء عداد/إجابة الجيوباردي النشط."
+    }
+
+    if (room.activeGame === "haraj" && room.haraj.status === "in_progress" && isHarajTimedPhase(room.haraj.phase)) {
+      return "لا يمكن التبديل أثناء وقت التخمين في الحراج."
+    }
   }
 
   if (action === "host.startHarajRound" || action === "host.nextHarajRound") {
@@ -262,13 +317,17 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
   }
 
   if (action === "host.selectTriviaClue") {
-    return room.state === "game_live" && room.trivia.status === "in_progress" && room.trivia.phase === "board_turn"
+    return room.state === "game_live" &&
+      room.activeGame === "trivia" &&
+      room.trivia.status === "in_progress" &&
+      room.trivia.phase === "board_turn"
       ? null
       : "اختيار السؤال متاح فقط أثناء دور اختيار اللوحة."
   }
 
   if (action === "host.selectAnotherResponder") {
     return room.state === "game_live" &&
+      room.activeGame === "trivia" &&
       room.trivia.status === "in_progress" &&
       (room.trivia.phase === "board_turn" || room.trivia.phase === "answer_active")
       ? null
@@ -277,6 +336,7 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
 
   if (action === "host.nextQuestion") {
     return room.state === "game_live" &&
+      room.activeGame === "trivia" &&
       room.trivia.status === "in_progress" &&
       (room.trivia.phase === "answer_reveal" ||
         room.trivia.phase === "countdown" ||
@@ -314,6 +374,7 @@ export default function HostStagePage() {
   const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
   const [feedbackContext, setFeedbackContext] = useState<FeedbackOverlayContext | null>(null)
   const [showQuestionModal, setShowQuestionModal] = useState(false)
+  const [showGameSwitchMenu, setShowGameSwitchMenu] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
@@ -546,8 +607,16 @@ export default function HostStagePage() {
       return "paused"
     }
 
-    if (room.state === "between_games" && room.trivia.status === "completed") {
+    if (room.state === "between_games") {
       return "celebration"
+    }
+
+    if (room.state === "game_live" && room.activeGame === "trivia" && room.trivia.status === "in_progress") {
+      return "trivia"
+    }
+
+    if (room.state === "game_live" && room.activeGame === "haraj" && room.haraj.status === "in_progress") {
+      return "haraj"
     }
 
     if (room.state === "game_live" && room.trivia.status === "in_progress") {
@@ -566,6 +635,12 @@ export default function HostStagePage() {
   }, [room])
 
   const hostPollMs = resolveHostPollMs(room)
+
+  useEffect(() => {
+    if (!room) {
+      setShowGameSwitchMenu(false)
+    }
+  }, [room])
 
   const assignmentByPlayer = useMemo(
     () => new Map((room?.teamAssignments ?? []).map((entry) => [entry.playerId, entry.teamId])),
@@ -1005,6 +1080,20 @@ export default function HostStagePage() {
     }
   }, [runAction])
 
+  const handleSwitchGame = useCallback(
+    async (gameId: ActiveGame) => {
+      try {
+        await runAction("host.switchGame", { gameId })
+        setShowQuestionModal(false)
+        setShowGameSwitchMenu(false)
+        setNotice(`تم التبديل إلى لعبة ${getGameLabel(gameId)}.`)
+      } catch (requestError) {
+        setError(toErrorMessage(requestError))
+      }
+    },
+    [runAction]
+  )
+
   const handleNextHarajRound = useCallback(async () => {
     try {
       const nextRoom = await runAction("host.nextHarajRound")
@@ -1104,21 +1193,59 @@ export default function HostStagePage() {
   const answerSeconds = remainingSeconds(trivia?.answerEndsAt ?? null, nowTs)
 
   const canSelectAnotherResponder =
-    trivia?.status === "in_progress" && (trivia.phase === "answer_active" || trivia.phase === "board_turn")
+    room?.activeGame === "trivia" &&
+    trivia?.status === "in_progress" &&
+    (trivia.phase === "answer_active" || trivia.phase === "board_turn")
 
   const canManageTeams = room?.state === "lobby_open" || room?.state === "lobby_locked" || room?.state === "teams_ready"
   const canStartSession = Boolean(canManageTeams && startSessionReadiness.canStart)
 
-  const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
+  const canStartTrivia =
+    (room?.state === "teams_ready" || room?.state === "between_games") && room?.trivia.status !== "completed"
   const canStartHaraj =
     room?.state === "between_games" && room.trivia.status === "completed" && room.haraj.status === "idle"
   const canAdvanceHarajRound =
-    room?.state === "game_live" && room.haraj.status === "in_progress" && room.haraj.phase === "haraj_reveal"
+    room?.state === "game_live" &&
+    room.activeGame === "haraj" &&
+    room.haraj.status === "in_progress" &&
+    room.haraj.phase === "haraj_reveal"
   const canResumeSession = room?.state === "paused_wait_host"
   const canEndSession = Boolean(room && !isTerminalRoomState(room.state))
+  const canUseGameSwitcher = Boolean(
+    room && (room.state === "teams_ready" || room.state === "game_live" || room.state === "between_games")
+  )
+  const switchBlockedByActiveTimedPhase = Boolean(
+    room &&
+      ((room.activeGame === "trivia" && room.trivia.status === "in_progress" && isTriviaTimedPhase(room.trivia.phase)) ||
+        (room.activeGame === "haraj" && room.haraj.status === "in_progress" && isHarajTimedPhase(room.haraj.phase)))
+  )
+  const gameSwitchOptions = useMemo(() => {
+    if (!room) {
+      return [] as Array<{ gameId: ActiveGame; label: string; completed: boolean; active: boolean; disabled: boolean }>
+    }
 
-  const canSelectClue = trivia?.status === "in_progress" && trivia.phase === "board_turn"
+    const base = [
+      { gameId: "trivia" as const, label: "الجيوباردي", status: room.trivia.status },
+      { gameId: "haraj" as const, label: "الحراج", status: room.haraj.status },
+    ]
+    return base.map((entry) => {
+      const completed = entry.status === "completed"
+      const active = room.activeGame === entry.gameId && room.state === "game_live"
+      const disabled =
+        completed || active || !canUseGameSwitcher || switchBlockedByActiveTimedPhase || Boolean(busyAction)
+      return {
+        gameId: entry.gameId,
+        label: entry.label,
+        completed,
+        active,
+        disabled,
+      }
+    })
+  }, [busyAction, canUseGameSwitcher, room, switchBlockedByActiveTimedPhase])
+
+  const canSelectClue = room?.activeGame === "trivia" && trivia?.status === "in_progress" && trivia.phase === "board_turn"
   const canAdvanceFromQuestionModal =
+    room?.activeGame === "trivia" &&
     trivia?.status === "in_progress" &&
     (trivia.phase === "answer_reveal" ||
       trivia.phase === "countdown" ||
@@ -1149,8 +1276,23 @@ export default function HostStagePage() {
 
   const harajCollectSeconds = remainingSeconds(haraj?.collectEndsAt ?? null, nowTs)
   const harajSubmittedSet = useMemo(() => new Set(haraj?.submittedPlayerIds ?? []), [haraj?.submittedPlayerIds])
-  const celebrationIsHarajCompleted =
-    room?.state === "between_games" && room?.trivia.status === "completed" && room?.haraj.status === "completed"
+  const celebrationTitle = useMemo(() => {
+    if (!room || room.state !== "between_games") {
+      return "انتهت الجولة"
+    }
+    const triviaDone = room.trivia.status === "completed"
+    const harajDone = room.haraj.status === "completed"
+    if (triviaDone && harajDone) {
+      return "اكتملت جميع الألعاب"
+    }
+    if (harajDone) {
+      return "انتهت لعبة الحراج"
+    }
+    if (triviaDone) {
+      return "انتهت لعبة الجيوباردي"
+    }
+    return "تم إنهاء لعبة نشطة"
+  }, [room])
 
   const liveStatusCommandText = useMemo(() => {
     const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
@@ -1985,7 +2127,7 @@ export default function HostStagePage() {
           <section className="party-surface-strong rounded-3xl p-6 text-center">
             <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Celebration</p>
             <h2 className="mt-2 text-5xl font-black text-amber-100">
-              {celebrationIsHarajCompleted ? "انتهت لعبة الحراج" : "انتهت لعبة الجيوباردي"}
+              {celebrationTitle}
             </h2>
 
             {winningSummary ? (
@@ -2036,6 +2178,62 @@ export default function HostStagePage() {
 
       <div className="fixed bottom-4 left-[max(0.375rem,calc((100vw-1820px)/2-3.25rem))] z-30">
         <div className="flex flex-col gap-2">
+          {room ? (
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={() => setShowGameSwitchMenu((previous) => !previous)}
+                aria-label="تبديل اللعبة"
+                title="تبديل اللعبة"
+                disabled={Boolean(busyAction) || !canUseGameSwitcher}
+                className={HOST_SWITCH_ICON_BUTTON_CLASS}
+              >
+                <Gamepad2 className="size-5" />
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/20 bg-black/80 px-2 py-1 text-xs font-medium text-white opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                تبديل اللعبة
+              </span>
+
+              <AnimatePresence>
+                {showGameSwitchMenu ? (
+                  <motion.div
+                    initial={{ opacity: 0, x: -14, scale: 0.96 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -14, scale: 0.96 }}
+                    className="absolute left-full top-1/2 ml-3 -translate-y-1/2 space-y-2"
+                  >
+                    {gameSwitchOptions.map((option) => (
+                      <button
+                        key={`switch-${option.gameId}`}
+                        type="button"
+                        onClick={() => void handleSwitchGame(option.gameId)}
+                        disabled={option.disabled}
+                        className={`flex min-w-[12rem] items-center justify-between rounded-full border px-4 py-2 text-sm font-black shadow-xl transition ${option.completed
+                          ? "border-emerald-300/55 bg-emerald-500/18 text-emerald-100"
+                          : option.active
+                            ? "border-amber-300/65 bg-amber-500/20 text-amber-100"
+                            : "border-white/20 bg-slate-950/85 text-slate-100 hover:bg-slate-900"
+                          } disabled:cursor-not-allowed disabled:opacity-70`}
+                      >
+                        <span>{option.label}</span>
+                        {option.completed ? (
+                          <Check className="size-4" />
+                        ) : option.active ? (
+                          <span className="text-xs text-amber-200">نشطة</span>
+                        ) : null}
+                      </button>
+                    ))}
+                    {switchBlockedByActiveTimedPhase ? (
+                      <p className="max-w-[15rem] rounded-xl border border-amber-300/35 bg-slate-950/92 px-3 py-2 text-xs font-semibold text-amber-100">
+                        التبديل متاح بعد انتهاء المؤقت الحالي.
+                      </p>
+                    ) : null}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          ) : null}
+
           {room ? (
             <div className="group relative">
               <button

@@ -139,7 +139,7 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
     return CONTROLLER_POLL_IDLE_MS
   }
 
-  if (room.trivia.status === "in_progress") {
+  if (room.activeGame === "trivia" && room.trivia.status === "in_progress") {
     if (room.trivia.phase === "board_turn") {
       return CONTROLLER_POLL_BOARD_MS
     }
@@ -154,6 +154,27 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
     }
 
     return CONTROLLER_POLL_IDLE_MS
+  }
+
+  if (room.activeGame === "haraj" && room.haraj.status === "in_progress") {
+    if (room.haraj.phase === "haraj_collecting" || room.haraj.phase === "haraj_reveal") {
+      return CONTROLLER_POLL_ACTIVE_MS
+    }
+    return CONTROLLER_POLL_BOARD_MS
+  }
+
+  if (room.trivia.status === "in_progress") {
+    if (room.trivia.phase === "board_turn") {
+      return CONTROLLER_POLL_BOARD_MS
+    }
+    if (
+      room.trivia.phase === "countdown" ||
+      room.trivia.phase === "buzzer_open" ||
+      room.trivia.phase === "answer_active" ||
+      room.trivia.phase === "answer_reveal"
+    ) {
+      return CONTROLLER_POLL_ACTIVE_MS
+    }
   }
 
   if (room.haraj.status === "in_progress") {
@@ -184,6 +205,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
   const lastHarajRoundKeyRef = useRef<string | null>(null)
+  const isTriviaActiveGame = room?.activeGame === "trivia" && room?.trivia.status === "in_progress"
+  const isHarajActiveGame = room?.activeGame === "haraj" && room?.haraj.status === "in_progress"
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -209,7 +232,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
   useEffect(() => {
     const qId = room?.trivia?.selectedClue?.questionId
-    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
+    if (
+      isTriviaActiveGame &&
+      room?.trivia?.phase === "answer_reveal" &&
+      room?.trivia.lastResult &&
+      qId &&
+      qId !== processedFeedbackQuestionId
+    ) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "no_buzz" && reason !== "host_skip") {
         const responderPlayerId = room.trivia.currentResponderPlayerId
@@ -233,13 +262,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
     }
     // Reset tracker when return to board
-    if (room?.trivia?.phase === "board_turn") {
+    if (isTriviaActiveGame && room?.trivia?.phase === "board_turn") {
       setProcessedFeedbackQuestionId(null)
       setFeedbackState(null)
       setFeedbackScoreDelta(null)
       setFeedbackContext(null)
     }
-  }, [processedFeedbackQuestionId, room])
+  }, [isTriviaActiveGame, processedFeedbackQuestionId, room])
 
   const hydrateState = useCallback(async () => {
     if (!session) {
@@ -438,9 +467,9 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
   }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
 
-  const selectedQuestionId = room?.trivia.selectedClue?.questionId ?? null
+  const selectedQuestionId = isTriviaActiveGame ? room?.trivia.selectedClue?.questionId ?? null : null
   const harajRoundKey =
-    room?.haraj.status === "in_progress" ? `${room.haraj.roundIndex}:${room.haraj.currentProduct?.productId ?? "none"}` : null
+    isHarajActiveGame ? `${room.haraj.roundIndex}:${room.haraj.currentProduct?.productId ?? "none"}` : null
   useEffect(() => {
     if (selectedQuestionId !== submittedQuestionId) {
       setSubmittedQuestionId(null)
@@ -479,6 +508,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
     return (
       room.state === "game_live" &&
+      room.activeGame === "trivia" &&
       room.trivia.status === "in_progress" &&
       room.trivia.phase === "buzzer_open" &&
       !room.trivia.currentResponderPlayerId
@@ -489,7 +519,12 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     if (!room || !session || !selectedQuestionId) {
       return false
     }
-    if (room.state !== "game_live" || room.trivia.status !== "in_progress" || room.trivia.phase !== "answer_active") {
+    if (
+      room.state !== "game_live" ||
+      room.activeGame !== "trivia" ||
+      room.trivia.status !== "in_progress" ||
+      room.trivia.phase !== "answer_active"
+    ) {
       return false
     }
     if (room.trivia.currentResponderPlayerId !== session.playerId) {
@@ -499,7 +534,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }, [room, session, selectedQuestionId, submittedQuestionId])
 
   const hasSubmittedHarajEstimate = Boolean(
-    (session && room?.haraj.submittedPlayerIds.includes(session.playerId)) ||
+    (session && isHarajActiveGame && room?.haraj.submittedPlayerIds.includes(session.playerId)) ||
       (harajRoundKey && submittedHarajRoundKey === harajRoundKey)
   )
 
@@ -509,6 +544,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
     return (
       room.state === "game_live" &&
+      room.activeGame === "haraj" &&
       room.haraj.status === "in_progress" &&
       room.haraj.phase === "haraj_collecting" &&
       Boolean(myTeamId) &&
@@ -520,17 +556,22 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const buzzSeconds = remainingSeconds(room?.trivia.buzzEndsAt ?? null, nowTs)
   const answerSeconds = remainingSeconds(room?.trivia.answerEndsAt ?? null, nowTs)
   const harajCollectSeconds = remainingSeconds(room?.haraj.collectEndsAt ?? null, nowTs)
-  const selectedClue = room?.trivia.selectedClue ?? null
-  const isCountdownPhase = room?.trivia.phase === "countdown"
+  const selectedClue = isTriviaActiveGame ? room?.trivia.selectedClue ?? null : null
+  const isCountdownPhase = isTriviaActiveGame && room?.trivia.phase === "countdown"
   const isQuestionRevealed =
-    room?.trivia.phase === "buzzer_open" || room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal"
+    isTriviaActiveGame &&
+    (room?.trivia.phase === "buzzer_open" || room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal")
 
   const statusText = useMemo(() => {
     if (!room || !session) {
       return "بانتظار بدء اللعبة من شاشة المضيف."
     }
 
-    if (room.haraj.status === "in_progress") {
+    if (room.state === "paused_wait_host") {
+      return "تم إيقاف الجلسة مؤقتًا بسبب عدم نشاط المضيف. انتظر استئناف الجلسة."
+    }
+
+    if (isHarajActiveGame) {
       if (room.haraj.phase === "haraj_collecting") {
         if (hasSubmittedHarajEstimate) {
           return "تم إرسال تخمينك. انتظر كشف السعر الحقيقي."
@@ -545,12 +586,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       return "بانتظار انطلاق جولة الحراج."
     }
 
-    if (room.trivia.status !== "in_progress") {
+    if (!isTriviaActiveGame) {
       return "بانتظار بدء اللعبة من شاشة المضيف."
-    }
-
-    if (room.state === "paused_wait_host") {
-      return "تم إيقاف الجلسة مؤقتًا بسبب عدم نشاط المضيف. انتظر استئناف الجلسة."
     }
 
     if (room.trivia.phase === "board_turn") {
@@ -600,6 +637,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     room,
     session,
     teamById,
+    isHarajActiveGame,
+    isTriviaActiveGame,
   ])
 
   const submitBuzz = async () => {
@@ -756,7 +795,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.haraj.status === "in_progress" && room.haraj.phase === "haraj_collecting" && room.haraj.currentProduct ? (
+            {isHarajActiveGame && room?.haraj.phase === "haraj_collecting" && room.haraj.currentProduct ? (
               <div className="mt-5 space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   جولة {room.haraj.roundIndex + 1} من {room.haraj.totalRounds}
@@ -800,7 +839,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.haraj.status === "in_progress" && room.haraj.phase === "haraj_reveal" && room.haraj.lastReveal ? (
+            {isHarajActiveGame && room?.haraj.phase === "haraj_reveal" && room.haraj.lastReveal ? (
               <div className="mt-5 space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">كشف النتائج</p>
                 <h2 className="text-2xl font-black">{room.haraj.lastReveal.productName}</h2>
@@ -838,7 +877,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.haraj.status !== "in_progress" && selectedClue ? (
+            {isTriviaActiveGame && selectedClue ? (
               <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   {selectedClue.categoryName} | {selectedClue.points} points
@@ -856,7 +895,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 ) : null}
               </div>
             ) : null}
-            {room?.haraj.status !== "in_progress" && canBuzz ? (
+            {isTriviaActiveGame && canBuzz ? (
               <div className="mt-8 mb-4 flex justify-center">
                 {/* Buzzer Base */}
                 <div className="relative flex h-[12rem] w-[12rem] sm:h-[16rem] sm:w-[16rem] items-center justify-center rounded-full bg-gradient-to-b from-slate-700 to-slate-950 p-3 sm:p-5 shadow-[0_15px_25px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.2)] ring-2 sm:ring-4 ring-slate-900">
@@ -878,7 +917,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.haraj.status !== "in_progress" && room?.trivia.phase === "answer_active" ? (
+            {isTriviaActiveGame && room?.trivia.phase === "answer_active" ? (
               <div className="mt-5 space-y-3">
                 {canAnswer ? (
                   <>
@@ -914,7 +953,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.haraj.status !== "in_progress" && room?.trivia.phase === "buzzer_open" ? (
+            {isTriviaActiveGame && room?.trivia.phase === "buzzer_open" ? (
               <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
                 <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي</p>
                 <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>

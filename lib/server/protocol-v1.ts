@@ -11,6 +11,7 @@ export type HostActionType =
   | "host.startTeams"
   | "host.startGame"
   | "host.startTrivia"
+  | "host.switchGame"
   | "host.startHaraj"
   | "host.startHarajRound"
   | "host.nextHarajRound"
@@ -51,6 +52,7 @@ const HOST_ACTIONS = new Set<HostActionType>([
   "host.startTeams",
   "host.startGame",
   "host.startTrivia",
+  "host.switchGame",
   "host.startHaraj",
   "host.startHarajRound",
   "host.nextHarajRound",

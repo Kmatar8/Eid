@@ -19,6 +19,7 @@ const HOST_REQUEST_ID_REQUIRED_ACTIONS = new Set([
   "host.startTeams",
   "host.startGame",
   "host.startTrivia",
+  "host.switchGame",
   "host.startHaraj",
   "host.startHarajRound",
   "host.nextHarajRound",

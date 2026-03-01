@@ -8,6 +8,7 @@ import bundledHostCredentialSeeds from "@/lib/server/host-credentials.generated.
 import { HARAJ_PRODUCT_BANK, type HarajProduct } from "@/lib/server/haraj-bank"
 import { TRIVIA_CATEGORY_ORDER, TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
 import type {
+  ActiveGame,
   AvatarType,
   HarajPhase,
   HarajSnapshot,
@@ -158,6 +159,51 @@ const ACTIVE_ROOM_STATES: Set<RoomState> = new Set([
 
 function nowMs() {
   return Date.now()
+}
+
+function parseActiveGame(value: unknown): ActiveGame | null {
+  return value === "trivia" || value === "haraj" ? value : null
+}
+
+function inferActiveGameFromSessions(
+  triviaSession: TriviaSession | null | undefined,
+  harajSession: HarajSession | null | undefined
+): ActiveGame | null {
+  if (triviaSession?.status === "in_progress") {
+    return "trivia"
+  }
+  if (harajSession?.status === "in_progress") {
+    return "haraj"
+  }
+  return null
+}
+
+function resolveRoomActiveGame(
+  store: InMemoryStore,
+  room: RoomRecord,
+  options?: { persist?: boolean }
+): ActiveGame | null {
+  const normalized = parseActiveGame((room as { activeGame?: unknown }).activeGame ?? null)
+  if (normalized) {
+    if (options?.persist && room.activeGame !== normalized) {
+      room.activeGame = normalized
+    }
+    return normalized
+  }
+
+  const inferred = inferActiveGameFromSessions(store.triviaByRoom.get(room.id), store.harajByRoom.get(room.id))
+  if (options?.persist) {
+    room.activeGame = inferred
+  }
+  return inferred
+}
+
+function isTriviaTimedPhase(phase: TriviaPhase | null) {
+  return phase === "countdown" || phase === "buzzer_open" || phase === "answer_active"
+}
+
+function isHarajTimedPhase(phase: HarajPhase | null) {
+  return phase === "haraj_collecting"
 }
 
 function addUtcMonths(fromMs: number, months: number) {
@@ -451,6 +497,7 @@ export function importRoomShardSnapshot(roomId: string, snapshot: unknown): bool
     removeRoomScopedStoreData(store, roomId)
 
     if (candidate.room) {
+      candidate.room.activeGame = parseActiveGame((candidate.room as { activeGame?: unknown }).activeGame)
       store.rooms.set(roomId, candidate.room)
     }
 
@@ -581,6 +628,15 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
       }
       if (!(candidate.redeemCodesByHash instanceof Map)) {
         candidate.redeemCodesByHash = new Map()
+      }
+      if (candidate.rooms instanceof Map) {
+        for (const roomValue of candidate.rooms.values()) {
+          if (!roomValue || typeof roomValue !== "object") {
+            continue
+          }
+          const roomRecord = roomValue as RoomRecord
+          roomRecord.activeGame = parseActiveGame((roomValue as { activeGame?: unknown }).activeGame)
+        }
       }
       if (candidate.hosts instanceof Map && candidate.hostsByEmail instanceof Map) {
         const rebuiltHostEmailMap = new Map<string, string>()
@@ -1073,6 +1129,13 @@ function resolveResumeState(store: InMemoryStore, room: RoomRecord): RoomState {
 
   const trivia = store.triviaByRoom.get(room.id)
   const haraj = store.harajByRoom.get(room.id)
+  const activeGame = resolveRoomActiveGame(store, room, { persist: true })
+  if (activeGame === "trivia" && trivia?.status === "in_progress") {
+    return "game_live"
+  }
+  if (activeGame === "haraj" && haraj?.status === "in_progress") {
+    return "game_live"
+  }
   if (haraj && haraj.status === "in_progress") {
     return "game_live"
   }
@@ -1098,6 +1161,7 @@ function expireRoom(store: InMemoryStore, room: RoomRecord, reason: string) {
   }
 
   room.state = "expired"
+  room.activeGame = null
   room.updatedAt = nowMs()
   room.completedAt = room.updatedAt
 
@@ -1472,6 +1536,7 @@ function completeTriviaSession(store: InMemoryStore, room: RoomRecord, session: 
   session.buzzEndsAt = null
   session.answerEndsAt = null
   room.state = "between_games"
+  room.activeGame = null
   recordRoomEvent(store, room.id, "trivia.completed", { reason })
 }
 
@@ -1721,6 +1786,7 @@ function startHarajRound(store: InMemoryStore, room: RoomRecord, session: HarajS
   }
 
   room.state = "game_live"
+  room.activeGame = "haraj"
   room.pausedAt = null
 
   const product = getCurrentHarajProduct(session)
@@ -1872,6 +1938,7 @@ function completeHarajSession(store: InMemoryStore, room: RoomRecord, session: H
   session.phase = "haraj_next_round_or_end"
   session.collectEndsAt = null
   room.state = "between_games"
+  room.activeGame = null
   recordRoomEvent(store, room.id, "haraj.completed", {
     reason,
     roundsPlayed: session.roundIndex + 1,
@@ -2169,6 +2236,7 @@ export function getRoom(roomId: string): RoomRecord | null {
   }
 
   applyTimeouts(store, room)
+  resolveRoomActiveGame(store, room, { persist: true })
   return room
 }
 
@@ -2199,6 +2267,7 @@ export function createRoomForHost(hostId: string):
     id: `room_${randomUUID()}`,
     hostId,
     state: "lobby_open",
+    activeGame: null,
     version: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -2289,6 +2358,7 @@ export function completeRoomForHost(
   if (room.state !== "session_completed") {
     const timestamp = nowMs()
     room.state = "session_completed"
+    room.activeGame = null
     room.updatedAt = timestamp
     room.completedAt = timestamp
     recordRoomEvent(store, room.id, "room.completed", { hostId })
@@ -2428,11 +2498,12 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
   }
 
   const sessionTick = store.triviaByRoom.get(room.id)
-  if (sessionTick) {
+  const harajTick = store.harajByRoom.get(room.id)
+  const activeGame = resolveRoomActiveGame(store, room, { persist: true })
+  if (activeGame === "trivia" && sessionTick) {
     applyTriviaTimedTransitions(store, room, sessionTick)
   }
-  const harajTick = store.harajByRoom.get(room.id)
-  if (harajTick) {
+  if (activeGame === "haraj" && harajTick) {
     applyHarajTimedTransitions(store, room, harajTick)
   }
 
@@ -2582,6 +2653,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
 
       const assignments = assignBalancedTeams(store, room.id, true)
       room.state = "teams_ready"
+      room.activeGame = null
       room.pausedAt = null
       recordRoomEvent(store, room.id, "room.teams_ready", {
         hostId: input.actorId,
@@ -2594,6 +2666,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       }
 
       room.state = "game_live"
+      room.activeGame = inferActiveGameFromSessions(store.triviaByRoom.get(room.id), store.harajByRoom.get(room.id))
       room.pausedAt = null
       recordRoomEvent(store, room.id, "room.game_live", { hostId: input.actorId })
     } else if (input.actionType === "host.startTrivia") {
@@ -2601,39 +2674,179 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
-      if (room.state === "between_games") {
-        const harajSession = store.harajByRoom.get(room.id)
-        if (!harajSession || harajSession.status !== "completed") {
+      const existingTrivia = store.triviaByRoom.get(room.id)
+      if (existingTrivia?.status === "completed") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      if (existingTrivia?.status === "in_progress") {
+        room.state = "game_live"
+        room.activeGame = "trivia"
+        room.pausedAt = null
+        recordRoomEvent(store, room.id, "room.active_game_switched", {
+          hostId: input.actorId,
+          from: activeGame,
+          to: "trivia",
+          mode: "resume",
+          triviaPhase: existingTrivia.phase,
+        })
+      } else {
+        const session = createTriviaSession(store, room.id)
+        if (!session) {
+          return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+        }
+
+        const startingTeamId = getTeamIdsInOrder(store, room.id).find(
+          (teamId) => getTeamPlayerIds(store, room.id, teamId).length > 0
+        )
+        if (!startingTeamId) {
+          return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+        }
+
+        setTurnTeam(store, room.id, session, startingTeamId)
+        store.triviaByRoom.set(room.id, session)
+        room.state = "game_live"
+        room.activeGame = "trivia"
+        room.pausedAt = null
+
+        recordRoomEvent(store, room.id, "trivia.started", {
+          hostId: input.actorId,
+          totalQuestions: session.totalQuestions,
+        })
+        recordRoomEvent(store, room.id, "trivia.turn_started", {
+          teamId: session.currentTeamId,
+          pickerPlayerId: session.currentPickerPlayerId,
+          remainingQuestions: getRemainingQuestionCount(session),
+        })
+      }
+    } else if (input.actionType === "host.switchGame") {
+      if (room.state !== "teams_ready" && room.state !== "between_games" && room.state !== "game_live") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const targetGame = typeof input.payload?.gameId === "string" ? input.payload.gameId : ""
+      if (targetGame !== "trivia" && targetGame !== "haraj") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const triviaSession = store.triviaByRoom.get(room.id) ?? null
+      const harajSession = store.harajByRoom.get(room.id) ?? null
+      const currentActiveGame = resolveRoomActiveGame(store, room, { persist: true })
+
+      if (currentActiveGame === "trivia" && triviaSession?.status === "in_progress" && isTriviaTimedPhase(triviaSession.phase)) {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      if (currentActiveGame === "haraj" && harajSession?.status === "in_progress" && isHarajTimedPhase(harajSession.phase)) {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      if (targetGame === "trivia") {
+        if (triviaSession?.status === "completed") {
           return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
         }
+
+        if (triviaSession?.status === "in_progress") {
+          room.state = "game_live"
+          room.activeGame = "trivia"
+          room.pausedAt = null
+          recordRoomEvent(store, room.id, "room.active_game_switched", {
+            hostId: input.actorId,
+            from: currentActiveGame,
+            to: "trivia",
+            mode: "resume",
+            triviaPhase: triviaSession.phase,
+          })
+        } else {
+          const session = createTriviaSession(store, room.id)
+          if (!session) {
+            return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+          }
+
+          const startingTeamId = getTeamIdsInOrder(store, room.id).find(
+            (teamId) => getTeamPlayerIds(store, room.id, teamId).length > 0
+          )
+          if (!startingTeamId) {
+            return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+          }
+
+          setTurnTeam(store, room.id, session, startingTeamId)
+          store.triviaByRoom.set(room.id, session)
+          room.state = "game_live"
+          room.activeGame = "trivia"
+          room.pausedAt = null
+
+          recordRoomEvent(store, room.id, "trivia.started", {
+            hostId: input.actorId,
+            totalQuestions: session.totalQuestions,
+          })
+          recordRoomEvent(store, room.id, "trivia.turn_started", {
+            teamId: session.currentTeamId,
+            pickerPlayerId: session.currentPickerPlayerId,
+            remainingQuestions: getRemainingQuestionCount(session),
+          })
+          recordRoomEvent(store, room.id, "room.active_game_switched", {
+            hostId: input.actorId,
+            from: currentActiveGame,
+            to: "trivia",
+            mode: "start_new",
+          })
+        }
+      } else {
+        if (harajSession?.status === "completed") {
+          return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+        }
+
+        if (!harajSession) {
+          const newSession = createHarajSession(room.id)
+          if (!newSession) {
+            return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+          }
+
+          store.harajByRoom.set(room.id, newSession)
+          recordRoomEvent(store, room.id, "haraj.started", {
+            hostId: input.actorId,
+            totalRounds: newSession.products.length,
+          })
+
+          const started = startHarajRound(store, room, newSession, input.actorId)
+          if (!started) {
+            return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+          }
+          recordRoomEvent(store, room.id, "room.active_game_switched", {
+            hostId: input.actorId,
+            from: currentActiveGame,
+            to: "haraj",
+            mode: "start_new",
+          })
+        } else {
+          room.state = "game_live"
+          room.activeGame = "haraj"
+          room.pausedAt = null
+
+          if (harajSession.phase === "haraj_intro" || harajSession.phase === "haraj_scoreboard") {
+            const started = startHarajRound(store, room, harajSession, input.actorId)
+            if (!started) {
+              completeHarajSession(store, room, harajSession, "no_more_rounds")
+            }
+            recordRoomEvent(store, room.id, "room.active_game_switched", {
+              hostId: input.actorId,
+              from: currentActiveGame,
+              to: "haraj",
+              mode: "resume_or_advance",
+              harajPhase: harajSession.phase,
+            })
+          } else {
+            recordRoomEvent(store, room.id, "room.active_game_switched", {
+              hostId: input.actorId,
+              from: currentActiveGame,
+              to: "haraj",
+              mode: "resume",
+              harajPhase: harajSession.phase,
+            })
+          }
+        }
       }
-
-      const session = createTriviaSession(store, room.id)
-      if (!session) {
-        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
-      }
-
-      const startingTeamId = getTeamIdsInOrder(store, room.id).find(
-        (teamId) => getTeamPlayerIds(store, room.id, teamId).length > 0
-      )
-      if (!startingTeamId) {
-        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
-      }
-
-      setTurnTeam(store, room.id, session, startingTeamId)
-      store.triviaByRoom.set(room.id, session)
-      room.state = "game_live"
-      room.pausedAt = null
-
-      recordRoomEvent(store, room.id, "trivia.started", {
-        hostId: input.actorId,
-        totalQuestions: session.totalQuestions,
-      })
-      recordRoomEvent(store, room.id, "trivia.turn_started", {
-        teamId: session.currentTeamId,
-        pickerPlayerId: session.currentPickerPlayerId,
-        remainingQuestions: getRemainingQuestionCount(session),
-      })
     } else if (input.actionType === "host.startHaraj") {
       const triviaSession = store.triviaByRoom.get(room.id)
       if (room.state !== "between_games" || !triviaSession || triviaSession.status !== "completed") {
@@ -2641,7 +2854,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       }
 
       const existingHaraj = store.harajByRoom.get(room.id)
-      if (existingHaraj?.status === "in_progress") {
+      if (existingHaraj?.status === "in_progress" || existingHaraj?.status === "completed") {
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
@@ -2666,6 +2879,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "HARAJ_NOT_ACTIVE" }
       }
 
+      if (resolveRoomActiveGame(store, room, { persist: true }) !== "haraj") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
       if (session.phase !== "haraj_intro" && session.phase !== "haraj_scoreboard") {
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
@@ -2680,6 +2897,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "HARAJ_NOT_ACTIVE" }
       }
 
+      if (resolveRoomActiveGame(store, room, { persist: true }) !== "haraj") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
       if (session.phase !== "haraj_reveal" && session.phase !== "haraj_scoreboard") {
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
@@ -2692,6 +2913,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       const session = store.triviaByRoom.get(room.id)
       if (!session || session.status !== "in_progress") {
         return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
+      }
+
+      if (resolveRoomActiveGame(store, room, { persist: true }) !== "trivia") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
       if (session.phase !== "board_turn" || !session.currentTeamId) {
@@ -2735,6 +2960,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
       }
 
+      if (resolveRoomActiveGame(store, room, { persist: true }) !== "trivia") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
       if (session.phase === "answer_reveal") {
         moveToNextTurn(store, room, session)
       } else if (
@@ -2763,6 +2992,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       const session = store.triviaByRoom.get(room.id)
       if (!session || session.status !== "in_progress") {
         return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
+      }
+
+      if (resolveRoomActiveGame(store, room, { persist: true }) !== "trivia") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
       if (session.phase !== "board_turn" && session.phase !== "answer_active") {
@@ -2857,6 +3090,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
     }
 
+    if (resolveRoomActiveGame(store, room, { persist: true }) !== "trivia") {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+    }
+
     touchPlayer(input.roomId, input.actorId)
 
     const session = store.triviaByRoom.get(room.id)
@@ -2911,6 +3148,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
     }
 
+    if (resolveRoomActiveGame(store, room, { persist: true }) !== "trivia") {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+    }
+
     applyTriviaTimedTransitions(store, room, session)
 
     if (session.phase !== "answer_active") {
@@ -2954,6 +3195,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     const session = store.harajByRoom.get(room.id)
     if (!session || session.status !== "in_progress") {
       return { ok: false, code: "HARAJ_NOT_ACTIVE" }
+    }
+
+    if (resolveRoomActiveGame(store, room, { persist: true }) !== "haraj") {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
     }
 
     applyHarajTimedTransitions(store, room, session)
@@ -3052,11 +3297,12 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
   }
 
   const triviaSession = store.triviaByRoom.get(roomId) ?? null
-  if (triviaSession) {
+  const harajSession = store.harajByRoom.get(roomId) ?? null
+  const activeGame = resolveRoomActiveGame(store, room, { persist: true })
+  if (activeGame === "trivia" && triviaSession) {
     applyTriviaTimedTransitions(store, room, triviaSession)
   }
-  const harajSession = store.harajByRoom.get(roomId) ?? null
-  if (harajSession) {
+  if (activeGame === "haraj" && harajSession) {
     applyHarajTimedTransitions(store, room, harajSession)
   }
 
@@ -3095,6 +3341,7 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
     roomId: room.id,
     hostId: room.hostId,
     state: room.state,
+    activeGame,
     version: room.version,
     createdAt: room.createdAt,
     updatedAt: room.updatedAt,
