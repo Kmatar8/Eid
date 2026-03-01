@@ -9,7 +9,7 @@
 ## 2. Product Summary
 Hroof is a TV-first multiplayer party game platform where a host mirrors their phone to a TV and runs games in real time. Players join by scanning a QR code and use their phones as controllers.
 
-Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-based scoring.
+Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj price-estimation rounds, both with team-based scoring.
 
 ## 3. Goals
 1. Deliver reliable real-time gameplay for live gatherings.
@@ -67,6 +67,7 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
    - Active responder context (player + team) after buzzer lock.
    - Manual fallback control to randomly select another responder from the same team.
 7. When Trivia ends, host sees a celebration/winner screen with scores and a CTA to move to the next game.
+8. During Haraj rounds, host sees product image, submission progress, reveal ranking, and team score updates.
 
 ### 6.2 Controller Clarity Requirements (Trivia)
 1. Controller view must clearly indicate whether the current question is for the current player or another player.
@@ -78,6 +79,15 @@ Primary launch game is Jeopardy-style Trivia (4 multiple choices) with team-base
 ### 6.3 Theme Policy
 1. Runtime UI is dark-mode only in v1.
 2. Light-mode switching is disabled across host, join, and controller surfaces.
+
+### 6.4 Landing Page Support Chatbot
+1. Landing page includes an Arabic-only customer support chatbot widget.
+2. Chatbot answers only from repository-managed Markdown knowledge base content.
+3. If answer is not found in knowledge base, chatbot must direct customer to WhatsApp support contact.
+4. Chatbot uses external AI API (`Gemini 2.5 Flash`) through server-side integration only.
+5. API keys must never be exposed to the client.
+6. Chat memory context is limited to the latest `20` customer messages per session.
+7. Chat messages are not persisted in D1/DO/R2.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states
@@ -149,6 +159,36 @@ Per turn:
 - Picker selection inside a team is randomized with usage balancing.
 - Buzzer eligibility is open to all players.
 
+## 8.6 Haraj v1 Functional Spec (Price Estimation)
+## 8.6.1 Round structure
+Per round:
+1. Host starts a Haraj round with a selected product image and known actual price.
+2. Product image is visible to all participants.
+3. Controllers accept one numeric estimate per player.
+4. Collection timer is fixed at `15` seconds.
+5. Estimates are hidden from all participants until lock/reveal.
+6. Submission status is visible (who submitted vs who did not submit).
+7. Round locks when timer expires or all players submit.
+8. If no player submits by timeout, round auto-skips with zero points for all teams.
+9. On reveal, host sees actual price and all player estimates with absolute difference from actual price.
+10. Closest estimates receive points (`50` for rank 1, `30` for rank 2, `10` for rank 3), credited to player teams.
+
+## 8.6.2 Haraj round phases
+1. `haraj_intro`
+2. `haraj_collecting`
+3. `haraj_locked`
+4. `haraj_reveal`
+5. `haraj_scoreboard`
+6. `haraj_next_round_or_end`
+
+## 8.6.3 Haraj scoring and tie rules
+1. Ranking metric is absolute difference: `abs(estimate - actualPrice)`.
+2. Higher/lower estimate direction does not matter; equal absolute difference is a tie.
+3. Ties share the total points of occupied ranks equally.
+4. Example: two-way tie for first shares `(50 + 30) / 2 = 40` each.
+5. Example: two-way tie for second shares `(30 + 10) / 2 = 20` each.
+6. Players outside top 3 point slots receive `0`.
+
 ## 9. Reconnect Behavior
 1. Player gets signed `playerSessionToken` after successful join.
 2. On reopen, client attempts reconnect automatically.
@@ -188,8 +228,12 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 6. `scores` (team-level snapshots)
 7. `room_events` (append-only audit/event stream)
 8. `game_sessions` and `trivia_questions`
+9. `haraj_products`, `haraj_rounds`, and `haraj_submissions`
 
 ## 12. API + Event Contracts (high-level)
+### 12.0 Landing support API
+- `POST /api/chat/support` (landing chatbot prompt + reply)
+
 ## 12.1 Host actions
 - `host.lockLobby`
 - `host.assignPlayerTeam`
@@ -202,6 +246,9 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - `host.startTrivia`
 - `host.selectTriviaClue`
 - `host.nextQuestion`
+- `host.startHaraj`
+- `host.startHarajRound`
+- `host.nextHarajRound`
 - `host.addTeamScore`
 - `host.endSession`
 
@@ -210,6 +257,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - `player.reconnect`
 - `player.input`
 - `player.submitAnswer`
+- `player.submitHarajEstimate`
 - `player.heartbeat`
 
 ## 12.3 Server broadcasts
@@ -217,6 +265,8 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - `room.score`
 - `room.question`
 - `room.controllerMode`
+- `room.harajRound`
+- `room.harajReveal`
 - `room.error`
 
 ## 13. Security Requirements
@@ -242,8 +292,9 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 ## M3: Teaming + Scoreboard
 - Team assignment, team-only scoring model, persistent snapshots.
 
-## M4: Trivia v1
+## M4: Trivia v1 + Haraj v1
 - Jeopardy board flow, buzzer lock, responder fairness, live score commits.
+- Haraj round flow, 15-second estimate collection, hidden answers until reveal, tie-aware scoring.
 
 ## M5: Reliability + Scale Hardening
 - Timeout enforcement, load tests for target concurrency, observability + alerts.
@@ -260,3 +311,4 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 2. Question source and authoring workflow (seeded DB vs external CMS).
 3. Whether to support mid-game late join for players.
 4. Required minimum question count per room based on player count policy.
+5. Final WhatsApp support number value to use in landing chatbot fallback response.
