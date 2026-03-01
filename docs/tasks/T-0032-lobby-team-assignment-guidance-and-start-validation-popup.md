@@ -16,6 +16,7 @@ Improve host lobby team setup UX by:
 3. Team chooser displays two options using team colors and names (fallback to color labels when names are still default/empty).
 4. On start attempt with invalid setup (missing team names or unassigned players), show corrective popup for 10 seconds and block progression.
 5. Require all players assigned to teams before start progression.
+6. Ensure team name input fields do not render seeded default values (`Team A`/`Team B`) and appear empty until host enters custom names.
 
 ### Out
 1. Changes to server-side team balancing algorithm.
@@ -40,7 +41,8 @@ Improve host lobby team setup UX by:
 2. Add 10-second popup state + auto-dismiss.
 3. Replace drag/drop avatar/team interactions with `+` action and chooser modal.
 4. Update lobby guidance text to reflect click-based assignment.
-5. Validate with lint/build and manual API/UI checks.
+5. Update team draft initialization to clear default seeded team names in input fields.
+6. Validate with lint/build and manual API/UI checks.
 
 ## Acceptance criteria
 1. Start attempt with missing team names shows popup for ~10 seconds with corrective steps.
@@ -48,6 +50,7 @@ Improve host lobby team setup UX by:
 3. Host cannot proceed to `teams_ready` until requirements are met.
 4. No drag-and-drop behavior remains in lobby avatar/team assignment.
 5. Each avatar shows an animated `+`; clicking it opens team chooser with guidance text and two team options.
+6. Team name input fields render empty when team names are still default `Team A`/`Team B`.
 
 ## Validation checklist
 - [x] Focused lint/type checks pass for touched files.
@@ -61,6 +64,9 @@ Improve host lobby team setup UX by:
    - `npm run build` ✅
 3. Manual UI:
    - Pending host-side click-through confirmation for popup timing and chooser interaction in browser.
+4. Team name input default-fill fix:
+   - Updated team draft initialization in `app/host/page.tsx` to treat seeded defaults (`Team A`/`Team B`) as empty values for input rendering.
+   - Result: team name inputs render blank until host enters custom names, while preserving already customized names.
 
 ## Rollback plan
 1. Restore drag/drop handlers and drag states in host lobby.

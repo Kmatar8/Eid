@@ -617,7 +617,16 @@ export default function HostStagePage() {
       const next: Record<string, string> = {}
       for (const team of room.teams) {
         const preserved = previous[team.teamId]
-        next[team.teamId] = preserved && preserved.trim().length > 0 ? preserved : team.name
+        const normalizedPreserved = preserved?.trim() ?? ""
+        const hasCustomPreservedName =
+          normalizedPreserved.length > 0 && !isDefaultTeamName(team.teamId, normalizedPreserved)
+
+        if (hasCustomPreservedName) {
+          next[team.teamId] = preserved ?? ""
+          continue
+        }
+
+        next[team.teamId] = isDefaultTeamName(team.teamId, team.name) ? "" : team.name
       }
       return next
     })
