@@ -40,13 +40,23 @@ const DEFAULT_SYSTEM_INSTRUCTIONS = `
 const DEFAULT_KNOWLEDGE_BASE = `
 # قاعدة معرفة افتراضية
 ## بدء المضيف
-- المضيف يسجل الدخول من /host/login باستخدام كود المضيف.
-- بعد الدخول ينشئ غرفة ويشارك رابط/QR.
+- سجّل دخولك من /host/login باستخدام كود المضيف.
+- بعد الدخول أنشئ غرفة وشارك رابط/QR مع اللاعبين.
+- تأكد توزيع اللاعبين على فريقين قبل بدء اللعب.
 
-## التشغيل
-- وزّع اللاعبين على فريقين قبل البدء.
-- ابدأ اللعبة من واجهة المضيف.
-- تقدر تبدّل بين الألعاب حسب حالة الجلسة.
+## تريفيا
+- اختر سؤال من اللوحة حسب الدور.
+- يفتح البازر وبعده يتحدد مجيب واحد.
+- الإجابة الصحيحة تضيف نقاط والخطأ يخصم نقاط.
+
+## حراج
+- تبدأ الجولة بصورة منتج وكل لاعب يرسل تقدير واحد.
+- بعد انتهاء الوقت يتم الكشف عن السعر الحقيقي والترتيب.
+- النقاط تكون حسب الأقرب للسعر الحقيقي.
+
+## تبديل الألعاب
+- تقدر تبدّل بين تريفيا وحراج من واجهة المضيف.
+- التقدم والنقاط محفوظة عند التبديل.
 `.trim()
 
 const MAX_MESSAGE_LENGTH = 800
@@ -127,8 +137,49 @@ function normalizeInputString(raw: unknown) {
   return value.length > 0 ? value : null
 }
 
+const ARABIC_STOP_WORDS = new Set([
+  "وش",
+  "ايش",
+  "اش",
+  "هلا",
+  "مرحبا",
+  "السلام",
+  "عليكم",
+  "ممكن",
+  "ابغى",
+  "ابي",
+  "بغيت",
+  "هذا",
+  "هذي",
+  "هذه",
+  "هو",
+  "هي",
+  "في",
+  "على",
+  "من",
+  "الى",
+  "مع",
+  "عن",
+  "او",
+  "هل",
+  "ما",
+  "انا",
+  "انت",
+])
+
+function normalizeArabicToken(token: string) {
+  return token
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+}
+
 function tokenize(text: string) {
-  return text.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? []
+  const raw = text.match(/[\p{L}\p{N}]{2,}/gu) ?? []
+  return raw
+    .map((token) => normalizeArabicToken(token))
+    .filter((token) => token.length > 1 && !ARABIC_STOP_WORDS.has(token))
 }
 
 function splitKnowledgeBaseSections(markdown: string) {
@@ -296,6 +347,30 @@ function hasArabicCharacters(text: string) {
   return /[\u0600-\u06FF]/.test(text)
 }
 
+function buildKnowledgeFallbackReply(matchedSections: KnowledgeSection[], fallbackMessage: string) {
+  const primary = matchedSections[0]
+  if (!primary) {
+    return fallbackMessage
+  }
+
+  const lines = primary.body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, ""))
+    .filter((line) => line.length > 0)
+    .slice(0, 3)
+
+  const summarizedLines =
+    lines.length > 0
+      ? lines.map((line) => `- ${line}`).join("\n")
+      : `- ${primary.body.slice(0, 180)}`
+
+  const heading = primary.title ? `في قسم "${primary.title}"` : "في قاعدة المعرفة"
+
+  return `يا هلا! حسب المعلومات ${heading}:\n${summarizedLines}\n\nإذا تبغى شرح أدق، قلّي النقطة اللي ودك أركز عليها.`
+}
+
 async function generateGeminiReply(input: {
   apiKey: string
   model: string
@@ -388,11 +463,13 @@ export async function POST(request: Request) {
     })
   }
 
+  const knowledgeFallbackReply = buildKnowledgeFallbackReply(matchedSections, fallbackMessage)
+
   const apiKey = process.env.HROOF_GEMINI_API_KEY
   if (!apiKey) {
     return jsonResponse(200, {
-      reply: fallbackMessage,
-      source: "fallback",
+      reply: knowledgeFallbackReply,
+      source: "kb_fallback",
     })
   }
 
@@ -414,8 +491,8 @@ export async function POST(request: Request) {
 
     if (!reply || !hasArabicCharacters(reply)) {
       return jsonResponse(200, {
-        reply: fallbackMessage,
-        source: "fallback",
+        reply: knowledgeFallbackReply,
+        source: "kb_fallback",
       })
     }
 
@@ -425,8 +502,8 @@ export async function POST(request: Request) {
     })
   } catch {
     return jsonResponse(200, {
-      reply: fallbackMessage,
-      source: "fallback",
+      reply: knowledgeFallbackReply,
+      source: "kb_fallback",
     })
   }
 }
