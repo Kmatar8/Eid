@@ -376,11 +376,15 @@ export default function HostStagePage() {
   const [showQuestionModal, setShowQuestionModal] = useState(false)
   const [showGameSwitchMenu, setShowGameSwitchMenu] = useState(false)
   const [lastQuestionId, setLastQuestionId] = useState<string | null>(null)
+  const [harajRevealCountdownEndsAt, setHarajRevealCountdownEndsAt] = useState<number | null>(null)
+  const [harajRevealCountdownRoundKey, setHarajRevealCountdownRoundKey] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
   const streamConnectedRef = useRef(false)
   const correctAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
   const wrongAnswerAudioRef = useRef<HTMLAudioElement | null>(null)
+  const lastHarajSnapshotRef = useRef<RoomSnapshot["haraj"] | null>(null)
+  const processedHarajRevealRoundKeyRef = useRef<string | null>(null)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -455,6 +459,39 @@ export default function HostStagePage() {
         // Browser autoplay policy may block playback before first user interaction.
       })
     }
+  }, [])
+
+  const launchCelebrationConfetti = useCallback((durationMs = 3000) => {
+    const end = Date.now() + durationMs
+    const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1", "#10b981", "#3b82f6"]
+
+    const frame = () => {
+      if (Date.now() > end) {
+        return
+      }
+
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 60,
+        startVelocity: 65,
+        origin: { x: 0, y: 0.6 },
+        colors,
+        zIndex: 50,
+      })
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 60,
+        startVelocity: 65,
+        origin: { x: 1, y: 0.6 },
+        colors,
+        zIndex: 50,
+      })
+      requestAnimationFrame(frame)
+    }
+
+    frame()
   }, [])
 
   useEffect(() => {
@@ -535,34 +572,7 @@ export default function HostStagePage() {
 
         if (wasCorrect) {
           playCorrectAnswerSound()
-
-          const end = Date.now() + 3 * 1000 // 3 seconds
-          const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1", "#10b981", "#3b82f6"]
-
-          const frame = () => {
-            if (Date.now() > end) return
-            confetti({
-              particleCount: 3,
-              angle: 60,
-              spread: 60,
-              startVelocity: 65,
-              origin: { x: 0, y: 0.6 },
-              colors: colors,
-              zIndex: 50,
-            })
-            confetti({
-              particleCount: 3,
-              angle: 120,
-              spread: 60,
-              startVelocity: 65,
-              origin: { x: 1, y: 0.6 },
-              colors: colors,
-              zIndex: 50,
-            })
-            requestAnimationFrame(frame)
-          }
-
-          frame()
+          launchCelebrationConfetti(3000)
         } else {
           playWrongAnswerSound()
         }
@@ -576,11 +586,58 @@ export default function HostStagePage() {
       setFeedbackContext(null)
     }
   }, [
+    launchCelebrationConfetti,
     playCorrectAnswerSound,
     playWrongAnswerSound,
     processedFeedbackQuestionId,
     room,
   ])
+
+  useEffect(() => {
+    const currentHaraj = room?.haraj ?? null
+    const previousHaraj = lastHarajSnapshotRef.current
+
+    if (!currentHaraj) {
+      lastHarajSnapshotRef.current = null
+      processedHarajRevealRoundKeyRef.current = null
+      setHarajRevealCountdownRoundKey(null)
+      setHarajRevealCountdownEndsAt(null)
+      return
+    }
+
+    const currentRevealKey =
+      currentHaraj.phase === "haraj_reveal" && currentHaraj.lastReveal
+        ? `${currentHaraj.lastReveal.roundIndex}:${currentHaraj.lastReveal.productId}`
+        : null
+
+    if (!currentRevealKey) {
+      setHarajRevealCountdownRoundKey(null)
+      setHarajRevealCountdownEndsAt(null)
+      lastHarajSnapshotRef.current = currentHaraj
+      return
+    }
+
+    if (currentRevealKey !== processedHarajRevealRoundKeyRef.current) {
+      const didAllEligiblePlayersSubmit = Boolean(
+        previousHaraj &&
+          previousHaraj.phase === "haraj_collecting" &&
+          previousHaraj.roundEligiblePlayers > 0 &&
+          previousHaraj.roundSubmittedCount >= previousHaraj.roundEligiblePlayers
+      )
+
+      if (didAllEligiblePlayersSubmit) {
+        setHarajRevealCountdownRoundKey(currentRevealKey)
+        setHarajRevealCountdownEndsAt(Date.now() + 5000)
+      } else {
+        setHarajRevealCountdownRoundKey(null)
+        setHarajRevealCountdownEndsAt(null)
+      }
+
+      processedHarajRevealRoundKeyRef.current = currentRevealKey
+    }
+
+    lastHarajSnapshotRef.current = currentHaraj
+  }, [room?.haraj])
 
   const joinUrl = useMemo(() => {
     if (!roomId || typeof window === "undefined") {
@@ -1276,6 +1333,32 @@ export default function HostStagePage() {
 
   const harajCollectSeconds = remainingSeconds(haraj?.collectEndsAt ?? null, nowTs)
   const harajSubmittedSet = useMemo(() => new Set(haraj?.submittedPlayerIds ?? []), [haraj?.submittedPlayerIds])
+  const currentHarajRevealRoundKey =
+    haraj?.phase === "haraj_reveal" && haraj.lastReveal
+      ? `${haraj.lastReveal.roundIndex}:${haraj.lastReveal.productId}`
+      : null
+  const harajRevealCountdownSeconds = remainingSeconds(harajRevealCountdownEndsAt, nowTs)
+  const isHarajRevealCountdownActive = Boolean(
+    currentHarajRevealRoundKey &&
+      harajRevealCountdownRoundKey &&
+      currentHarajRevealRoundKey === harajRevealCountdownRoundKey &&
+      harajRevealCountdownSeconds > 0
+  )
+
+  useEffect(() => {
+    if (!harajRevealCountdownRoundKey || !harajRevealCountdownEndsAt) {
+      return
+    }
+
+    if (nowTs < harajRevealCountdownEndsAt) {
+      return
+    }
+
+    setHarajRevealCountdownRoundKey(null)
+    setHarajRevealCountdownEndsAt(null)
+    launchCelebrationConfetti(2200)
+  }, [harajRevealCountdownEndsAt, harajRevealCountdownRoundKey, launchCelebrationConfetti, nowTs])
+
   const celebrationTitle = useMemo(() => {
     if (!room || room.state !== "between_games") {
       return "انتهت الجولة"
@@ -2054,70 +2137,77 @@ export default function HostStagePage() {
             ) : null}
 
             {haraj?.phase === "haraj_reveal" && haraj.lastReveal ? (
-              <article className="party-surface-strong rounded-3xl p-5">
+              <article className="party-surface-strong relative rounded-3xl p-5">
                 <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
                 <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
-                <p className="mt-2 text-lg text-slate-100">
-                  السعر الحقيقي:{" "}
-                  <span className="font-black text-amber-300">
-                    {haraj.lastReveal.actualPrice} {haraj.lastReveal.currency}
-                  </span>
-                </p>
-                <div className="mt-4 overflow-hidden rounded-2xl border border-white/20 bg-black/30">
-                  <img src={haraj.lastReveal.imageUrl} alt={haraj.lastReveal.productName} className="h-64 w-full object-cover" />
-                </div>
-
-                {haraj.lastReveal.skipped ? (
-                  <p className="mt-4 rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-3 text-sm font-semibold text-amber-100">
-                    لم يرسل أي لاعب تخمينًا خلال الوقت المحدد. تم تخطي الجولة بدون نقاط.
-                  </p>
-                ) : (
-                  <div className="mt-4 overflow-x-auto rounded-2xl border border-white/15 bg-black/20">
-                    <table className="min-w-full text-right text-sm">
-                      <thead className="bg-white/10 text-slate-200">
-                        <tr>
-                          <th className="px-3 py-2">اللاعب</th>
-                          <th className="px-3 py-2">التخمين</th>
-                          <th className="px-3 py-2">الفارق</th>
-                          <th className="px-3 py-2">الترتيب</th>
-                          <th className="px-3 py-2">النقاط</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {haraj.lastReveal.results.map((result) => (
-                          <tr key={`haraj-result-${result.playerId}`} className="border-t border-white/10">
-                            <td className="px-3 py-2 font-semibold">{result.playerName}</td>
-                            <td className="px-3 py-2">
-                              {result.estimate} {haraj.lastReveal?.currency}
-                            </td>
-                            <td className="px-3 py-2">{result.difference}</td>
-                            <td className="px-3 py-2">{result.rank ?? "-"}</td>
-                            <td className="px-3 py-2 font-black text-amber-200">{result.pointsAwarded}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_1fr] lg:items-start">
+                  <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
+                    <img src={haraj.lastReveal.imageUrl} alt={haraj.lastReveal.productName} className="h-72 w-full object-cover lg:h-[30rem]" />
                   </div>
-                )}
+
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-5 text-center">
+                      <p className="text-sm font-bold tracking-[0.12em] text-amber-100">السعر الحقيقي</p>
+                      <p className="mt-2 text-5xl font-black leading-none text-amber-300 sm:text-6xl">
+                        {haraj.lastReveal.actualPrice} {haraj.lastReveal.currency}
+                      </p>
+                    </div>
+
+                    {haraj.lastReveal.skipped ? (
+                      <p className="rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-3 text-sm font-semibold text-amber-100">
+                        لم يرسل أي لاعب تخمينًا خلال الوقت المحدد. تم تخطي الجولة بدون نقاط.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto rounded-2xl border border-white/15 bg-black/20">
+                        <table className="min-w-full text-right text-sm">
+                          <thead className="bg-white/10 text-slate-200">
+                            <tr>
+                              <th className="px-3 py-2">اللاعب</th>
+                              <th className="px-3 py-2">التخمين</th>
+                              <th className="px-3 py-2">الفارق</th>
+                              <th className="px-3 py-2">الترتيب</th>
+                              <th className="px-3 py-2">النقاط</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {haraj.lastReveal.results.map((result) => (
+                              <tr key={`haraj-result-${result.playerId}`} className="border-t border-white/10">
+                                <td className="px-3 py-2 font-semibold">{result.playerName}</td>
+                                <td className="px-3 py-2">
+                                  {result.estimate} {haraj.lastReveal?.currency}
+                                </td>
+                                <td className="px-3 py-2">{result.difference}</td>
+                                <td className="px-3 py-2">{result.rank ?? "-"}</td>
+                                <td className="px-3 py-2 font-black text-amber-200">{result.pointsAwarded}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Button
                     type="button"
                     className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                    disabled={Boolean(busyAction) || !canAdvanceHarajRound}
+                    disabled={Boolean(busyAction) || !canAdvanceHarajRound || isHarajRevealCountdownActive}
                     onClick={() => void handleNextHarajRound()}
                   >
                     الجولة التالية
                   </Button>
-                  <Button
-                    type="button"
-                    className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                    disabled={Boolean(busyAction) || !canEndSession}
-                    onClick={() => void handleEndSession()}
-                  >
-                    إنهاء الفعالية
-                  </Button>
                 </div>
+
+                {isHarajRevealCountdownActive ? (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center rounded-3xl bg-slate-950/86 backdrop-blur-sm">
+                    <div className="rounded-3xl border border-amber-300/50 bg-black/45 px-8 py-7 text-center shadow-2xl">
+                      <p className="text-lg font-semibold text-amber-100">اكتملت كل التخمينات</p>
+                      <p className="mt-2 text-sm text-slate-200">سيتم كشف السعر الحقيقي بعد</p>
+                      <p className="mt-2 text-7xl font-black leading-none text-amber-300">{harajRevealCountdownSeconds}</p>
+                    </div>
+                  </div>
+                ) : null}
               </article>
             ) : null}
           </section>

@@ -35,6 +35,8 @@ This board tracks implementation order, ownership, and execution status.
 | 15 | T-0043 | M1 | Chatbot KB Answer Fallback Reliability | done | AI-Agent | T-0034 | Return KB-derived answers when Gemini/config path fails |
 | 16 | T-0044 | M1 | Chatbot Social Intents + Arabic Retrieval Hardening | done | AI-Agent | T-0034 | Add social intent responses and improve Arabic matching reliability |
 | 17 | T-0045 | M1 | Chatbot Brand Name + Host Onboarding KB Expansion | done | AI-Agent | T-0034 | Rename to `جمعة العيد`, expand onboarding KB, and improve follow-up context handling |
+| 18 | T-0046 | M1 | Chatbot WhatsApp Escalation Number Finalization | done | AI-Agent | T-0034 | Finalize fallback escalation number to `0576216613` |
+| 19 | T-0047 | M4 | Haraj Reveal UX + Arabic/English Estimate Normalization | done | AI-Agent | T-0033 | Host reveal layout/countdown/confetti updates + controller/server input normalization |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

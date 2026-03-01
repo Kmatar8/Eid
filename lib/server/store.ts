@@ -165,6 +165,33 @@ function parseActiveGame(value: unknown): ActiveGame | null {
   return value === "trivia" || value === "haraj" ? value : null
 }
 
+function normalizeEasternArabicDigits(value: string) {
+  return value
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x660))
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x6f0))
+}
+
+function parseHarajEstimateValue(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value !== "string") {
+    return null
+  }
+
+  const normalized = normalizeEasternArabicDigits(value.trim())
+    .replace(/٫/g, ".")
+    .replace(/[٬،,]/g, "")
+    .replace(/\s+/g, "")
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function inferActiveGameFromSessions(
   triviaSession: TriviaSession | null | undefined,
   harajSession: HarajSession | null | undefined
@@ -3245,10 +3272,8 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
     }
 
-    const rawEstimate = input.payload?.estimate
-    const estimate =
-      typeof rawEstimate === "number" ? rawEstimate : typeof rawEstimate === "string" ? Number(rawEstimate) : Number.NaN
-    if (!Number.isFinite(estimate) || estimate < 0) {
+    const estimate = parseHarajEstimateValue(input.payload?.estimate)
+    if (estimate === null || estimate < 0) {
       return { ok: false, code: "HARAJ_INVALID_ESTIMATE" }
     }
 

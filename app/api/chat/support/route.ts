@@ -33,7 +33,7 @@ const SOCIAL_INTENTS_PUBLIC_PATH = "/chatbot/social-intents.md"
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_FALLBACK_MESSAGE =
-  "ما عندي تفاصيل كافية في قاعدة المعرفة الحالية للإجابة بدقة. تواصل مع فريق الدعم عبر واتساب على الرقم: [سيتم تزويده لاحقًا]."
+  "ما عندي تفاصيل كافية في قاعدة المعرفة الحالية للإجابة بدقة. تواصل مع فريق الدعم عبر واتساب على الرقم: 0576216613."
 const DEFAULT_SYSTEM_INSTRUCTIONS = `
 أنت مساعدة دعم عربية.
 1) أجب بالعربية فقط.

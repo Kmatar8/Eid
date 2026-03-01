@@ -101,6 +101,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
     - player onboarding/join flow
     - TV mirroring options and troubleshooting
 12. Follow-up clarification prompts (for example: "كيف يعني؟") should use recent customer message context before resolving to fallback.
+13. WhatsApp escalation contact for chatbot fallback is `0576216613`.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states
@@ -177,7 +178,7 @@ Per turn:
 Per round:
 1. Host starts a Haraj round with a selected product image and known actual price.
 2. Product image is visible to all participants.
-3. Controllers accept one numeric estimate per player.
+3. Controllers accept one numeric estimate per player using Arabic or English digits; runtime normalizes to English numeric value for scoring and reveal table display.
 4. Collection timer is fixed at `15` seconds.
 5. Estimates are hidden from all participants until lock/reveal.
 6. Submission status is visible (who submitted vs who did not submit).
@@ -185,6 +186,8 @@ Per round:
 8. If no player submits by timeout, round auto-skips with zero points for all teams.
 9. On reveal, host sees actual price and all player estimates with absolute difference from actual price.
 10. Closest estimates receive points (`50` for rank 1, `30` for rank 2, `10` for rank 3), credited to player teams.
+11. If all eligible players submit before timeout, host sees a `5`-second overlay countdown before reveal details are shown.
+12. Haraj reveal layout on host is split: product image on the left and player guesses table on the right, with a large `السعر الحقيقي` headline above the table.
 
 ## 8.6.2 Haraj round phases
 1. `haraj_intro`
@@ -337,4 +340,3 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 2. Question source and authoring workflow (seeded DB vs external CMS).
 3. Whether to support mid-game late join for players.
 4. Required minimum question count per room based on player count policy.
-5. Final WhatsApp support number value to use in landing chatbot fallback response.

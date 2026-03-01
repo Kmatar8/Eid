@@ -61,6 +61,25 @@ function optionLetter(index: number) {
   return ["A", "B", "C", "D"][index] ?? "?"
 }
 
+function normalizeEasternArabicDigits(value: string) {
+  return value
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x660))
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x6f0))
+}
+
+function parseHarajEstimateInput(value: string): number | null {
+  const normalized = normalizeEasternArabicDigits(value.trim())
+    .replace(/٫/g, ".")
+    .replace(/[٬،,]/g, "")
+    .replace(/\s+/g, "")
+  if (!normalized) {
+    return null
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function shouldRetrySubmit(error: unknown) {
   if (!(error instanceof LiveApiError)) {
     return false
@@ -714,8 +733,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       return
     }
 
-    const estimate = Number(harajEstimateDraft.trim())
-    if (!Number.isFinite(estimate) || estimate < 0) {
+    const estimate = parseHarajEstimateInput(harajEstimateDraft)
+    if (estimate === null || estimate < 0) {
       setError("أدخل رقمًا صحيحًا للتخمين.")
       return
     }
@@ -800,14 +819,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   جولة {room.haraj.roundIndex + 1} من {room.haraj.totalRounds}
                 </p>
-                <h2 className="text-2xl font-black">{room.haraj.currentProduct.name}</h2>
-                <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
-                  <img
-                    src={room.haraj.currentProduct.imageUrl}
-                    alt={room.haraj.currentProduct.name}
-                    className="h-56 w-full object-cover"
-                  />
-                </div>
+                <p className="text-sm text-slate-200">أدخل قيمة المنتج فقط.</p>
                 <p className="text-sm text-slate-200">
                   الوقت المتبقي: <span className="font-black text-amber-300">{harajCollectSeconds}</span> ثانية
                 </p>
@@ -817,14 +829,15 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    <label className="block text-sm font-semibold text-slate-200">تخمينك للسعر ({room.haraj.currentProduct.currency})</label>
+                    <label className="block text-sm font-semibold text-slate-200">قيمة المنتج ({room.haraj.currentProduct.currency})</label>
                     <input
-                      type="number"
-                      min={0}
+                      type="text"
+                      inputMode="decimal"
+                      dir="ltr"
                       value={harajEstimateDraft}
                       onChange={(event) => setHarajEstimateDraft(event.target.value)}
                       className="h-12 w-full rounded-xl border border-white/20 bg-black/25 px-3 text-lg font-bold text-white outline-none focus:ring-2 focus:ring-cyan-400/45"
-                      placeholder="مثال: 499"
+                      placeholder="مثال: 499 أو ٤٩٩"
                     />
                     <Button
                       type="button"
