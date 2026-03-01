@@ -2110,8 +2110,13 @@ export default function HostStagePage() {
                 </p>
 
                 <div className="mt-4 grid gap-4 lg:grid-cols-[28rem_1fr]">
-                  <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
-                    <img src={haraj.currentProduct.imageUrl} alt={haraj.currentProduct.name} className="h-72 w-full object-cover" />
+                  <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2">
+                    <img
+                      src={haraj.currentProduct.imageUrl}
+                      alt={haraj.currentProduct.name}
+                      className="max-h-full w-full rounded-xl object-contain"
+                      decoding="async"
+                    />
                   </div>
                   <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
                     <p className="text-sm font-semibold text-slate-200">حالة الإرسال (بدون كشف التخمين):</p>
@@ -2141,8 +2146,13 @@ export default function HostStagePage() {
                 <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
                 <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
                 <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_1fr] lg:items-start">
-                  <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
-                    <img src={haraj.lastReveal.imageUrl} alt={haraj.lastReveal.productName} className="h-72 w-full object-cover lg:h-[30rem]" />
+                  <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:h-[30rem]">
+                    <img
+                      src={haraj.lastReveal.imageUrl}
+                      alt={haraj.lastReveal.productName}
+                      className="max-h-full w-full rounded-xl object-contain"
+                      decoding="async"
+                    />
                   </div>
 
                   <div className="space-y-4">

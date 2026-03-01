@@ -37,6 +37,9 @@ This board tracks implementation order, ownership, and execution status.
 | 17 | T-0045 | M1 | Chatbot Brand Name + Host Onboarding KB Expansion | done | AI-Agent | T-0034 | Rename to `جمعة العيد`, expand onboarding KB, and improve follow-up context handling |
 | 18 | T-0046 | M1 | Chatbot WhatsApp Escalation Number Finalization | done | AI-Agent | T-0034 | Finalize fallback escalation number to `0576216613` |
 | 19 | T-0047 | M4 | Haraj Reveal UX + Arabic/English Estimate Normalization | done | AI-Agent | T-0033 | Host reveal layout/countdown/confetti updates + controller/server input normalization |
+| 20 | T-0048 | M4 | Haraj Products from CSV + Image Path Standardization | done | AI-Agent | T-0033 | Generate product bank from `haraj.csv` and standardize image folder path |
+| 21 | T-0049 | M4 | Haraj Image Asset Resolution + Mixed Size Display Hardening | done | AI-Agent | T-0048 | Resolve `.jpg/.jpeg` mismatches and improve host image fit for mixed dimensions |
+| 22 | T-0050 | M4 | Haraj Image WebP Optimization Pipeline | done | AI-Agent | T-0049 | Add batch WebP conversion and make generated catalog prefer WebP assets |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.
