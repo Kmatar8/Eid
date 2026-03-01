@@ -19,6 +19,7 @@ export type HostRecord = {
   email: string | null
   passwordHash: string
   accessExpiresAt: number | null
+  activeSessionId: string | null
   activeRoomId: string | null
   createdAt: number
 }

@@ -375,7 +375,7 @@ export async function GET(request: Request, context: RouteContext) {
     return errorResponse(400, "VALIDATION_ERROR", "roomId is required")
   }
 
-  const actor = resolveRoomActor(request, roomId)
+  const actor = await resolveRoomActor(request, roomId)
   if (!actor.ok) {
     return errorResponse(actor.status, actor.code, actor.message)
   }

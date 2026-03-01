@@ -46,6 +46,7 @@ export async function POST(request: Request) {
         sub: dbAuthResult.hostId,
         role: "host",
         hostId: dbAuthResult.hostId,
+        sessionId: dbAuthResult.sessionId,
         username: dbAuthResult.code,
       },
       tokenTtlSeconds
@@ -69,27 +70,48 @@ export async function POST(request: Request) {
     return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
   }
 
+  if (dbAuthResult.reason === "NOT_ACTIVATED") {
+    return errorResponse(409, "HOST_CODE_NOT_ACTIVATED", "Host code requires activation")
+  }
+
+  if (
+    dbAuthResult.reason !== "DB_UNAVAILABLE" &&
+    dbAuthResult.reason !== "CREDENTIAL_NOT_FOUND" &&
+    dbAuthResult.reason !== "INVALID_PASSWORD"
+  ) {
+    return errorResponse(500, "AUTH_FLOW_ERROR", "Unexpected host auth state")
+  }
+
   if (dbAuthResult.reason !== "DB_UNAVAILABLE") {
     return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code or password")
   }
 
   return withSharedStore(async () => {
-    const host = authenticateHost(username, password)
-    if (!host) {
+    const hostAuth = authenticateHost(username, password)
+    if (!hostAuth.ok) {
+      if (hostAuth.reason === "NOT_ACTIVATED") {
+        return errorResponse(409, "HOST_CODE_NOT_ACTIVATED", "Host code requires activation")
+      }
+
+      if (hostAuth.reason === "ACCESS_EXPIRED") {
+        return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
+      }
+
       return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code or password")
     }
 
-    const tokenTtlSeconds = resolveHostTokenTtlSeconds(host)
+    const tokenTtlSeconds = resolveHostTokenTtlSeconds(hostAuth.host)
     if (tokenTtlSeconds <= 0) {
       return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
     }
 
     const token = signToken(
       {
-        sub: host.id,
+        sub: hostAuth.host.id,
         role: "host",
-        hostId: host.id,
-        username: host.username,
+        hostId: hostAuth.host.id,
+        sessionId: hostAuth.sessionId,
+        username: hostAuth.host.username,
       },
       tokenTtlSeconds
     )
@@ -97,9 +119,9 @@ export async function POST(request: Request) {
     return jsonResponse(200, {
       token,
       host: {
-        id: host.id,
-        username: host.username,
-        email: host.email,
+        id: hostAuth.host.id,
+        username: hostAuth.host.username,
+        email: hostAuth.host.email,
       },
     })
   })

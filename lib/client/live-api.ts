@@ -248,6 +248,13 @@ export function hostLogin(username: string, password: string) {
   })
 }
 
+export function hostActivate(username: string, password: string) {
+  return requestJson<HostLoginResult>("/api/auth/host/activate", {
+    method: "POST",
+    body: { username, password },
+  })
+}
+
 export function createRoom(hostToken: string) {
   return requestJson<CreateRoomResult>("/api/rooms/create", {
     method: "POST",
