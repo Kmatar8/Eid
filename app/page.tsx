@@ -392,8 +392,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   onClick={() => {
-                    // TODO: Add purchase link here when provided by the user
-                    window.open("#", "_blank")
+                    window.open("https://salla.sa/happyystoree/KRaxjOw", "_blank")
                   }}
                   className={cn(
                     "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
