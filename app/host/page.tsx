@@ -1203,13 +1203,15 @@ export default function HostStagePage() {
     return room.players.find((player) => player.playerId === teamPickerPlayerId) ?? null
   }, [room, teamPickerPlayerId])
   const isTriviaStage = Boolean(room && stage === "trivia")
-  const showBackgroundFireworks = !isTriviaStage
+  const isHarajStage = Boolean(room && stage === "haraj")
+  const isActiveGameStage = isTriviaStage || isHarajStage
+  const showBackgroundFireworks = !isActiveGameStage
   const fireworksBasePopulation = 1
   const fireworksDemoPopulation = 1
   const fireworksExplosionHeight = { min: 0, max: 0.15 }
 
   return (
-    <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
+    <div className={`relative overflow-hidden text-foreground ${isActiveGameStage ? "h-[100dvh]" : "min-h-screen"}`}>
       <FeedbackOverlay
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
@@ -1238,7 +1240,7 @@ export default function HostStagePage() {
       <div className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
 
       <main
-        className={`relative z-10 mx-auto w-full max-w-[1820px] px-4 sm:px-8 ${isTriviaStage ? "h-full overflow-hidden pb-4 pt-4" : "min-h-screen pb-28 pt-5"
+        className={`relative z-10 mx-auto w-full max-w-[1820px] px-4 sm:px-8 ${isActiveGameStage ? "h-full overflow-hidden pb-4 pt-4" : "min-h-screen pb-28 pt-5"
           }`}
       >
         {error ? <p className="party-status-error mb-3 rounded-xl px-4 py-3 text-sm font-medium">{error}</p> : null}
