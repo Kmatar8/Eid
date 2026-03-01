@@ -1203,9 +1203,10 @@ export default function HostStagePage() {
     return room.players.find((player) => player.playerId === teamPickerPlayerId) ?? null
   }, [room, teamPickerPlayerId])
   const isTriviaStage = Boolean(room && stage === "trivia")
-  const fireworksBasePopulation = isTriviaStage ? 0.5 : 1
+  const showBackgroundFireworks = !isTriviaStage
+  const fireworksBasePopulation = 1
   const fireworksDemoPopulation = 1
-  const fireworksExplosionHeight = isTriviaStage ? { min: 0.08, max: 0.34 } : { min: 0, max: 0.15 }
+  const fireworksExplosionHeight = { min: 0, max: 0.15 }
 
   return (
     <div className={`relative overflow-hidden text-foreground ${isTriviaStage ? "h-[100dvh]" : "min-h-screen"}`}>
@@ -1220,13 +1221,17 @@ export default function HostStagePage() {
           setFeedbackContext(null)
         }}
       />
-      <FireworksBackground
-        population={fireworksBasePopulation}
-        particleSpeed={4}
-        explosionHeight={fireworksExplosionHeight}
-        className={`absolute inset-0 z-0 pointer-events-none ${isTriviaStage ? "opacity-90" : "opacity-80"}`}
-      />
-      <FireworksBackgroundDemo population={fireworksDemoPopulation} />
+      {showBackgroundFireworks ? (
+        <>
+          <FireworksBackground
+            population={fireworksBasePopulation}
+            particleSpeed={4}
+            explosionHeight={fireworksExplosionHeight}
+            className="absolute inset-0 z-0 pointer-events-none opacity-80"
+          />
+          <FireworksBackgroundDemo population={fireworksDemoPopulation} />
+        </>
+      ) : null}
       <div className="party-stage-bg" />
       <div className="party-stage-grid" />
       <div className="pointer-events-none absolute -left-28 top-12 h-80 w-80 rounded-full bg-fuchsia-400/20 blur-3xl" />
