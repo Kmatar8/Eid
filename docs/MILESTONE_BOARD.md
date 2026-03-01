@@ -34,6 +34,7 @@ This board tracks implementation order, ownership, and execution status.
 | 14 | T-0042 | M1 | Chatbot Graceful Config Fallback | done | AI-Agent | T-0034 | Prevent chatbot 500 by degrading config/key failures to safe fallback replies |
 | 15 | T-0043 | M1 | Chatbot KB Answer Fallback Reliability | done | AI-Agent | T-0034 | Return KB-derived answers when Gemini/config path fails |
 | 16 | T-0044 | M1 | Chatbot Social Intents + Arabic Retrieval Hardening | done | AI-Agent | T-0034 | Add social intent responses and improve Arabic matching reliability |
+| 17 | T-0045 | M1 | Chatbot Brand Name + Host Onboarding KB Expansion | done | AI-Agent | T-0034 | Rename to `جمعة العيد`, expand onboarding KB, and improve follow-up context handling |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

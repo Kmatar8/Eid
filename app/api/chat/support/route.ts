@@ -62,11 +62,11 @@ const DEFAULT_KNOWLEDGE_BASE = `
 - التقدم والنقاط محفوظة عند التبديل.
 `.trim()
 const DEFAULT_SOCIAL_INTENTS: Record<SocialIntentKey, string> = {
-  greeting: "يا هلا والله! 👋 نورت. وش ودك تعرف عن تشغيل هروف؟",
+  greeting: "يا هلا والله! 👋 نورت. وش ودك تعرف عن تشغيل جمعة العيد؟",
   how_are_you: "الحمدلله بخير دامك بخير 😄 جاهزة أساعدك في إعداد اللعبة.",
   thanks: "تسلم يا بعدي 🙏 إذا ودك أكمل معك بخطوات التشغيل أنا حاضرة.",
   goodbye: "الله معك 🌟 إذا احتجت أي شيء، ارجع لي بأي وقت.",
-  identity: "أنا سارة، مساعدة هروف. أساعدك في إعداد المضيف وتشغيل الألعاب.",
+  identity: "أنا سارة، مساعدة جمعة العيد. أساعدك في إعداد المضيف وتشغيل الألعاب.",
 }
 
 const MAX_MESSAGE_LENGTH = 800
@@ -217,7 +217,7 @@ function tokenize(text: string) {
   return Array.from(new Set(expanded))
 }
 
-type DomainTopic = "gameplay" | "login" | "trivia" | "haraj" | "switch"
+type DomainTopic = "gameplay" | "login" | "trivia" | "haraj" | "switch" | "tv_mirroring"
 
 function detectDomainTopic(question: string): DomainTopic | null {
   const text = normalizeArabicToken(question)
@@ -235,6 +235,9 @@ function detectDomainTopic(question: string): DomainTopic | null {
   }
   if (/(تبديل|switch|تحويل لعبه)/.test(text)) {
     return "switch"
+  }
+  if (/(تلفزيون|التلفزيون|شاشه|شاشة|مرايا|mirror|airplay|cast|hdmi)/.test(text)) {
+    return "tv_mirroring"
   }
   return null
 }
@@ -258,6 +261,9 @@ function sectionMatchesTopic(section: { title: string; body: string }, topic: Do
   if (topic === "switch") {
     return /(تبديل الالعاب|تبدل بين تريفيا وحراج|حفظ التقدم)/.test(text)
   }
+  if (topic === "tv_mirroring") {
+    return /(اعرض شاشه المضيف على التلفزيون|ايفون|اندرويد|airplay|cast|hdmi|مشاكل شائعه في المرايا)/.test(text)
+  }
   return false
 }
 
@@ -269,6 +275,17 @@ function getTopicPriorityBoost(section: { title: string; body: string }, topic: 
     }
     if (/(حالات الغرفه|حدود هذه القاعده|معلومات الخصوصيه)/.test(title)) {
       return -3
+    }
+  }
+  if (topic === "tv_mirroring") {
+    if (/(كيف اعرض شاشه المضيف على التلفزيون|ايفون|اندرويد|لابتوب)/.test(title)) {
+      return 10
+    }
+    if (/(مشاكل شائعه في المرايا)/.test(title)) {
+      return 3
+    }
+    if (/(تجهيز الجلسه قبل اللعب|حالات الغرفه)/.test(title)) {
+      return -2
     }
   }
   return 0
@@ -430,6 +447,30 @@ function parseCustomerHistory(rawHistory: unknown) {
     .map((item) => item.slice(0, MAX_CUSTOMER_HISTORY_ITEM_LENGTH))
 
   return cleaned.slice(-MAX_CUSTOMER_HISTORY_ITEMS)
+}
+
+function isClarificationPrompt(message: string) {
+  const normalized = normalizeArabicToken(message)
+  return /(كيف يعني|وش يعني|يعني ايش|وضح|وضح اكثر|ممكن توضح|اشرح اكثر|ما فهمت|still|what do you mean)/i.test(
+    normalized
+  )
+}
+
+function buildRetrievalQuery(message: string, customerHistory: string[]) {
+  if (!isClarificationPrompt(message)) {
+    return message
+  }
+
+  const normalizedCurrent = normalizeArabicToken(message)
+  const previous = [...customerHistory]
+    .reverse()
+    .find((item) => normalizeArabicToken(item) !== normalizedCurrent)
+
+  if (!previous) {
+    return message
+  }
+
+  return `${previous}\n${message}`
 }
 
 function buildGeminiUserPrompt(input: {
@@ -602,7 +643,8 @@ export async function POST(request: Request) {
   }
 
   const customerHistory = parseCustomerHistory(rawBody.customerHistory)
-  const matchedSections = rankKnowledgeSections(knowledgeBase, message, 4)
+  const retrievalQuery = buildRetrievalQuery(message, customerHistory)
+  const matchedSections = rankKnowledgeSections(knowledgeBase, retrievalQuery, 4)
 
   if (matchedSections.length === 0) {
     return jsonResponse(200, {
