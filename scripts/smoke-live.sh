@@ -9,19 +9,14 @@ if [[ -z "$BASE_URL" ]]; then
 fi
 
 HOST_USER="${HOST_USER:-}"
-HOST_PASS="${HOST_PASS:-}"
 HOST_CREDENTIALS_CSV="${HOST_CREDENTIALS_CSV:-docs/seeds/host-redeem-codes.csv}"
 
-if [[ -z "$HOST_USER" || -z "$HOST_PASS" ]] && [[ -f "$HOST_CREDENTIALS_CSV" ]]; then
+if [[ -z "$HOST_USER" ]] && [[ -f "$HOST_CREDENTIALS_CSV" ]]; then
   FIRST_SEED_LINE="$(sed -n '2p' "$HOST_CREDENTIALS_CSV" || true)"
-  if [[ "$FIRST_SEED_LINE" == *,* ]]; then
-    HOST_USER="${HOST_USER:-${FIRST_SEED_LINE%%,*}}"
-    HOST_PASS="${HOST_PASS:-${FIRST_SEED_LINE#*,}}"
-  fi
+  HOST_USER="${HOST_USER:-$FIRST_SEED_LINE}"
 fi
 
 HOST_USER="${HOST_USER:-host-demo}"
-HOST_PASS="${HOST_PASS:-demo1234}"
 
 for cmd in curl jq; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -112,7 +107,7 @@ echo "BASE_URL=$BASE_URL"
 echo "HOST_USER=$HOST_USER"
 
 printf "\n== Host login ==\n"
-api_call POST /api/auth/host/login "" "{\"username\":\"$HOST_USER\",\"password\":\"$HOST_PASS\"}"
+api_call POST /api/auth/host/login "" "{\"username\":\"$HOST_USER\"}"
 expect_status 200 "host.login"
 HOST_TOKEN="$(echo "$BODY" | jq -er '.token')"
 

@@ -41,7 +41,7 @@ function resolveHostAuthError(reason: string): ActorResolveError {
     }
   }
 
-  if (reason === "SESSION_REVOKED" || reason === "NOT_ACTIVATED") {
+  if (reason === "SESSION_REVOKED") {
     return {
       ok: false,
       status: 401,

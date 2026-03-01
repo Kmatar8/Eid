@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "crypto"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { hashPassword, verifyPassword } from "@/lib/server/password"
+import { hashPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
 import bundledHostCredentialSeeds from "@/lib/server/host-credentials.generated.json"
 import { HARAJ_PRODUCT_BANK, type HarajProduct } from "@/lib/server/haraj-bank"
@@ -2191,9 +2191,6 @@ export function ensureHostSessionRecord(input: { hostId: string; username: strin
 
 type HostAuthFailureReason =
   | "CREDENTIAL_NOT_FOUND"
-  | "INVALID_PASSWORD"
-  | "NOT_ACTIVATED"
-  | "ALREADY_ACTIVATED"
   | "ACCESS_EXPIRED"
 
 type HostAuthSuccess = {
@@ -2228,28 +2225,7 @@ function rotateHostSession(store: InMemoryStore, host: HostRecord) {
   return sessionId
 }
 
-export function activateHost(username: string, password: string): HostAuthResult {
-  const store = getStore()
-  const host = resolveHostByUsername(store, username)
-  if (!host) {
-    return { ok: false, reason: "CREDENTIAL_NOT_FOUND" }
-  }
-
-  if (typeof host.accessExpiresAt === "number") {
-    if (isHostAccessExpired(host)) {
-      return { ok: false, reason: "ACCESS_EXPIRED" }
-    }
-    return { ok: false, reason: "ALREADY_ACTIVATED" }
-  }
-
-  const now = nowMs()
-  host.passwordHash = hashPassword(password)
-  host.accessExpiresAt = resolveHostAccessExpiry(now)
-  const sessionId = rotateHostSession(store, host)
-  return { ok: true, host, sessionId }
-}
-
-export function authenticateHost(username: string, password: string): HostAuthResult {
+export function authenticateHost(username: string): HostAuthResult {
   const store = getStore()
   const host = resolveHostByUsername(store, username)
   if (!host) {
@@ -2257,20 +2233,12 @@ export function authenticateHost(username: string, password: string): HostAuthRe
   }
 
   if (typeof host.accessExpiresAt !== "number") {
-    return { ok: false, reason: "NOT_ACTIVATED" }
+    host.accessExpiresAt = resolveHostAccessExpiry(nowMs())
+    store.revision += 1
   }
 
   if (isHostAccessExpired(host)) {
     return { ok: false, reason: "ACCESS_EXPIRED" }
-  }
-
-  if (!verifyPassword(password, host.passwordHash)) {
-    return { ok: false, reason: "INVALID_PASSWORD" }
-  }
-
-  if (!host.activeSessionId) {
-    const sessionId = rotateHostSession(store, host)
-    return { ok: true, host, sessionId }
   }
 
   return { ok: true, host, sessionId: rotateHostSession(store, host) }

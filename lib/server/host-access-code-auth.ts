@@ -2,8 +2,6 @@ import { createHash, randomUUID } from "crypto"
 
 import { getCloudflareContext } from "@opennextjs/cloudflare"
 
-import { hashPassword, verifyPassword } from "@/lib/server/password"
-
 const HOST_ACCESS_DURATION_MS = 1000 * 60 * 60 * 24 * 60
 
 type D1RowLike = Record<string, unknown>
@@ -53,10 +51,7 @@ export type HostAccessCodeAuthErrorReason =
   | "DB_UNAVAILABLE"
   | "DB_ERROR"
   | "CREDENTIAL_NOT_FOUND"
-  | "INVALID_PASSWORD"
   | "ACCESS_EXPIRED"
-  | "NOT_ACTIVATED"
-  | "ALREADY_ACTIVATED"
   | "SESSION_REVOKED"
 
 type HostAccessCodeAuthError = {
@@ -152,8 +147,7 @@ function isAccessExpired(accessExpiresAt: number, at: number) {
 }
 
 export async function authenticateHostAccessCode(
-  codeInput: string,
-  password: string
+  codeInput: string
 ): Promise<HostAccessCodeAuthResult> {
   const code = normalizeCode(codeInput)
   if (!code) {
@@ -175,84 +169,33 @@ export async function authenticateHostAccessCode(
     const activatedAt = parseActivatedAt(row)
     const accessExpiresAt = parseAccessExpiresAt(row)
 
-    if (activatedAt === null || accessExpiresAt === null) {
-      return { ok: false, reason: "NOT_ACTIVATED" }
-    }
+    let nextActivatedAt = activatedAt
+    let nextAccessExpiresAt = accessExpiresAt
 
-    if (isAccessExpired(accessExpiresAt, now)) {
-      await markCodeExpired(database, row.code, now)
-      return { ok: false, reason: "ACCESS_EXPIRED" }
-    }
-
-    if (!verifyPassword(password, row.password_hash)) {
-      return { ok: false, reason: "INVALID_PASSWORD" }
-    }
-
-    if (row.status !== "redeemed") {
+    if (nextActivatedAt === null || nextAccessExpiresAt === null) {
+      nextActivatedAt = now
+      nextAccessExpiresAt = resolveAccessExpiryFromActivation(nextActivatedAt)
       await database
-        .prepare("UPDATE host_access_codes SET status = 'redeemed', updated_at = ? WHERE code = ?")
-        .bind(now, row.code)
+        .prepare(
+          "UPDATE host_access_codes SET status = 'redeemed', activated_at = ?, redeemed_at = COALESCE(redeemed_at, ?), access_expires_at = ?, updated_at = ? WHERE code = ?"
+        )
+        .bind(nextActivatedAt, nextActivatedAt, nextAccessExpiresAt, now, row.code)
         .run()
-    }
-
-    const sessionId = await rotateActiveSession(database, row.code, now)
-    return {
-      ok: true,
-      code: row.code,
-      hostId: deriveHostIdFromCode(row.code),
-      activatedAt,
-      accessExpiresAt,
-      sessionId,
-    }
-  } catch {
-    return { ok: false, reason: "DB_ERROR" }
-  }
-}
-
-export async function activateHostAccessCode(
-  codeInput: string,
-  password: string
-): Promise<HostAccessCodeAuthResult> {
-  const code = normalizeCode(codeInput)
-  if (!code) {
-    return { ok: false, reason: "CREDENTIAL_NOT_FOUND" }
-  }
-
-  const database = await getDatabase()
-  if (!database) {
-    return { ok: false, reason: "DB_UNAVAILABLE" }
-  }
-
-  try {
-    const row = await readAccessCodeRow(database, code)
-    if (!row) {
-      return { ok: false, reason: "CREDENTIAL_NOT_FOUND" }
-    }
-
-    const now = nowMs()
-    const activatedAt = parseActivatedAt(row)
-    const accessExpiresAt = parseAccessExpiresAt(row)
-
-    if (activatedAt !== null && accessExpiresAt !== null) {
-      if (isAccessExpired(accessExpiresAt, now)) {
+    } else {
+      if (isAccessExpired(nextAccessExpiresAt, now)) {
         await markCodeExpired(database, row.code, now)
         return { ok: false, reason: "ACCESS_EXPIRED" }
       }
-      return { ok: false, reason: "ALREADY_ACTIVATED" }
+
+      if (row.status !== "redeemed") {
+        await database
+          .prepare("UPDATE host_access_codes SET status = 'redeemed', updated_at = ? WHERE code = ?")
+          .bind(now, row.code)
+          .run()
+      }
     }
 
-    const nextActivatedAt = now
-    const nextAccessExpiresAt = resolveAccessExpiryFromActivation(nextActivatedAt)
-    const sessionId = randomUUID()
-    const passwordHash = hashPassword(password)
-
-    await database
-      .prepare(
-        "UPDATE host_access_codes SET password_hash = ?, status = 'redeemed', activated_at = ?, redeemed_at = COALESCE(redeemed_at, ?), access_expires_at = ?, active_session_id = ?, updated_at = ? WHERE code = ?"
-      )
-      .bind(passwordHash, nextActivatedAt, nextActivatedAt, nextAccessExpiresAt, sessionId, now, row.code)
-      .run()
-
+    const sessionId = await rotateActiveSession(database, row.code, now)
     return {
       ok: true,
       code: row.code,
@@ -291,7 +234,7 @@ export async function validateHostAccessCodeSession(
     const activatedAt = parseActivatedAt(row)
     const accessExpiresAt = parseAccessExpiresAt(row)
     if (activatedAt === null || accessExpiresAt === null) {
-      return { ok: false, reason: "NOT_ACTIVATED" }
+      return { ok: false, reason: "SESSION_REVOKED" }
     }
 
     if (isAccessExpired(accessExpiresAt, now)) {

@@ -8,7 +8,6 @@ export const runtime = "nodejs"
 
 type LoginBody = {
   username?: string
-  password?: string
 }
 
 function resolveTtlFromAccessExpiry(accessExpiresAt: number) {
@@ -28,13 +27,12 @@ export async function POST(request: Request) {
   }
 
   const username = typeof body.username === "string" ? body.username.trim() : ""
-  const password = typeof body.password === "string" ? body.password : ""
 
-  if (!username || !password) {
-    return errorResponse(400, "VALIDATION_ERROR", "username and password are required")
+  if (!username) {
+    return errorResponse(400, "VALIDATION_ERROR", "username is required")
   }
 
-  const dbAuthResult = await authenticateHostAccessCode(username, password)
+  const dbAuthResult = await authenticateHostAccessCode(username)
   if (dbAuthResult.ok) {
     const tokenTtlSeconds = resolveTtlFromAccessExpiry(dbAuthResult.accessExpiresAt)
     if (tokenTtlSeconds <= 0) {
@@ -70,34 +68,22 @@ export async function POST(request: Request) {
     return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
   }
 
-  if (dbAuthResult.reason === "NOT_ACTIVATED") {
-    return errorResponse(409, "HOST_CODE_NOT_ACTIVATED", "Host code requires activation")
-  }
-
-  if (
-    dbAuthResult.reason !== "DB_UNAVAILABLE" &&
-    dbAuthResult.reason !== "CREDENTIAL_NOT_FOUND" &&
-    dbAuthResult.reason !== "INVALID_PASSWORD"
-  ) {
+  if (dbAuthResult.reason !== "DB_UNAVAILABLE" && dbAuthResult.reason !== "CREDENTIAL_NOT_FOUND") {
     return errorResponse(500, "AUTH_FLOW_ERROR", "Unexpected host auth state")
   }
 
   if (dbAuthResult.reason !== "DB_UNAVAILABLE") {
-    return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code or password")
+    return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code")
   }
 
   return withSharedStore(async () => {
-    const hostAuth = authenticateHost(username, password)
+    const hostAuth = authenticateHost(username)
     if (!hostAuth.ok) {
-      if (hostAuth.reason === "NOT_ACTIVATED") {
-        return errorResponse(409, "HOST_CODE_NOT_ACTIVATED", "Host code requires activation")
-      }
-
       if (hostAuth.reason === "ACCESS_EXPIRED") {
         return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
       }
 
-      return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code or password")
+      return errorResponse(401, "INVALID_CREDENTIALS", "Invalid host code")
     }
 
     const tokenTtlSeconds = resolveHostTokenTtlSeconds(hostAuth.host)
