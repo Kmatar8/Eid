@@ -37,7 +37,7 @@ const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 const HARAJ_COLLECT_WINDOW_MS = 15 * 1000
 const HARAJ_TOP_RANK_POINTS = [50, 30, 10] as const
 const REDEEMED_CODE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 30
-const HOST_ACCESS_DURATION_MONTHS = 2
+const HOST_ACCESS_DURATION_MS = 1000 * 60 * 60 * 24 * 60
 const DEFAULT_HOST_TOKEN_TTL_SECONDS = 60 * 60 * 12
 const HOST_SESSION_PLACEHOLDER_PASSWORD_HASH = hashPassword("host-session-placeholder")
 
@@ -206,23 +206,8 @@ function isHarajTimedPhase(phase: HarajPhase | null) {
   return phase === "haraj_collecting"
 }
 
-function addUtcMonths(fromMs: number, months: number) {
-  const from = new Date(fromMs)
-  const targetMonth = from.getUTCMonth() + months
-  const targetYear = from.getUTCFullYear() + Math.floor(targetMonth / 12)
-  const normalizedMonth = ((targetMonth % 12) + 12) % 12
-  const maxDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate()
-  const targetDay = Math.min(from.getUTCDate(), maxDay)
-
-  return Date.UTC(
-    targetYear,
-    normalizedMonth,
-    targetDay,
-    from.getUTCHours(),
-    from.getUTCMinutes(),
-    from.getUTCSeconds(),
-    from.getUTCMilliseconds()
-  )
+function resolveHostAccessExpiry(activatedAt: number) {
+  return activatedAt + HOST_ACCESS_DURATION_MS
 }
 
 function getRoomEventSubscribersMap() {
@@ -654,6 +639,9 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
           if (typeof host.accessExpiresAt !== "number") {
             hostRecord.accessExpiresAt = null
           }
+          if (typeof host.activeSessionId !== "string" || host.activeSessionId.length === 0) {
+            hostRecord.activeSessionId = null
+          }
 
           if (typeof host.email !== "string") {
             hostRecord.email = null
@@ -705,7 +693,7 @@ function parseHostSeedInputs(): HostSeedInput[] {
       const password = typeof candidate.password === "string" ? candidate.password : undefined
       const accessExpiresAt = parseTimestampValue(candidate.accessExpiresAt)
 
-      if (!username || (!passwordHash && !password)) {
+      if (!username) {
         continue
       }
 
@@ -774,7 +762,7 @@ function parseHostSeedCsv(raw: string): HostSeedInput[] {
   const passwordIndex = header.indexOf("password")
   const emailIndex = header.indexOf("email")
   const accessExpiresAtIndex = Math.max(header.indexOf("accessexpiresat"), header.indexOf("access_expires_at"))
-  if ((codeIndex < 0 && usernameIndex < 0) || passwordIndex < 0) {
+  if (codeIndex < 0 && usernameIndex < 0) {
     return []
   }
 
@@ -789,12 +777,12 @@ function parseHostSeedCsv(raw: string): HostSeedInput[] {
     const usernameValue =
       usernameIndex >= 0 ? columns[usernameIndex] : codeIndex >= 0 ? columns[codeIndex] : undefined
     const username = typeof usernameValue === "string" ? usernameValue.trim() : ""
-    const password = columns[passwordIndex]
+    const password = passwordIndex >= 0 ? columns[passwordIndex] : undefined
     const email = emailIndex >= 0 && columns[emailIndex] ? normalizeEmail(columns[emailIndex]) : undefined
     const accessExpiresAt =
       accessExpiresAtIndex >= 0 ? parseTimestampValue(columns[accessExpiresAtIndex]) : null
 
-    if (!username || !password) {
+    if (!username) {
       continue
     }
 
@@ -833,7 +821,7 @@ function parseBundledHostSeedInputs(): HostSeedInput[] {
     const email = typeof candidate.email === "string" ? normalizeEmail(candidate.email) : undefined
     const accessExpiresAt = parseTimestampValue(candidate.accessExpiresAt)
 
-    if (!username || (!passwordHash && !password)) {
+    if (!username) {
       continue
     }
 
@@ -979,8 +967,10 @@ function seedHosts(store: InMemoryStore) {
       id,
       username,
       email: normalizedEmail,
-      passwordHash: seed.passwordHash ?? hashPassword(seed.password ?? "change-me"),
+      passwordHash:
+        seed.passwordHash ?? (typeof seed.password === "string" ? hashPassword(seed.password) : HOST_SESSION_PLACEHOLDER_PASSWORD_HASH),
       accessExpiresAt: seed.accessExpiresAt ?? null,
+      activeSessionId: null,
       activeRoomId: null,
       createdAt: nowMs(),
     }
@@ -2119,7 +2109,8 @@ export function registerHostFromRedeem(input: {
     username,
     email: normalizedEmail,
     passwordHash: hashPassword(input.password),
-    accessExpiresAt: addUtcMonths(createdAt, HOST_ACCESS_DURATION_MONTHS),
+    accessExpiresAt: resolveHostAccessExpiry(createdAt),
+    activeSessionId: null,
     activeRoomId: null,
     createdAt,
   }
@@ -2187,6 +2178,7 @@ export function ensureHostSessionRecord(input: { hostId: string; username: strin
     email: null,
     passwordHash: HOST_SESSION_PLACEHOLDER_PASSWORD_HASH,
     accessExpiresAt: null,
+    activeSessionId: null,
     activeRoomId: null,
     createdAt: now,
   }
@@ -2197,8 +2189,27 @@ export function ensureHostSessionRecord(input: { hostId: string; username: strin
   return host
 }
 
-export function authenticateHost(username: string, password: string): HostRecord | null {
-  const store = getStore()
+type HostAuthFailureReason =
+  | "CREDENTIAL_NOT_FOUND"
+  | "INVALID_PASSWORD"
+  | "NOT_ACTIVATED"
+  | "ALREADY_ACTIVATED"
+  | "ACCESS_EXPIRED"
+
+type HostAuthSuccess = {
+  ok: true
+  host: HostRecord
+  sessionId: string
+}
+
+type HostAuthFailure = {
+  ok: false
+  reason: HostAuthFailureReason
+}
+
+export type HostAuthResult = HostAuthSuccess | HostAuthFailure
+
+function resolveHostByUsername(store: InMemoryStore, username: string) {
   const normalizedUsername = username.trim()
   const hostId =
     store.hostsByUsername.get(normalizedUsername) ??
@@ -2207,25 +2218,80 @@ export function authenticateHost(username: string, password: string): HostRecord
     return null
   }
 
-  const host = store.hosts.get(hostId)
+  return store.hosts.get(hostId) ?? null
+}
+
+function rotateHostSession(store: InMemoryStore, host: HostRecord) {
+  const sessionId = randomUUID()
+  host.activeSessionId = sessionId
+  store.revision += 1
+  return sessionId
+}
+
+export function activateHost(username: string, password: string): HostAuthResult {
+  const store = getStore()
+  const host = resolveHostByUsername(store, username)
   if (!host) {
-    return null
+    return { ok: false, reason: "CREDENTIAL_NOT_FOUND" }
   }
 
-  if (!verifyPassword(password, host.passwordHash)) {
-    return null
+  if (typeof host.accessExpiresAt === "number") {
+    if (isHostAccessExpired(host)) {
+      return { ok: false, reason: "ACCESS_EXPIRED" }
+    }
+    return { ok: false, reason: "ALREADY_ACTIVATED" }
+  }
+
+  const now = nowMs()
+  host.passwordHash = hashPassword(password)
+  host.accessExpiresAt = resolveHostAccessExpiry(now)
+  const sessionId = rotateHostSession(store, host)
+  return { ok: true, host, sessionId }
+}
+
+export function authenticateHost(username: string, password: string): HostAuthResult {
+  const store = getStore()
+  const host = resolveHostByUsername(store, username)
+  if (!host) {
+    return { ok: false, reason: "CREDENTIAL_NOT_FOUND" }
   }
 
   if (typeof host.accessExpiresAt !== "number") {
-    host.accessExpiresAt = addUtcMonths(nowMs(), HOST_ACCESS_DURATION_MONTHS)
-    store.revision += 1
+    return { ok: false, reason: "NOT_ACTIVATED" }
   }
 
   if (isHostAccessExpired(host)) {
-    return null
+    return { ok: false, reason: "ACCESS_EXPIRED" }
   }
 
-  return host
+  if (!verifyPassword(password, host.passwordHash)) {
+    return { ok: false, reason: "INVALID_PASSWORD" }
+  }
+
+  if (!host.activeSessionId) {
+    const sessionId = rotateHostSession(store, host)
+    return { ok: true, host, sessionId }
+  }
+
+  return { ok: true, host, sessionId: rotateHostSession(store, host) }
+}
+
+export function isHostSessionActive(input: { hostId: string; sessionId: string }) {
+  const store = getStore()
+  const host = store.hosts.get(input.hostId)
+  if (!host) {
+    return false
+  }
+
+  if (!host.activeSessionId) {
+    return false
+  }
+
+  if (isHostAccessExpired(host)) {
+    return false
+  }
+
+  return host.activeSessionId === input.sessionId
 }
 
 export function getRoom(roomId: string): RoomRecord | null {

@@ -6,6 +6,7 @@ export type TokenClaims = {
   sub: string
   role: TokenRole
   hostId?: string
+  sessionId?: string
   roomId?: string
   playerId?: string
   username?: string
@@ -18,6 +19,8 @@ export type TokenClaims = {
 export type HostTokenClaims = TokenClaims & {
   role: "host"
   hostId: string
+  sessionId: string
+  username: string
 }
 
 export type PlayerTokenClaims = TokenClaims & {
@@ -102,7 +105,15 @@ export function verifyToken(token: string): TokenClaims | null {
 }
 
 export function isHostToken(claims: TokenClaims | null): claims is HostTokenClaims {
-  return Boolean(claims && claims.role === "host" && typeof claims.hostId === "string")
+  return Boolean(
+    claims &&
+      claims.role === "host" &&
+      typeof claims.hostId === "string" &&
+      typeof claims.sessionId === "string" &&
+      claims.sessionId.length > 0 &&
+      typeof claims.username === "string" &&
+      claims.username.length > 0
+  )
 }
 
 export function isPlayerToken(claims: TokenClaims | null): claims is PlayerTokenClaims {

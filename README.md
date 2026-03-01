@@ -23,23 +23,23 @@ After deployment, use these routes:
 Generate host credential pool (500 rows by default):
 
 ```bash
-npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 12 lib/server/host-credentials.generated.json
+npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 lib/server/host-credentials.generated.json
 ```
 
-Sync generated credentials to D1 (passwords are hashed before insertion):
+Sync generated codes to D1 (placeholder hashes are inserted until first activation):
 
 ```bash
 # remote D1
 npm run sync:host-codes:d1 -- docs/seeds/host-redeem-codes.csv --remote
 ```
 
-CSV format is `code,password` and login uses `code` as username.
+CSV format is `code` only. First-time host login must activate the code by setting a password.
 Credential tracking is stored in `host_access_codes` (D1):
 - `active` before first login
 - `redeemed` after first successful login
 - `expired` after access expiry
 
-Access window is `2 months` from first successful activation.
+Access window is `60 days` from first successful activation.
 
 ## Deployed Smoke Test
 

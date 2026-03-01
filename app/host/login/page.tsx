@@ -7,7 +7,7 @@ import { useEffect, useState, type FormEvent } from "react"
 import FireworksBackgroundDemo from "@/components/fireworks-demo"
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
-import { LiveApiError, hostLogin } from "@/lib/client/live-api"
+import { LiveApiError, hostActivate, hostLogin } from "@/lib/client/live-api"
 import { getHostToken, setHostToken, setHostUsername } from "@/lib/client/live-session"
 
 function toErrorMessage(error: unknown) {
@@ -26,6 +26,7 @@ export default function HostLoginPage() {
   const router = useRouter()
   const [code, setCode] = useState("")
   const [password, setPassword] = useState("")
+  const [mode, setMode] = useState<"login" | "activate">("login")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,17 +36,31 @@ export default function HostLoginPage() {
     }
   }, [router])
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBusy(true)
     setError(null)
 
     try {
-      const response = await hostLogin(code.trim(), password)
+      const response =
+        mode === "activate" ? await hostActivate(code.trim(), password) : await hostLogin(code.trim(), password)
       setHostToken(response.token)
       setHostUsername(response.host.username)
       router.replace("/host")
     } catch (requestError) {
+      if (requestError instanceof LiveApiError) {
+        if (mode === "login" && requestError.code === "HOST_CODE_NOT_ACTIVATED") {
+          setMode("activate")
+          setError("هذا الكود غير مفعّل بعد. أدخل كلمة مرور جديدة لتفعيل الكود.")
+          return
+        }
+
+        if (mode === "activate" && requestError.code === "HOST_CODE_ALREADY_ACTIVATED") {
+          setMode("login")
+          setError("هذا الكود مفعّل مسبقًا. استخدم تسجيل الدخول بكلمة المرور الحالية.")
+          return
+        }
+      }
       setError(toErrorMessage(requestError))
     } finally {
       setBusy(false)
@@ -62,9 +77,13 @@ export default function HostLoginPage() {
         <section className="w-full max-w-md rounded-3xl border border-white/25 bg-black/45 p-6 backdrop-blur-xl sm:p-8">
           <p className="text-xs uppercase tracking-[0.2em] text-violet-100/80">Host Access</p>
           <h1 className="mt-2 text-4xl font-extrabold">ابدأ الفعالية</h1>
-          <p className="mt-2 text-sm text-slate-200">استخدم الكود وكلمة المرور الموجودة في ملف التفعيل للدخول مباشرةً.</p>
+          <p className="mt-2 text-sm text-slate-200">
+            {mode === "activate"
+              ? "فعّل الكود لأول مرة عبر تعيين كلمة مرور جديدة."
+              : "أدخل الكود وكلمة المرور للدخول. إذا كان الكود جديدًا سيتم تحويلك للتفعيل."}
+          </p>
 
-          <form className="mt-6 space-y-4" onSubmit={handleLogin}>
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm">
               الكود
               <input
@@ -77,7 +96,7 @@ export default function HostLoginPage() {
               />
             </label>
             <label className="block text-sm">
-              كلمة المرور
+              {mode === "activate" ? "كلمة المرور الجديدة" : "كلمة المرور"}
               <input
                 className="mt-1 w-full rounded-xl border border-white/25 bg-black/40 px-3 py-2 text-white placeholder:text-slate-400"
                 value={password}
@@ -92,7 +111,19 @@ export default function HostLoginPage() {
               className="h-11 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 font-bold text-slate-950"
               disabled={busy}
             >
-              {busy ? "جاري تسجيل الدخول..." : "دخول المضيف"}
+              {busy ? (mode === "activate" ? "جاري التفعيل..." : "جاري تسجيل الدخول...") : mode === "activate" ? "تفعيل الكود" : "دخول المضيف"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-10 w-full rounded-xl border border-white/20 text-slate-200 hover:bg-white/10"
+              onClick={() => {
+                setError(null)
+                setMode((value) => (value === "login" ? "activate" : "login"))
+              }}
+              disabled={busy}
+            >
+              {mode === "activate" ? "لديك كلمة مرور بالفعل؟ تسجيل الدخول" : "أول مرة؟ فعّل الكود"}
             </Button>
           </form>
 

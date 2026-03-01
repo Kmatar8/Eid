@@ -1,5 +1,6 @@
-import { buildRoomSnapshot, completeRoomForHost } from "@/lib/server/store"
+import { validateHostAccessCodeSession } from "@/lib/server/host-access-code-auth"
 import { errorResponse, getBearerToken, jsonResponse } from "@/lib/server/http"
+import { buildRoomSnapshot, completeRoomForHost, isHostSessionActive } from "@/lib/server/store"
 import { withRoomScopedStore } from "@/lib/server/store-sync"
 import { isHostToken, verifyToken } from "@/lib/server/token"
 
@@ -27,6 +28,23 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const hostId = claims.hostId ?? claims.sub
+    const sessionValidation = await validateHostAccessCodeSession(claims.username, claims.sessionId)
+    if (!sessionValidation.ok) {
+      if (sessionValidation.reason === "DB_UNAVAILABLE") {
+        if (!isHostSessionActive({ hostId, sessionId: claims.sessionId })) {
+          return errorResponse(401, "HOST_SESSION_REVOKED", "Host session is no longer active")
+        }
+      } else if (sessionValidation.reason === "DB_ERROR") {
+        return errorResponse(503, "AUTH_STORE_UNAVAILABLE", "Credential database is temporarily unavailable")
+      } else if (sessionValidation.reason === "ACCESS_EXPIRED") {
+        return errorResponse(403, "HOST_ACCESS_REVOKED", "Host access is revoked or expired")
+      } else {
+        return errorResponse(401, "HOST_SESSION_REVOKED", "Host session is no longer active")
+      }
+    } else if (sessionValidation.hostId !== hostId) {
+      return errorResponse(401, "UNAUTHORIZED", "Invalid host token")
+    }
+
     const completed = completeRoomForHost(hostId, roomId)
     if (!completed.ok) {
       if (completed.code === "HOST_NOT_FOUND") {
