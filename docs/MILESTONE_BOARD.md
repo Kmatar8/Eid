@@ -30,6 +30,7 @@ This board tracks implementation order, ownership, and execution status.
 | 10 | T-0034 | M1 | Landing AI KB Chatbot (Arabic, Gemini) | done | AI-Agent | T-0008 | Landing widget + server API + KB/prompt folder |
 | 11 | T-0039 | M1 | Landing Chatbot Copy Refresh | done | AI-Agent | T-0034 | Requested title/greeting/subtitle text updates |
 | 12 | T-0040 | M1 | Chatbot Host Knowledge Base + Saudi Tone Instructions | done | AI-Agent | T-0034 | Host workflow KB enrichment and tone rules update |
+| 13 | T-0041 | M1 | Chatbot Content Origin Resolution Fix | done | AI-Agent | T-0034 | Fix `CHATBOT_CONFIG_ERROR` from origin mismatch on markdown loading |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

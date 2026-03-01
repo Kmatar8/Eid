@@ -173,19 +173,44 @@ function rankKnowledgeSections(markdown: string, question: string, limit: number
 }
 
 async function readPublicContentFile(request: Request, publicPath: string) {
-  const url = new URL(publicPath, request.url)
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      accept: "text/plain, text/markdown",
-    },
-  })
+  const overrideBaseUrl = normalizeInputString(process.env.HROOF_PUBLIC_BASE_URL)
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.trim() || "https"
+  const forwardedHost = request.headers.get("x-forwarded-host")?.trim()
+  const host = request.headers.get("host")?.trim()
+  const requestOrigin = new URL(request.url).origin
 
-  if (!response.ok) {
-    throw new Error(`Failed to load public content: ${publicPath}`)
+  const candidateOrigins = [
+    overrideBaseUrl,
+    forwardedHost ? `${forwardedProto}://${forwardedHost}` : null,
+    host ? `${forwardedProto}://${host}` : null,
+    requestOrigin,
+  ].filter((value): value is string => Boolean(value))
+
+  const uniqueOrigins = Array.from(new Set(candidateOrigins))
+
+  let lastError: unknown = null
+  for (const origin of uniqueOrigins) {
+    try {
+      const url = new URL(publicPath, origin)
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          accept: "text/plain, text/markdown",
+        },
+      })
+
+      if (!response.ok) {
+        lastError = new Error(`Failed to load public content from ${url.toString()} with status ${response.status}`)
+        continue
+      }
+
+      return (await response.text()).trim()
+    } catch (error) {
+      lastError = error
+    }
   }
 
-  return (await response.text()).trim()
+  throw lastError ?? new Error(`Failed to load public content: ${publicPath}`)
 }
 
 function parseCustomerHistory(rawHistory: unknown) {
