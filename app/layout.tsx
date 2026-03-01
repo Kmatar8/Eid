@@ -6,13 +6,18 @@ import { ThemeProvider } from "@/components/theme-provider";
 const cairo = Cairo({ subsets: ["arabic"], weight: ["400", "500", "600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "حروف - ألعاب العيد",
-  description: "مجموعة ألعاب تفاعلية لجمعات العيد والعائلة. صممت لتلعب على التلفزيون.",
+  title: "فعالية العيد",
+  description: "فعالية العيد: ألعاب تفاعلية للجمعات العائلية تعمل مباشرة على شاشة العرض والجوال.",
   manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/eid-favicon.svg", type: "image/svg+xml" }],
+    shortcut: ["/eid-favicon.svg"],
+    apple: ["/eid-favicon.svg"],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "حروف",
+    title: "فعالية العيد",
   },
 };
 

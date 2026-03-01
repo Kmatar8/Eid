@@ -31,6 +31,7 @@ This board tracks implementation order, ownership, and execution status.
 | 11 | T-0039 | M1 | Landing Chatbot Copy Refresh | done | AI-Agent | T-0034 | Requested title/greeting/subtitle text updates |
 | 12 | T-0040 | M1 | Chatbot Host Knowledge Base + Saudi Tone Instructions | done | AI-Agent | T-0034 | Host workflow KB enrichment and tone rules update |
 | 13 | T-0041 | M1 | Chatbot Content Origin Resolution Fix | done | AI-Agent | T-0034 | Fix `CHATBOT_CONFIG_ERROR` from origin mismatch on markdown loading |
+| 14 | T-0042 | M1 | Chatbot Graceful Config Fallback | done | AI-Agent | T-0034 | Prevent chatbot 500 by degrading config/key failures to safe fallback replies |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

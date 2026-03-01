@@ -29,6 +29,25 @@ const FALLBACK_MESSAGE_PUBLIC_PATH = "/chatbot/fallback-message.md"
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+const DEFAULT_FALLBACK_MESSAGE =
+  "ما عندي تفاصيل كافية في قاعدة المعرفة الحالية للإجابة بدقة. تواصل مع فريق الدعم عبر واتساب على الرقم: [سيتم تزويده لاحقًا]."
+const DEFAULT_SYSTEM_INSTRUCTIONS = `
+أنت مساعدة دعم عربية.
+1) أجب بالعربية فقط.
+2) استخدم فقط المعلومات المتاحة في مقتطفات قاعدة المعرفة.
+3) إذا ما لقيت الإجابة بوضوح، أعد رسالة التحويل للدعم حرفيًا.
+`.trim()
+const DEFAULT_KNOWLEDGE_BASE = `
+# قاعدة معرفة افتراضية
+## بدء المضيف
+- المضيف يسجل الدخول من /host/login باستخدام كود المضيف.
+- بعد الدخول ينشئ غرفة ويشارك رابط/QR.
+
+## التشغيل
+- وزّع اللاعبين على فريقين قبل البدء.
+- ابدأ اللعبة من واجهة المضيف.
+- تقدر تبدّل بين الألعاب حسب حالة الجلسة.
+`.trim()
 
 const MAX_MESSAGE_LENGTH = 800
 const MAX_CUSTOMER_HISTORY_ITEMS = 20
@@ -336,22 +355,27 @@ export async function POST(request: Request) {
     return errorResponse(400, "MESSAGE_TOO_LONG", "الرسالة طويلة جدًا.")
   }
 
-  let knowledgeBase = ""
-  let systemInstructions = ""
-  let fallbackMessage = ""
+  let knowledgeBase = DEFAULT_KNOWLEDGE_BASE
+  let systemInstructions = DEFAULT_SYSTEM_INSTRUCTIONS
+  let fallbackMessage = DEFAULT_FALLBACK_MESSAGE
 
   try {
-    ;[knowledgeBase, systemInstructions, fallbackMessage] = await Promise.all([
+    const loaded = await Promise.all([
       readPublicContentFile(request, KB_PUBLIC_PATH),
       readPublicContentFile(request, SYSTEM_INSTRUCTIONS_PUBLIC_PATH),
       readPublicContentFile(request, FALLBACK_MESSAGE_PUBLIC_PATH),
     ])
+    knowledgeBase = loaded[0] || DEFAULT_KNOWLEDGE_BASE
+    systemInstructions = loaded[1] || DEFAULT_SYSTEM_INSTRUCTIONS
+    fallbackMessage = loaded[2] || DEFAULT_FALLBACK_MESSAGE
   } catch {
-    return errorResponse(500, "CHATBOT_CONFIG_ERROR", "تعذر تحميل إعدادات الشات بوت.")
+    // Graceful degradation: keep default content instead of hard-failing with 500.
   }
 
   if (!knowledgeBase || !systemInstructions || !fallbackMessage) {
-    return errorResponse(500, "CHATBOT_CONFIG_EMPTY", "ملفات إعدادات الشات بوت غير مكتملة.")
+    knowledgeBase = DEFAULT_KNOWLEDGE_BASE
+    systemInstructions = DEFAULT_SYSTEM_INSTRUCTIONS
+    fallbackMessage = DEFAULT_FALLBACK_MESSAGE
   }
 
   const customerHistory = parseCustomerHistory(rawBody.customerHistory)
@@ -366,7 +390,10 @@ export async function POST(request: Request) {
 
   const apiKey = process.env.HROOF_GEMINI_API_KEY
   if (!apiKey) {
-    return errorResponse(500, "MISSING_GEMINI_API_KEY", "مفتاح Gemini غير مضبوط.")
+    return jsonResponse(200, {
+      reply: fallbackMessage,
+      source: "fallback",
+    })
   }
 
   const model = process.env.HROOF_GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL
