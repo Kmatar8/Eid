@@ -74,6 +74,8 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 10. If host switches away from a non-completed game, that game's progress is preserved and resumed when switching back.
 11. Completed games are shown with a checkmark in the switch pills and are locked from re-entry.
 12. Game overview screens are start/progression surfaces and should not render a primary "end session" action button inside overview content cards.
+13. After Jeopardy completion, host must transition to Haraj overview/start screen (not final-results screen).
+14. Final-results/celebration screen appears only after all enabled games are completed.
 
 ### 6.2 Controller Clarity Requirements (Trivia)
 1. Controller view must clearly indicate whether the current question is for the current player or another player.

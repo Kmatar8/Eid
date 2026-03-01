@@ -41,7 +41,7 @@ const HOST_SWITCH_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-amber-300/35 bg-amber-500/22 text-amber-100 shadow-lg transition hover:scale-105 hover:bg-amber-500/34 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 disabled:hover:bg-amber-500/22"
 
 type FeedbackType = "correct" | "wrong" | null
-type HostStage = "lobby" | "overview" | "trivia" | "haraj" | "celebration" | "paused"
+type HostStage = "lobby" | "overview" | "trivia" | "haraj" | "haraj_overview" | "celebration" | "paused"
 
 type TeamTone = {
   border: string
@@ -702,7 +702,13 @@ export default function HostStagePage() {
     }
 
     if (room.state === "between_games") {
-      return "celebration"
+      if (room.trivia.status === "completed" && room.haraj.status === "idle") {
+        return "haraj_overview"
+      }
+      if (room.trivia.status === "completed" && room.haraj.status === "completed") {
+        return "celebration"
+      }
+      return "overview"
     }
 
     if (room.state === "game_live" && room.activeGame === "trivia" && room.trivia.status === "in_progress") {
@@ -1799,6 +1805,46 @@ export default function HostStagePage() {
                   onClick={() => void handleStartTrivia()}
                 >
                   ابدأ اللعبة
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {room && stage === "haraj_overview" ? (
+          <section className="flex min-h-[calc(100dvh-8.5rem)] items-center justify-center">
+            <div className="party-surface-strong w-full max-w-6xl rounded-3xl p-6">
+              <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Haraj Overview</p>
+              <h2 className="mt-2 text-4xl font-bold">جاهزين نبدأ الحراج؟</h2>
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
+                  <h3 className="text-2xl font-bold">طريقة الجولة</h3>
+                  <ul className="mt-3 space-y-2 text-base text-slate-200">
+                    <li>1. يظهر المنتج للجميع على شاشة المضيف.</li>
+                    <li>2. كل لاعب يدخل تخمين السعر من جواله.</li>
+                    <li>3. وقت التخمين 15 ثانية أو حتى يرسل الجميع.</li>
+                    <li>4. بعد الإغلاق يتم كشف السعر الحقيقي والترتيب.</li>
+                  </ul>
+                </article>
+                <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
+                  <h3 className="text-2xl font-bold">النقاط</h3>
+                  <ul className="mt-3 space-y-2 text-base text-slate-200">
+                    <li>1. الأقرب للسعر الحقيقي يحصل على 50 نقطة.</li>
+                    <li>2. الثاني يحصل على 30 نقطة.</li>
+                    <li>3. الثالث يحصل على 10 نقاط.</li>
+                    <li>4. التعادلات تُقسّم نقاط المراكز المتساوية.</li>
+                  </ul>
+                </article>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                  disabled={Boolean(busyAction) || !canStartHaraj}
+                  onClick={() => void handleStartHaraj()}
+                >
+                  ابدأ لعبة الحراج
                 </Button>
               </div>
             </div>

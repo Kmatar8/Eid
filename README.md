@@ -80,6 +80,18 @@ npm run build
 npm run deploy
 ```
 
+For Cloudflare CI deployment reliability (transient `502` deployment API failures), use:
+
+```bash
+npm run build:worker
+npm run deploy:cf:retry -- --config wrangler.jsonc
+```
+
+Optional retry tuning env vars:
+
+- `CF_DEPLOY_MAX_ATTEMPTS` (default: `3`)
+- `CF_DEPLOY_RETRY_DELAY_MS` (default: `8000`)
+
 ## Landing Chatbot (Gemini + Markdown KB)
 
 The landing page includes an Arabic support chatbot backed by:

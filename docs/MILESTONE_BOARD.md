@@ -42,6 +42,8 @@ This board tracks implementation order, ownership, and execution status.
 | 22 | T-0050 | M4 | Haraj Image WebP Optimization Pipeline | done | AI-Agent | T-0049 | Add batch WebP conversion and make generated catalog prefer WebP assets |
 | 23 | T-0051 | M4 | Join Page Validation Overlay + Player UI Cleanup | done | AI-Agent | T-0006 | Overlay guidance for missing name/avatar and remove room-id/host hints from join page |
 | 24 | T-0052 | M4 | Host Overview Actions + Haraj Reveal Polish | done | AI-Agent | T-0047 | Remove overview end buttons, widen next-round CTA, add reveal confetti + winner row colors |
+| 25 | T-0054 | M4 | Host Post-Jeopardy Routing to Haraj Overview | done | AI-Agent | T-0052 | Route post-Jeopardy `between_games` to Haraj overview; final results only after all games |
+| 26 | T-0055 | M5 | Cloudflare Deploy Retry Hardening | done | AI-Agent | T-0054 | Add deploy retry wrapper for transient API 502 failures and update CI command guidance |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.
