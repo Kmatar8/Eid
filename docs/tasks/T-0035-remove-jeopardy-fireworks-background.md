@@ -11,7 +11,7 @@ Remove the animated fireworks background while gameplay is actively running (Jeo
 ### In
 1. Disable host-page background fireworks during Trivia stage (`stage === "trivia"`).
 2. Disable host-page background fireworks during Haraj stage (`stage === "haraj"`).
-2. Keep existing background visuals and gameplay logic unchanged.
+3. Keep existing background visuals and gameplay logic unchanged.
 
 ### Out
 1. No changes to scoring, timing, buzzer, or room-state contracts.
