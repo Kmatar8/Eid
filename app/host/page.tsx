@@ -1640,7 +1640,7 @@ export default function HostStagePage() {
                   </p>
                 ) : (
                   <div className="flex flex-col items-start gap-4 p-2">
-                    <AvatarGroup>
+                    <AvatarGroup translate={0}>
                       {room.players.map((player) => {
                         const teamId = assignmentByPlayer.get(player.playerId) ?? null
                         const tone = getTeamTone(teamId)
@@ -1748,7 +1748,9 @@ export default function HostStagePage() {
                   {orderedTeams.map((team) => {
                     const tone = getTeamTone(team.teamId)
                     const colorLabel = getTeamColorLabel(team.teamId)
-                    const showTeamName = !isDefaultTeamName(team.teamId, team.name)
+                    const draftTeamName = (teamNameDrafts[team.teamId] ?? "").trim()
+                    const candidateTeamName = draftTeamName.length > 0 ? draftTeamName : team.name
+                    const showTeamName = !isDefaultTeamName(team.teamId, candidateTeamName)
                     return (
                       <button
                         key={`picker-team-${team.teamId}`}
@@ -1757,7 +1759,7 @@ export default function HostStagePage() {
                         className={`rounded-2xl border p-4 text-right transition hover:-translate-y-0.5 hover:brightness-110 ${tone.border} ${tone.bg}`}
                       >
                         <p className={`text-lg font-black ${tone.text}`}>
-                          {showTeamName ? team.name : `الفريق ${colorLabel}`}
+                          {showTeamName ? candidateTeamName : `الفريق ${colorLabel}`}
                         </p>
                         <p className="mt-1 text-sm text-slate-200">
                           {showTeamName ? `اللون: ${colorLabel}` : "الاعتماد على اللون فقط"}
