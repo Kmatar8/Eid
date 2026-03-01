@@ -33,6 +33,7 @@ This board tracks implementation order, ownership, and execution status.
 | 13 | T-0041 | M1 | Chatbot Content Origin Resolution Fix | done | AI-Agent | T-0034 | Fix `CHATBOT_CONFIG_ERROR` from origin mismatch on markdown loading |
 | 14 | T-0042 | M1 | Chatbot Graceful Config Fallback | done | AI-Agent | T-0034 | Prevent chatbot 500 by degrading config/key failures to safe fallback replies |
 | 15 | T-0043 | M1 | Chatbot KB Answer Fallback Reliability | done | AI-Agent | T-0034 | Return KB-derived answers when Gemini/config path fails |
+| 16 | T-0044 | M1 | Chatbot Social Intents + Arabic Retrieval Hardening | done | AI-Agent | T-0034 | Add social intent responses and improve Arabic matching reliability |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

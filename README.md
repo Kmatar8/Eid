@@ -93,6 +93,7 @@ Editable chatbot content lives in:
 - `public/chatbot/knowledge-base.md`
 - `public/chatbot/system-instructions.md`
 - `public/chatbot/fallback-message.md`
+- `public/chatbot/social-intents.md`
 
 Update flow:
 

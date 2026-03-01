@@ -93,6 +93,8 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 5. API keys must never be exposed to the client.
 6. Chat memory context is limited to the latest `20` customer messages per session.
 7. Chat messages are not persisted in D1/DO/R2.
+8. Chatbot may answer basic social intents (greeting, courtesy, status check, goodbye) using configured local canned responses.
+9. Social intents must remain safe, friendly, and culturally appropriate, and must not override product-support fallback rules.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states

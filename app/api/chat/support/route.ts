@@ -23,9 +23,12 @@ type GeminiResponse = {
   candidates?: GeminiCandidate[]
 }
 
+type SocialIntentKey = "greeting" | "how_are_you" | "thanks" | "goodbye" | "identity"
+
 const KB_PUBLIC_PATH = "/chatbot/knowledge-base.md"
 const SYSTEM_INSTRUCTIONS_PUBLIC_PATH = "/chatbot/system-instructions.md"
 const FALLBACK_MESSAGE_PUBLIC_PATH = "/chatbot/fallback-message.md"
+const SOCIAL_INTENTS_PUBLIC_PATH = "/chatbot/social-intents.md"
 
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
@@ -58,6 +61,13 @@ const DEFAULT_KNOWLEDGE_BASE = `
 - تقدر تبدّل بين تريفيا وحراج من واجهة المضيف.
 - التقدم والنقاط محفوظة عند التبديل.
 `.trim()
+const DEFAULT_SOCIAL_INTENTS: Record<SocialIntentKey, string> = {
+  greeting: "يا هلا والله! 👋 نورت. وش ودك تعرف عن تشغيل هروف؟",
+  how_are_you: "الحمدلله بخير دامك بخير 😄 جاهزة أساعدك في إعداد اللعبة.",
+  thanks: "تسلم يا بعدي 🙏 إذا ودك أكمل معك بخطوات التشغيل أنا حاضرة.",
+  goodbye: "الله معك 🌟 إذا احتجت أي شيء، ارجع لي بأي وقت.",
+  identity: "أنا سارة، مساعدة هروف. أساعدك في إعداد المضيف وتشغيل الألعاب.",
+}
 
 const MAX_MESSAGE_LENGTH = 800
 const MAX_CUSTOMER_HISTORY_ITEMS = 20
@@ -175,11 +185,132 @@ function normalizeArabicToken(token: string) {
     .replace(/ة/g, "ه")
 }
 
+function expandArabicTokenVariants(token: string) {
+  const variants = new Set<string>()
+  const normalized = normalizeArabicToken(token)
+  variants.add(normalized)
+
+  // Handle common doubled-lam form to improve `اللعب` vs `العب` matching.
+  if (normalized.startsWith("الل") && normalized.length > 4) {
+    variants.add(`ال${normalized.slice(3)}`)
+  }
+
+  // Light prefix handling for common conjunction/prefix letters.
+  if (/^[وفبكل]/.test(normalized) && normalized.length > 4) {
+    variants.add(normalized.slice(1))
+  }
+
+  // Light suffix handling for frequent plural/pronoun endings.
+  const suffixes = ["ات", "ون", "ين", "ها", "هم", "كم", "نا"]
+  for (const suffix of suffixes) {
+    if (normalized.endsWith(suffix) && normalized.length > suffix.length + 2) {
+      variants.add(normalized.slice(0, -suffix.length))
+    }
+  }
+
+  return Array.from(variants).filter((value) => value.length > 1 && !ARABIC_STOP_WORDS.has(value))
+}
+
 function tokenize(text: string) {
   const raw = text.match(/[\p{L}\p{N}]{2,}/gu) ?? []
-  return raw
-    .map((token) => normalizeArabicToken(token))
-    .filter((token) => token.length > 1 && !ARABIC_STOP_WORDS.has(token))
+  const expanded = raw.flatMap((token) => expandArabicTokenVariants(token))
+  return Array.from(new Set(expanded))
+}
+
+type DomainTopic = "gameplay" | "login" | "trivia" | "haraj" | "switch"
+
+function detectDomainTopic(question: string): DomainTopic | null {
+  const text = normalizeArabicToken(question)
+  if (/(كيف.*العب|طريقه اللعب|اللعب|ابدا اللعب|كيف ابدا)/.test(text)) {
+    return "gameplay"
+  }
+  if (/(تسجيل|دخول|كود|login|لوقين)/.test(text)) {
+    return "login"
+  }
+  if (/(تريفيا|بازر|سوال|نقاط|اختيارات)/.test(text)) {
+    return "trivia"
+  }
+  if (/(حراج|سعر|تقدير|منتج)/.test(text)) {
+    return "haraj"
+  }
+  if (/(تبديل|switch|تحويل لعبه)/.test(text)) {
+    return "switch"
+  }
+  return null
+}
+
+function sectionMatchesTopic(section: { title: string; body: string }, topic: DomainTopic) {
+  const text = normalizeArabicToken(`${section.title}\n${section.body}`)
+  if (topic === "gameplay") {
+    const hasGameplay = /(رحله المضيف|تجهيز الفعاليه|تريفيا|حراج|بدء الجلسه|تشغيل الالعاب|تسلسل الجوله|شرح لعبه|اللعب)/.test(text)
+    const isSwitchFocused = /(تبديل الالعاب|تبدل بين تريفيا وحراج|حفظ التقدم)/.test(text)
+    return hasGameplay && !isSwitchFocused
+  }
+  if (topic === "login") {
+    return /(تسجيل دخول|كود المضيف|host\/login|سياسات الوصول)/.test(text)
+  }
+  if (topic === "trivia") {
+    return /(تريفيا|بازر|المجيب|احتساب النقاط|تصنيف|سؤال)/.test(text)
+  }
+  if (topic === "haraj") {
+    return /(حراج|تقدير|السعر الحقيقي|نظام النقاط|تعادل)/.test(text)
+  }
+  if (topic === "switch") {
+    return /(تبديل الالعاب|تبدل بين تريفيا وحراج|حفظ التقدم)/.test(text)
+  }
+  return false
+}
+
+function getTopicPriorityBoost(section: { title: string; body: string }, topic: DomainTopic) {
+  const title = normalizeArabicToken(section.title)
+  if (topic === "gameplay") {
+    if (/(تجهيز الفعاليه|رحله المضيف|شرح لعبه التريفيا|شرح لعبه الحراج|تسلسل الجوله|احتساب النقاط|افضل ممارسات)/.test(title)) {
+      return 8
+    }
+    if (/(حالات الغرفه|حدود هذه القاعده|معلومات الخصوصيه)/.test(title)) {
+      return -3
+    }
+  }
+  return 0
+}
+
+function parseSocialIntentsMarkdown(markdown: string): Record<SocialIntentKey, string> {
+  const output: Record<SocialIntentKey, string> = { ...DEFAULT_SOCIAL_INTENTS }
+  const allowedKeys = new Set<SocialIntentKey>(["greeting", "how_are_you", "thanks", "goodbye", "identity"])
+  const sections = splitKnowledgeBaseSections(markdown)
+
+  for (const section of sections) {
+    const key = normalizeArabicToken(section.title).replace(/\s+/g, "_") as SocialIntentKey
+    if (!allowedKeys.has(key)) {
+      continue
+    }
+    const value = section.body.trim()
+    if (value.length > 0) {
+      output[key] = value
+    }
+  }
+
+  return output
+}
+
+function detectSocialIntent(message: string): SocialIntentKey | null {
+  const normalizedMessage = normalizeArabicToken(message)
+
+  const patterns: Array<{ key: SocialIntentKey; regex: RegExp }> = [
+    { key: "greeting", regex: /(هلا|مرحبا|السلام عليكم|ياهلا|حي[ا|ي]ك|hi|hello)/i },
+    { key: "how_are_you", regex: /(كيف حالك|كيفك|شلونك|اخبارك|how are you)/i },
+    { key: "thanks", regex: /(شكرا|مشكور|يعطيك العافيه|يسلمو|thanks|thank you)/i },
+    { key: "goodbye", regex: /(مع السلامه|اشوفك|باي|bye|goodbye)/i },
+    { key: "identity", regex: /(مين انتي|من انتي|اسمك|منتي|who are you|your name)/i },
+  ]
+
+  for (const pattern of patterns) {
+    if (pattern.regex.test(normalizedMessage)) {
+      return pattern.key
+    }
+  }
+
+  return null
 }
 
 function splitKnowledgeBaseSections(markdown: string) {
@@ -217,6 +348,7 @@ function splitKnowledgeBaseSections(markdown: string) {
 function rankKnowledgeSections(markdown: string, question: string, limit: number) {
   const sections = splitKnowledgeBaseSections(markdown)
   const questionTokens = new Set(tokenize(question))
+  const topic = detectDomainTopic(question)
 
   if (questionTokens.size === 0) {
     return [] as KnowledgeSection[]
@@ -230,6 +362,10 @@ function rankKnowledgeSections(markdown: string, question: string, limit: number
         if (questionTokens.has(token)) {
           score += 1
         }
+      }
+      if (topic && sectionMatchesTopic(section, topic)) {
+        score += 4
+        score += getTopicPriorityBoost(section, topic)
       }
       return {
         ...section,
@@ -433,16 +569,19 @@ export async function POST(request: Request) {
   let knowledgeBase = DEFAULT_KNOWLEDGE_BASE
   let systemInstructions = DEFAULT_SYSTEM_INSTRUCTIONS
   let fallbackMessage = DEFAULT_FALLBACK_MESSAGE
+  let socialIntents: Record<SocialIntentKey, string> = { ...DEFAULT_SOCIAL_INTENTS }
 
   try {
     const loaded = await Promise.all([
       readPublicContentFile(request, KB_PUBLIC_PATH),
       readPublicContentFile(request, SYSTEM_INSTRUCTIONS_PUBLIC_PATH),
       readPublicContentFile(request, FALLBACK_MESSAGE_PUBLIC_PATH),
+      readPublicContentFile(request, SOCIAL_INTENTS_PUBLIC_PATH),
     ])
     knowledgeBase = loaded[0] || DEFAULT_KNOWLEDGE_BASE
     systemInstructions = loaded[1] || DEFAULT_SYSTEM_INSTRUCTIONS
     fallbackMessage = loaded[2] || DEFAULT_FALLBACK_MESSAGE
+    socialIntents = parseSocialIntentsMarkdown(loaded[3] || "")
   } catch {
     // Graceful degradation: keep default content instead of hard-failing with 500.
   }
@@ -451,6 +590,15 @@ export async function POST(request: Request) {
     knowledgeBase = DEFAULT_KNOWLEDGE_BASE
     systemInstructions = DEFAULT_SYSTEM_INSTRUCTIONS
     fallbackMessage = DEFAULT_FALLBACK_MESSAGE
+    socialIntents = { ...DEFAULT_SOCIAL_INTENTS }
+  }
+
+  const socialIntent = detectSocialIntent(message)
+  if (socialIntent) {
+    return jsonResponse(200, {
+      reply: socialIntents[socialIntent],
+      source: "intent",
+    })
   }
 
   const customerHistory = parseCustomerHistory(rawBody.customerHistory)
