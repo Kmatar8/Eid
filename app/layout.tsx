@@ -4,11 +4,36 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const cairo = Cairo({ subsets: ["arabic"], weight: ["400", "500", "600", "700", "800"] });
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.happystore.click";
+const shareImagePath = "/images/landing-hero.jpg";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "فعالية العيد",
   description: "فعالية العيد: ألعاب تفاعلية للجمعات العائلية تعمل مباشرة على شاشة العرض والجوال.",
   manifest: "/manifest.json",
+  openGraph: {
+    type: "website",
+    locale: "ar_SA",
+    url: "/",
+    siteName: "فعالية العيد",
+    title: "فعالية العيد",
+    description: "فعالية العيد: ألعاب تفاعلية للجمعات العائلية تعمل مباشرة على شاشة العرض والجوال.",
+    images: [
+      {
+        url: shareImagePath,
+        width: 1200,
+        height: 630,
+        alt: "فعالية العيد",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "فعالية العيد",
+    description: "فعالية العيد: ألعاب تفاعلية للجمعات العائلية تعمل مباشرة على شاشة العرض والجوال.",
+    images: [shareImagePath],
+  },
   icons: {
     icon: [{ url: "/eid-favicon.svg", type: "image/svg+xml" }],
     shortcut: ["/eid-favicon.svg"],
