@@ -53,15 +53,25 @@ function resolveStreamPollMs(snapshot: RoomSnapshot | null) {
     return STREAM_POLL_IDLE_MS
   }
 
-  if (snapshot.state !== "game_live" || snapshot.trivia.status !== "in_progress") {
+  if (snapshot.state !== "game_live") {
     return STREAM_POLL_IDLE_MS
   }
 
-  if (snapshot.trivia.phase === "board_turn") {
+  if (snapshot.trivia.status === "in_progress") {
+    if (snapshot.trivia.phase === "board_turn") {
+      return STREAM_POLL_BOARD_MS
+    }
+    return STREAM_POLL_ACTIVE_MS
+  }
+
+  if (snapshot.haraj.status === "in_progress") {
+    if (snapshot.haraj.phase === "haraj_collecting" || snapshot.haraj.phase === "haraj_reveal") {
+      return STREAM_POLL_ACTIVE_MS
+    }
     return STREAM_POLL_BOARD_MS
   }
 
-  return STREAM_POLL_ACTIVE_MS
+  return STREAM_POLL_IDLE_MS
 }
 
 function authorizeSnapshotForSubscriber(

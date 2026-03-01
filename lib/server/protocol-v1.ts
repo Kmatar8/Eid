@@ -11,11 +11,14 @@ export type HostActionType =
   | "host.startTeams"
   | "host.startGame"
   | "host.startTrivia"
+  | "host.startHaraj"
+  | "host.startHarajRound"
+  | "host.nextHarajRound"
   | "host.selectTriviaClue"
   | "host.nextQuestion"
   | "host.addTeamScore"
   | "host.endSession"
-export type PlayerActionType = "player.heartbeat" | "player.input" | "player.submitAnswer"
+export type PlayerActionType = "player.heartbeat" | "player.input" | "player.submitAnswer" | "player.submitHarajEstimate"
 export type ClientActionType = HostActionType | PlayerActionType
 
 export type ServerEventType = "room.state" | "room.diff" | "room.presence" | "room.error" | "room.ack"
@@ -48,13 +51,21 @@ const HOST_ACTIONS = new Set<HostActionType>([
   "host.startTeams",
   "host.startGame",
   "host.startTrivia",
+  "host.startHaraj",
+  "host.startHarajRound",
+  "host.nextHarajRound",
   "host.selectTriviaClue",
   "host.nextQuestion",
   "host.addTeamScore",
   "host.endSession",
 ])
 
-const PLAYER_ACTIONS = new Set<PlayerActionType>(["player.heartbeat", "player.input", "player.submitAnswer"])
+const PLAYER_ACTIONS = new Set<PlayerActionType>([
+  "player.heartbeat",
+  "player.input",
+  "player.submitAnswer",
+  "player.submitHarajEstimate",
+])
 
 export function isClientEnvelope(value: unknown): value is ClientEnvelope {
   if (!value || typeof value !== "object") {

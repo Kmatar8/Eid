@@ -40,7 +40,7 @@ const HOST_LOGOUT_ICON_BUTTON_CLASS =
   "flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-white/12 text-slate-100 shadow-lg transition hover:scale-105 hover:bg-white/20 active:scale-95"
 
 type FeedbackType = "correct" | "wrong" | null
-type HostStage = "lobby" | "overview" | "trivia" | "celebration" | "paused"
+type HostStage = "lobby" | "overview" | "trivia" | "haraj" | "celebration" | "paused"
 
 type TeamTone = {
   border: string
@@ -178,21 +178,30 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
     return HOST_POLL_IDLE_MS
   }
 
-  if (room.state !== "game_live" || room.trivia.status !== "in_progress") {
+  if (room.state !== "game_live") {
     return HOST_POLL_IDLE_MS
   }
 
-  if (room.trivia.phase === "board_turn") {
-    return HOST_POLL_BOARD_MS
+  if (room.trivia.status === "in_progress") {
+    if (room.trivia.phase === "board_turn") {
+      return HOST_POLL_BOARD_MS
+    }
+    if (
+      room.trivia.phase === "countdown" ||
+      room.trivia.phase === "buzzer_open" ||
+      room.trivia.phase === "answer_active" ||
+      room.trivia.phase === "answer_reveal"
+    ) {
+      return HOST_POLL_ACTIVE_MS
+    }
+    return HOST_POLL_IDLE_MS
   }
 
-  if (
-    room.trivia.phase === "countdown" ||
-    room.trivia.phase === "buzzer_open" ||
-    room.trivia.phase === "answer_active" ||
-    room.trivia.phase === "answer_reveal"
-  ) {
-    return HOST_POLL_ACTIVE_MS
+  if (room.haraj.status === "in_progress") {
+    if (room.haraj.phase === "haraj_collecting" || room.haraj.phase === "haraj_reveal") {
+      return HOST_POLL_ACTIVE_MS
+    }
+    return HOST_POLL_BOARD_MS
   }
 
   return HOST_POLL_IDLE_MS
@@ -234,6 +243,22 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
     return room.state === "teams_ready" || room.state === "between_games"
       ? null
       : "بدء اللعبة متاح فقط بعد تجهيز الفرق."
+  }
+
+  if (action === "host.startHaraj") {
+    if (room.state !== "between_games") {
+      return "تبدأ لعبة الحراج بعد انتهاء الجيوباردي."
+    }
+    if (room.trivia.status !== "completed") {
+      return "لا يمكن بدء الحراج قبل اكتمال لعبة الجيوباردي."
+    }
+    return null
+  }
+
+  if (action === "host.startHarajRound" || action === "host.nextHarajRound") {
+    return room.state === "game_live" || room.state === "between_games"
+      ? null
+      : "لا يمكن التقدم في جولات الحراج في الحالة الحالية."
   }
 
   if (action === "host.selectTriviaClue") {
@@ -527,6 +552,10 @@ export default function HostStagePage() {
 
     if (room.state === "game_live" && room.trivia.status === "in_progress") {
       return "trivia"
+    }
+
+    if (room.state === "game_live" && room.haraj.status === "in_progress") {
+      return "haraj"
     }
 
     if (room.state === "teams_ready") {
@@ -967,6 +996,28 @@ export default function HostStagePage() {
     }
   }, [runAction])
 
+  const handleStartHaraj = useCallback(async () => {
+    try {
+      await runAction("host.startHaraj")
+      setNotice("بدأت لعبة الحراج. أمام اللاعبين 15 ثانية لتخمين السعر.")
+    } catch (requestError) {
+      setError(toErrorMessage(requestError))
+    }
+  }, [runAction])
+
+  const handleNextHarajRound = useCallback(async () => {
+    try {
+      const nextRoom = await runAction("host.nextHarajRound")
+      if (nextRoom.state === "between_games" && nextRoom.haraj.status === "completed") {
+        setNotice("انتهت جولات الحراج. يمكنك إنهاء الفعالية أو بدء لعبة جديدة لاحقًا.")
+      } else {
+        setNotice("تم الانتقال إلى جولة حراج جديدة.")
+      }
+    } catch (requestError) {
+      setError(toErrorMessage(requestError))
+    }
+  }, [runAction])
+
   const handleResumeSession = useCallback(async () => {
     try {
       await runAction("host.resumeSession")
@@ -1039,6 +1090,7 @@ export default function HostStagePage() {
   }
 
   const trivia = room?.trivia ?? null
+  const haraj = room?.haraj ?? null
   const currentTurnTeam = room?.teams.find((team) => team.teamId === trivia?.currentTeamId) ?? null
   const currentPicker = trivia?.currentPickerPlayerId ? playerById.get(trivia.currentPickerPlayerId) ?? null : null
   const responderTeam = room?.teams.find((team) => team.teamId === trivia?.currentResponderTeamId) ?? null
@@ -1058,6 +1110,10 @@ export default function HostStagePage() {
   const canStartSession = Boolean(canManageTeams && startSessionReadiness.canStart)
 
   const canStartTrivia = room?.state === "teams_ready" || room?.state === "between_games"
+  const canStartHaraj =
+    room?.state === "between_games" && room.trivia.status === "completed" && room.haraj.status === "idle"
+  const canAdvanceHarajRound =
+    room?.state === "game_live" && room.haraj.status === "in_progress" && room.haraj.phase === "haraj_reveal"
   const canResumeSession = room?.state === "paused_wait_host"
   const canEndSession = Boolean(room && !isTerminalRoomState(room.state))
 
@@ -1090,6 +1146,11 @@ export default function HostStagePage() {
     const maxRows = Math.max(...(trivia?.board ?? []).map((category) => category.clues.length), 0)
     return Array.from({ length: maxRows }, (_, index) => index)
   }, [trivia?.board])
+
+  const harajCollectSeconds = remainingSeconds(haraj?.collectEndsAt ?? null, nowTs)
+  const harajSubmittedSet = useMemo(() => new Set(haraj?.submittedPlayerIds ?? []), [haraj?.submittedPlayerIds])
+  const celebrationIsHarajCompleted =
+    room?.state === "between_games" && room?.trivia.status === "completed" && room?.haraj.status === "completed"
 
   const liveStatusCommandText = useMemo(() => {
     const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
@@ -1788,10 +1849,137 @@ export default function HostStagePage() {
           </div>
         ) : null}
 
+        {room && stage === "haraj" ? (
+          <section className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-2">
+              {orderedTeams.map((team) => {
+                const tone = getTeamTone(team.teamId)
+                return (
+                  <article key={`haraj-score-${team.teamId}`} className={`rounded-2xl border p-4 text-center ${tone.border} ${tone.bg}`}>
+                    <p className={`text-xl font-semibold ${tone.text}`}>{team.name}</p>
+                    <p className="mt-1 text-6xl font-black leading-none">{team.score}</p>
+                  </article>
+                )
+              })}
+            </div>
+
+            {haraj?.phase === "haraj_collecting" && haraj.currentProduct ? (
+              <article className="party-surface-strong rounded-3xl p-5">
+                <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Round</p>
+                <h2 className="mt-2 text-3xl font-black">{haraj.currentProduct.name}</h2>
+                <p className="mt-2 text-sm text-slate-200">
+                  الوقت المتبقي: <span className="font-black text-amber-300">{harajCollectSeconds}</span> ثانية
+                </p>
+                <p className="mt-1 text-sm text-slate-200">
+                  تم استلام التخمينات:{" "}
+                  <span className="font-black text-cyan-200">
+                    {haraj.roundSubmittedCount}/{haraj.roundEligiblePlayers}
+                  </span>
+                </p>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-[28rem_1fr]">
+                  <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
+                    <img src={haraj.currentProduct.imageUrl} alt={haraj.currentProduct.name} className="h-72 w-full object-cover" />
+                  </div>
+                  <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
+                    <p className="text-sm font-semibold text-slate-200">حالة الإرسال (بدون كشف التخمين):</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {room.players.map((player) => {
+                        const submitted = harajSubmittedSet.has(player.playerId)
+                        return (
+                          <div
+                            key={`haraj-submit-${player.playerId}`}
+                            className={`rounded-xl border px-3 py-2 text-sm ${submitted ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-200"}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold">{player.displayName}</span>
+                              <span className="text-xs font-black">{submitted ? "تم الإرسال" : "بانتظار"}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ) : null}
+
+            {haraj?.phase === "haraj_reveal" && haraj.lastReveal ? (
+              <article className="party-surface-strong rounded-3xl p-5">
+                <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
+                <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
+                <p className="mt-2 text-lg text-slate-100">
+                  السعر الحقيقي:{" "}
+                  <span className="font-black text-amber-300">
+                    {haraj.lastReveal.actualPrice} {haraj.lastReveal.currency}
+                  </span>
+                </p>
+                <div className="mt-4 overflow-hidden rounded-2xl border border-white/20 bg-black/30">
+                  <img src={haraj.lastReveal.imageUrl} alt={haraj.lastReveal.productName} className="h-64 w-full object-cover" />
+                </div>
+
+                {haraj.lastReveal.skipped ? (
+                  <p className="mt-4 rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-3 text-sm font-semibold text-amber-100">
+                    لم يرسل أي لاعب تخمينًا خلال الوقت المحدد. تم تخطي الجولة بدون نقاط.
+                  </p>
+                ) : (
+                  <div className="mt-4 overflow-x-auto rounded-2xl border border-white/15 bg-black/20">
+                    <table className="min-w-full text-right text-sm">
+                      <thead className="bg-white/10 text-slate-200">
+                        <tr>
+                          <th className="px-3 py-2">اللاعب</th>
+                          <th className="px-3 py-2">التخمين</th>
+                          <th className="px-3 py-2">الفارق</th>
+                          <th className="px-3 py-2">الترتيب</th>
+                          <th className="px-3 py-2">النقاط</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {haraj.lastReveal.results.map((result) => (
+                          <tr key={`haraj-result-${result.playerId}`} className="border-t border-white/10">
+                            <td className="px-3 py-2 font-semibold">{result.playerName}</td>
+                            <td className="px-3 py-2">
+                              {result.estimate} {haraj.lastReveal?.currency}
+                            </td>
+                            <td className="px-3 py-2">{result.difference}</td>
+                            <td className="px-3 py-2">{result.rank ?? "-"}</td>
+                            <td className="px-3 py-2 font-black text-amber-200">{result.pointsAwarded}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Button
+                    type="button"
+                    className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                    disabled={Boolean(busyAction) || !canAdvanceHarajRound}
+                    onClick={() => void handleNextHarajRound()}
+                  >
+                    الجولة التالية
+                  </Button>
+                  <Button
+                    type="button"
+                    className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                    disabled={Boolean(busyAction) || !canEndSession}
+                    onClick={() => void handleEndSession()}
+                  >
+                    إنهاء الفعالية
+                  </Button>
+                </div>
+              </article>
+            ) : null}
+          </section>
+        ) : null}
+
         {room && stage === "celebration" ? (
           <section className="party-surface-strong rounded-3xl p-6 text-center">
             <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Celebration</p>
-            <h2 className="mt-2 text-5xl font-black text-amber-100">انتهت اللعبة</h2>
+            <h2 className="mt-2 text-5xl font-black text-amber-100">
+              {celebrationIsHarajCompleted ? "انتهت لعبة الحراج" : "انتهت لعبة الجيوباردي"}
+            </h2>
 
             {winningSummary ? (
               <>
@@ -1816,14 +2004,16 @@ export default function HostStagePage() {
             ) : null}
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Button
-                type="button"
-                className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
-                disabled={Boolean(busyAction) || !canStartTrivia}
-                onClick={() => void handleStartTrivia()}
-              >
-                الانتقال للعبة التالية
-              </Button>
+              {canStartHaraj ? (
+                <Button
+                  type="button"
+                  className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}
+                  disabled={Boolean(busyAction) || !canStartHaraj}
+                  onClick={() => void handleStartHaraj()}
+                >
+                  ابدأ لعبة الحراج
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 className={`${HOST_ACTION_BUTTON_CLASS} px-8 text-lg`}

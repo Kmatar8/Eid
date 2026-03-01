@@ -5,9 +5,12 @@ import { resolve } from "node:path"
 import { hashPassword, verifyPassword } from "@/lib/server/password"
 import type { ClientActionType, ClientRole } from "@/lib/server/protocol-v1"
 import bundledHostCredentialSeeds from "@/lib/server/host-credentials.generated.json"
+import { HARAJ_PRODUCT_BANK, type HarajProduct } from "@/lib/server/haraj-bank"
 import { TRIVIA_CATEGORY_ORDER, TRIVIA_QUESTION_BANK } from "@/lib/server/trivia-bank"
 import type {
   AvatarType,
+  HarajPhase,
+  HarajSnapshot,
   HostRecord,
   PlayerRecord,
   RedeemCodeRecord,
@@ -30,6 +33,8 @@ const MAX_ROOM_EVENTS = 4000
 const TRIVIA_COUNTDOWN_MS = 5 * 1000
 const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
+const HARAJ_COLLECT_WINDOW_MS = 15 * 1000
+const HARAJ_TOP_RANK_POINTS = [50, 30, 10] as const
 const REDEEMED_CODE_EXPIRY_MS = 1000 * 60 * 60 * 24 * 30
 const HOST_ACCESS_DURATION_MONTHS = 2
 const DEFAULT_HOST_TOKEN_TTL_SECONDS = 60 * 60 * 12
@@ -49,6 +54,7 @@ type InMemoryStore = {
   teamsByRoom: Map<string, TeamRecord[]>
   playerTeamsByRoom: Map<string, Map<string, string>>
   triviaByRoom: Map<string, TriviaSession>
+  harajByRoom: Map<string, HarajSession>
   hostLastSeenByRoom: Map<string, number>
   pausedFromStateByRoom: Map<string, RoomState>
   processedHostCommandsByRoom: Map<string, Set<string>>
@@ -97,6 +103,40 @@ type TriviaSession = {
   lastResult: TriviaSnapshot["lastResult"]
   answersByPlayer: Map<string, number>
   picksByPlayer: Map<string, number>
+  rngSeed: number
+}
+
+type HarajRoundSubmission = {
+  estimate: number
+  submittedAt: number
+}
+
+type HarajRevealResult = {
+  playerId: string
+  teamId: string | null
+  estimate: number
+  difference: number
+  rank: number | null
+  pointsAwarded: number
+}
+
+type HarajSession = {
+  status: "in_progress" | "completed"
+  phase: HarajPhase
+  products: HarajProduct[]
+  roundIndex: number
+  collectEndsAt: number | null
+  submissionsByRound: Map<number, Map<string, HarajRoundSubmission>>
+  lastReveal:
+    | {
+        roundIndex: number
+        productId: string
+        skipped: boolean
+        actualPrice: number
+        currency: string
+        results: HarajRevealResult[]
+      }
+    | null
   rngSeed: number
 }
 
@@ -198,6 +238,7 @@ function getStore(): InMemoryStore {
       teamsByRoom: new Map(),
       playerTeamsByRoom: new Map(),
       triviaByRoom: new Map(),
+      harajByRoom: new Map(),
       hostLastSeenByRoom: new Map(),
       pausedFromStateByRoom: new Map(),
       processedHostCommandsByRoom: new Map(),
@@ -237,6 +278,7 @@ type RoomShardSnapshot = {
   teams: TeamRecord[]
   teamAssignments: Array<[string, string]>
   trivia: TriviaSession | null
+  haraj: HarajSession | null
   hostLastSeenAt: number | null
   pausedFromState: RoomState | null
   processedHostCommands: string[]
@@ -299,6 +341,7 @@ function isStoreLike(value: unknown): value is InMemoryStore {
     candidate.teamsByRoom instanceof Map &&
     candidate.playerTeamsByRoom instanceof Map &&
     candidate.triviaByRoom instanceof Map &&
+    candidate.harajByRoom instanceof Map &&
     candidate.hostLastSeenByRoom instanceof Map &&
     candidate.pausedFromStateByRoom instanceof Map &&
     candidate.processedHostCommandsByRoom instanceof Map &&
@@ -324,6 +367,7 @@ function removeRoomScopedStoreData(store: InMemoryStore, roomId: string) {
   store.teamsByRoom.delete(roomId)
   store.playerTeamsByRoom.delete(roomId)
   store.triviaByRoom.delete(roomId)
+  store.harajByRoom.delete(roomId)
   store.hostLastSeenByRoom.delete(roomId)
   store.pausedFromStateByRoom.delete(roomId)
   store.processedHostCommandsByRoom.delete(roomId)
@@ -346,6 +390,7 @@ export function exportRoomShardSnapshot(roomId: string): unknown | null {
   const teams = [...(store.teamsByRoom.get(roomId) ?? [])]
   const teamAssignments = Array.from((store.playerTeamsByRoom.get(roomId) ?? new Map<string, string>()).entries())
   const trivia = store.triviaByRoom.get(roomId) ?? null
+  const haraj = store.harajByRoom.get(roomId) ?? null
   const hostLastSeenAt = store.hostLastSeenByRoom.get(roomId) ?? null
   const pausedFromState = store.pausedFromStateByRoom.get(roomId) ?? null
   const processedHostCommands = Array.from(store.processedHostCommandsByRoom.get(roomId) ?? new Set<string>())
@@ -360,6 +405,7 @@ export function exportRoomShardSnapshot(roomId: string): unknown | null {
     teams,
     teamAssignments,
     trivia,
+    haraj,
     hostLastSeenAt,
     pausedFromState,
     processedHostCommands,
@@ -434,6 +480,10 @@ export function importRoomShardSnapshot(roomId: string, snapshot: unknown): bool
 
     if (candidate.trivia) {
       store.triviaByRoom.set(roomId, candidate.trivia)
+    }
+
+    if (candidate.haraj) {
+      store.harajByRoom.set(roomId, candidate.haraj)
     }
 
     if (typeof candidate.hostLastSeenAt === "number") {
@@ -516,6 +566,9 @@ export function importStoreSnapshot(snapshot: unknown): boolean {
       }
       if (!(candidate.processedPlayerSubmitByRoom instanceof Map)) {
         candidate.processedPlayerSubmitByRoom = new Map()
+      }
+      if (!(candidate.harajByRoom instanceof Map)) {
+        candidate.harajByRoom = new Map()
       }
       if (!(candidate.hostLastSeenByRoom instanceof Map)) {
         candidate.hostLastSeenByRoom = new Map()
@@ -1019,6 +1072,15 @@ function resolveResumeState(store: InMemoryStore, room: RoomRecord): RoomState {
   }
 
   const trivia = store.triviaByRoom.get(room.id)
+  const haraj = store.harajByRoom.get(room.id)
+  if (haraj && haraj.status === "in_progress") {
+    return "game_live"
+  }
+
+  if (haraj && haraj.status === "completed") {
+    return "between_games"
+  }
+
   if (trivia && trivia.status === "in_progress") {
     return "game_live"
   }
@@ -1589,6 +1651,307 @@ function toTriviaSnapshot(session: TriviaSession | null): TriviaSnapshot {
   }
 }
 
+function shuffleHarajProducts(roomId: string) {
+  const products = [...HARAJ_PRODUCT_BANK]
+  let seed = hashSeed(`${roomId}:haraj:products`)
+  for (let index = products.length - 1; index > 0; index -= 1) {
+    seed = nextSeed(seed)
+    const swapIndex = seed % (index + 1)
+    const current = products[index]
+    products[index] = products[swapIndex] as HarajProduct
+    products[swapIndex] = current as HarajProduct
+  }
+  return products
+}
+
+function createHarajSession(roomId: string): HarajSession | null {
+  const products = shuffleHarajProducts(roomId)
+  if (products.length === 0) {
+    return null
+  }
+
+  return {
+    status: "in_progress",
+    phase: "haraj_intro",
+    products,
+    roundIndex: -1,
+    collectEndsAt: null,
+    submissionsByRound: new Map(),
+    lastReveal: null,
+    rngSeed: hashSeed(`${roomId}:haraj`),
+  }
+}
+
+function getCurrentHarajProduct(session: HarajSession): HarajProduct | null {
+  if (session.roundIndex < 0 || session.roundIndex >= session.products.length) {
+    return null
+  }
+
+  return session.products[session.roundIndex] ?? null
+}
+
+function getEligibleHarajPlayerIds(store: InMemoryStore, roomId: string) {
+  const playerIds = Array.from(store.playersByRoom.get(roomId) ?? [])
+  return playerIds.filter((playerId) => Boolean(getPlayerTeamId(store, roomId, playerId)))
+}
+
+function getHarajRoundSubmissions(session: HarajSession) {
+  const roundSubmissions = session.submissionsByRound.get(session.roundIndex)
+  if (roundSubmissions) {
+    return roundSubmissions
+  }
+
+  const created = new Map<string, HarajRoundSubmission>()
+  session.submissionsByRound.set(session.roundIndex, created)
+  return created
+}
+
+function startHarajRound(store: InMemoryStore, room: RoomRecord, session: HarajSession, hostId: string) {
+  const nextRoundIndex = session.roundIndex + 1
+  if (nextRoundIndex >= session.products.length) {
+    return false
+  }
+
+  session.roundIndex = nextRoundIndex
+  session.phase = "haraj_collecting"
+  session.collectEndsAt = nowMs() + HARAJ_COLLECT_WINDOW_MS
+  session.lastReveal = null
+  if (!session.submissionsByRound.has(session.roundIndex)) {
+    session.submissionsByRound.set(session.roundIndex, new Map())
+  }
+
+  room.state = "game_live"
+  room.pausedAt = null
+
+  const product = getCurrentHarajProduct(session)
+  recordRoomEvent(store, room.id, "haraj.round_started", {
+    hostId,
+    roundIndex: session.roundIndex,
+    totalRounds: session.products.length,
+    productId: product?.id ?? null,
+    productName: product?.name ?? null,
+    collectEndsAt: session.collectEndsAt,
+    durationMs: HARAJ_COLLECT_WINDOW_MS,
+  })
+
+  return true
+}
+
+function applyHarajPointsWithTies(results: HarajRevealResult[]) {
+  const sorted = [...results]
+  let cursor = 0
+  let position = 1
+
+  while (cursor < sorted.length) {
+    const currentDifference = sorted[cursor]?.difference
+    const groupStart = cursor
+    while (cursor < sorted.length && sorted[cursor]?.difference === currentDifference) {
+      cursor += 1
+    }
+    const group = sorted.slice(groupStart, cursor)
+    const occupiedPositions: number[] = []
+    for (let rank = position; rank < position + group.length; rank += 1) {
+      if (rank <= HARAJ_TOP_RANK_POINTS.length) {
+        occupiedPositions.push(rank)
+      }
+    }
+    const pointsPool = occupiedPositions.reduce((sum, rank) => sum + HARAJ_TOP_RANK_POINTS[rank - 1], 0)
+    const sharedPoints = pointsPool > 0 ? pointsPool / group.length : 0
+
+    for (const result of group) {
+      result.rank = position
+      result.pointsAwarded = sharedPoints
+    }
+
+    position += group.length
+  }
+}
+
+function finalizeHarajRound(
+  store: InMemoryStore,
+  room: RoomRecord,
+  session: HarajSession,
+  reason: "timeout" | "all_submitted"
+) {
+  if (session.status !== "in_progress" || session.phase !== "haraj_collecting") {
+    return
+  }
+
+  const product = getCurrentHarajProduct(session)
+  if (!product) {
+    return
+  }
+
+  session.phase = "haraj_locked"
+  session.collectEndsAt = null
+
+  const submissions = getHarajRoundSubmissions(session)
+  const rankedCandidates = Array.from(submissions.entries())
+    .map(([playerId, submission]) => ({
+      playerId,
+      teamId: getPlayerTeamId(store, room.id, playerId),
+      estimate: submission.estimate,
+      difference: Math.abs(submission.estimate - product.actualPrice),
+      rank: null,
+      pointsAwarded: 0,
+      submittedAt: submission.submittedAt,
+    }))
+    .sort((a, b) => {
+      if (a.difference !== b.difference) {
+        return a.difference - b.difference
+      }
+      if (a.submittedAt !== b.submittedAt) {
+        return a.submittedAt - b.submittedAt
+      }
+      return a.playerId.localeCompare(b.playerId)
+    })
+  const roundResults: HarajRevealResult[] = rankedCandidates.map((entry) => ({
+    playerId: entry.playerId,
+    teamId: entry.teamId,
+    estimate: entry.estimate,
+    difference: entry.difference,
+    rank: entry.rank,
+    pointsAwarded: entry.pointsAwarded,
+  }))
+
+  if (roundResults.length === 0) {
+    session.phase = "haraj_reveal"
+    session.lastReveal = {
+      roundIndex: session.roundIndex,
+      productId: product.id,
+      skipped: true,
+      actualPrice: product.actualPrice,
+      currency: product.currency,
+      results: [],
+    }
+    recordRoomEvent(store, room.id, "haraj.round_skipped", {
+      roundIndex: session.roundIndex,
+      productId: product.id,
+      reason: "no_submissions",
+      trigger: reason,
+    })
+    return
+  }
+
+  applyHarajPointsWithTies(roundResults)
+
+  for (const result of roundResults) {
+    if (!result.teamId || result.pointsAwarded <= 0) {
+      continue
+    }
+    addTeamScore(store, room.id, result.teamId, result.pointsAwarded)
+  }
+
+  session.phase = "haraj_reveal"
+  session.lastReveal = {
+    roundIndex: session.roundIndex,
+    productId: product.id,
+    skipped: false,
+    actualPrice: product.actualPrice,
+    currency: product.currency,
+    results: roundResults,
+  }
+
+  recordRoomEvent(store, room.id, "haraj.round_revealed", {
+    roundIndex: session.roundIndex,
+    productId: product.id,
+    reason,
+    resultCount: roundResults.length,
+    topResults: roundResults.slice(0, 3).map((entry) => ({
+      playerId: entry.playerId,
+      teamId: entry.teamId,
+      difference: entry.difference,
+      rank: entry.rank,
+      pointsAwarded: entry.pointsAwarded,
+    })),
+  })
+}
+
+function completeHarajSession(store: InMemoryStore, room: RoomRecord, session: HarajSession, reason: string) {
+  session.status = "completed"
+  session.phase = "haraj_next_round_or_end"
+  session.collectEndsAt = null
+  room.state = "between_games"
+  recordRoomEvent(store, room.id, "haraj.completed", {
+    reason,
+    roundsPlayed: session.roundIndex + 1,
+    totalRounds: session.products.length,
+  })
+}
+
+function applyHarajTimedTransitions(store: InMemoryStore, room: RoomRecord, session: HarajSession) {
+  if (session.status !== "in_progress") {
+    return
+  }
+
+  if (session.phase === "haraj_collecting" && session.collectEndsAt && nowMs() >= session.collectEndsAt) {
+    finalizeHarajRound(store, room, session, "timeout")
+  }
+}
+
+function toHarajSnapshot(store: InMemoryStore, roomId: string, session: HarajSession | null): HarajSnapshot {
+  if (!session) {
+    return {
+      status: "idle",
+      phase: null,
+      roundIndex: -1,
+      totalRounds: 0,
+      collectEndsAt: null,
+      currentProduct: null,
+      submittedPlayerIds: [],
+      roundSubmittedCount: 0,
+      roundEligiblePlayers: 0,
+      lastReveal: null,
+    }
+  }
+
+  const currentProduct = getCurrentHarajProduct(session)
+  const roundSubmissions = session.roundIndex >= 0 ? getHarajRoundSubmissions(session) : new Map<string, HarajRoundSubmission>()
+  const eligiblePlayerIds = getEligibleHarajPlayerIds(store, roomId)
+  const revealProduct = session.lastReveal
+    ? session.products.find((product) => product.id === session.lastReveal?.productId) ?? null
+    : null
+
+  return {
+    status: session.status,
+    phase: session.phase,
+    roundIndex: session.roundIndex,
+    totalRounds: session.products.length,
+    collectEndsAt: session.collectEndsAt,
+    currentProduct: currentProduct
+      ? {
+          productId: currentProduct.id,
+          name: currentProduct.name,
+          imageUrl: currentProduct.imageUrl,
+          currency: currentProduct.currency,
+        }
+      : null,
+    submittedPlayerIds: Array.from(roundSubmissions.keys()),
+    roundSubmittedCount: roundSubmissions.size,
+    roundEligiblePlayers: eligiblePlayerIds.length,
+    lastReveal: session.lastReveal
+      ? {
+          roundIndex: session.lastReveal.roundIndex,
+          productId: session.lastReveal.productId,
+          productName: revealProduct?.name ?? "منتج",
+          imageUrl: revealProduct?.imageUrl ?? "",
+          actualPrice: session.lastReveal.actualPrice,
+          currency: session.lastReveal.currency,
+          skipped: session.lastReveal.skipped,
+          results: session.lastReveal.results.map((result) => ({
+            playerId: result.playerId,
+            playerName: store.players.get(result.playerId)?.displayName ?? "لاعب",
+            teamId: result.teamId,
+            estimate: result.estimate,
+            difference: result.difference,
+            rank: result.rank,
+            pointsAwarded: result.pointsAwarded,
+          })),
+        }
+      : null,
+  }
+}
+
 function parseTriviaOption(value: unknown): TriviaOption | null {
   if (value === "A" || value === "B" || value === "C" || value === "D") {
     return value
@@ -1936,6 +2299,7 @@ export function completeRoomForHost(
   }
 
   store.triviaByRoom.delete(room.id)
+  store.harajByRoom.delete(room.id)
   store.hostLastSeenByRoom.delete(room.id)
   store.pausedFromStateByRoom.delete(room.id)
   store.processedHostCommandsByRoom.delete(room.id)
@@ -2026,6 +2390,9 @@ type ApplyRoomActionResult =
         | "TRIVIA_INVALID_CLUE"
         | "TRIVIA_NO_ALTERNATE_RESPONDER"
         | "TRIVIA_INVALID_RESPONDER"
+        | "HARAJ_NOT_ACTIVE"
+        | "HARAJ_INVALID_ESTIMATE"
+        | "HARAJ_ALREADY_SUBMITTED"
         | "INVALID_OPTION"
         | "ACTION_NOT_SUPPORTED"
       state?: RoomState
@@ -2063,6 +2430,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
   const sessionTick = store.triviaByRoom.get(room.id)
   if (sessionTick) {
     applyTriviaTimedTransitions(store, room, sessionTick)
+  }
+  const harajTick = store.harajByRoom.get(room.id)
+  if (harajTick) {
+    applyHarajTimedTransitions(store, room, harajTick)
   }
 
   if (input.actorRole === "host") {
@@ -2230,6 +2601,13 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
       }
 
+      if (room.state === "between_games") {
+        const harajSession = store.harajByRoom.get(room.id)
+        if (!harajSession || harajSession.status !== "completed") {
+          return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+        }
+      }
+
       const session = createTriviaSession(store, room.id)
       if (!session) {
         return { ok: false, code: "ACTION_NOT_SUPPORTED" }
@@ -2256,6 +2634,60 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
         pickerPlayerId: session.currentPickerPlayerId,
         remainingQuestions: getRemainingQuestionCount(session),
       })
+    } else if (input.actionType === "host.startHaraj") {
+      const triviaSession = store.triviaByRoom.get(room.id)
+      if (room.state !== "between_games" || !triviaSession || triviaSession.status !== "completed") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const existingHaraj = store.harajByRoom.get(room.id)
+      if (existingHaraj?.status === "in_progress") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const session = createHarajSession(room.id)
+      if (!session) {
+        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+      }
+
+      store.harajByRoom.set(room.id, session)
+      recordRoomEvent(store, room.id, "haraj.started", {
+        hostId: input.actorId,
+        totalRounds: session.products.length,
+      })
+
+      const started = startHarajRound(store, room, session, input.actorId)
+      if (!started) {
+        return { ok: false, code: "ACTION_NOT_SUPPORTED" }
+      }
+    } else if (input.actionType === "host.startHarajRound") {
+      const session = store.harajByRoom.get(room.id)
+      if (!session || session.status !== "in_progress") {
+        return { ok: false, code: "HARAJ_NOT_ACTIVE" }
+      }
+
+      if (session.phase !== "haraj_intro" && session.phase !== "haraj_scoreboard") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const started = startHarajRound(store, room, session, input.actorId)
+      if (!started) {
+        completeHarajSession(store, room, session, "no_more_rounds")
+      }
+    } else if (input.actionType === "host.nextHarajRound") {
+      const session = store.harajByRoom.get(room.id)
+      if (!session || session.status !== "in_progress") {
+        return { ok: false, code: "HARAJ_NOT_ACTIVE" }
+      }
+
+      if (session.phase !== "haraj_reveal" && session.phase !== "haraj_scoreboard") {
+        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+      }
+
+      const started = startHarajRound(store, room, session, input.actorId)
+      if (!started) {
+        completeHarajSession(store, room, session, "all_rounds_completed")
+      }
     } else if (input.actionType === "host.selectTriviaClue") {
       const session = store.triviaByRoom.get(room.id)
       if (!session || session.status !== "in_progress") {
@@ -2518,6 +2950,52 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
       questionId: question.id,
       reason: wasCorrect ? "correct" : "wrong",
     })
+  } else if (input.actionType === "player.submitHarajEstimate") {
+    const session = store.harajByRoom.get(room.id)
+    if (!session || session.status !== "in_progress") {
+      return { ok: false, code: "HARAJ_NOT_ACTIVE" }
+    }
+
+    applyHarajTimedTransitions(store, room, session)
+    if (session.phase !== "haraj_collecting") {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+    }
+
+    const teamId = getPlayerTeamId(store, room.id, input.actorId)
+    if (!teamId) {
+      return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
+    }
+
+    const rawEstimate = input.payload?.estimate
+    const estimate =
+      typeof rawEstimate === "number" ? rawEstimate : typeof rawEstimate === "string" ? Number(rawEstimate) : Number.NaN
+    if (!Number.isFinite(estimate) || estimate < 0) {
+      return { ok: false, code: "HARAJ_INVALID_ESTIMATE" }
+    }
+
+    const submissions = getHarajRoundSubmissions(session)
+    if (submissions.has(input.actorId)) {
+      return { ok: false, code: "HARAJ_ALREADY_SUBMITTED" }
+    }
+
+    submissions.set(input.actorId, {
+      estimate,
+      submittedAt: nowMs(),
+    })
+    touchPlayer(input.roomId, input.actorId)
+
+    const eligiblePlayers = getEligibleHarajPlayerIds(store, room.id)
+    recordRoomEvent(store, room.id, "haraj.estimate_submitted", {
+      roundIndex: session.roundIndex,
+      playerId: input.actorId,
+      teamId,
+      submittedCount: submissions.size,
+      expectedCount: eligiblePlayers.length,
+    })
+
+    if (eligiblePlayers.length > 0 && submissions.size >= eligiblePlayers.length) {
+      finalizeHarajRound(store, room, session, "all_submitted")
+    }
   } else {
     return { ok: false, code: "ACTION_NOT_SUPPORTED" }
   }
@@ -2577,6 +3055,10 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
   if (triviaSession) {
     applyTriviaTimedTransitions(store, room, triviaSession)
   }
+  const harajSession = store.harajByRoom.get(roomId) ?? null
+  if (harajSession) {
+    applyHarajTimedTransitions(store, room, harajSession)
+  }
 
   const playerIds = Array.from(store.playersByRoom.get(roomId) ?? [])
   const players = playerIds
@@ -2622,5 +3104,6 @@ export function buildRoomSnapshot(roomId: string): RoomSnapshot | null {
     teams,
     teamAssignments,
     trivia: toTriviaSnapshot(triviaSession),
+    haraj: toHarajSnapshot(store, roomId, harajSession),
   }
 }

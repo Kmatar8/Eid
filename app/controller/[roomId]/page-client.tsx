@@ -135,21 +135,32 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
     return CONTROLLER_POLL_IDLE_MS
   }
 
-  if (room.state !== "game_live" || room.trivia.status !== "in_progress") {
+  if (room.state !== "game_live") {
     return CONTROLLER_POLL_IDLE_MS
   }
 
-  if (room.trivia.phase === "board_turn") {
-    return CONTROLLER_POLL_BOARD_MS
+  if (room.trivia.status === "in_progress") {
+    if (room.trivia.phase === "board_turn") {
+      return CONTROLLER_POLL_BOARD_MS
+    }
+
+    if (
+      room.trivia.phase === "countdown" ||
+      room.trivia.phase === "buzzer_open" ||
+      room.trivia.phase === "answer_active" ||
+      room.trivia.phase === "answer_reveal"
+    ) {
+      return CONTROLLER_POLL_ACTIVE_MS
+    }
+
+    return CONTROLLER_POLL_IDLE_MS
   }
 
-  if (
-    room.trivia.phase === "countdown" ||
-    room.trivia.phase === "buzzer_open" ||
-    room.trivia.phase === "answer_active" ||
-    room.trivia.phase === "answer_reveal"
-  ) {
-    return CONTROLLER_POLL_ACTIVE_MS
+  if (room.haraj.status === "in_progress") {
+    if (room.haraj.phase === "haraj_collecting" || room.haraj.phase === "haraj_reveal") {
+      return CONTROLLER_POLL_ACTIVE_MS
+    }
+    return CONTROLLER_POLL_BOARD_MS
   }
 
   return CONTROLLER_POLL_IDLE_MS
@@ -161,6 +172,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [isPageVisible, setIsPageVisible] = useState(() => isDocumentVisible())
   const [busy, setBusy] = useState(false)
   const [submittedQuestionId, setSubmittedQuestionId] = useState<string | null>(null)
+  const [harajEstimateDraft, setHarajEstimateDraft] = useState("")
+  const [submittedHarajRoundKey, setSubmittedHarajRoundKey] = useState<string | null>(null)
   const [nowTs, setNowTs] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -170,6 +183,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
+  const lastHarajRoundKeyRef = useRef<string | null>(null)
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -425,11 +439,21 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
 
   const selectedQuestionId = room?.trivia.selectedClue?.questionId ?? null
+  const harajRoundKey =
+    room?.haraj.status === "in_progress" ? `${room.haraj.roundIndex}:${room.haraj.currentProduct?.productId ?? "none"}` : null
   useEffect(() => {
     if (selectedQuestionId !== submittedQuestionId) {
       setSubmittedQuestionId(null)
     }
   }, [selectedQuestionId, submittedQuestionId])
+
+  useEffect(() => {
+    if (harajRoundKey !== lastHarajRoundKeyRef.current) {
+      lastHarajRoundKeyRef.current = harajRoundKey
+      setSubmittedHarajRoundKey(null)
+      setHarajEstimateDraft("")
+    }
+  }, [harajRoundKey])
 
   const teamById = useMemo(() => new Map((room?.teams ?? []).map((team) => [team.teamId, team])), [room?.teams])
   const playerNameById = useMemo(
@@ -474,16 +498,54 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return submittedQuestionId !== selectedQuestionId
   }, [room, session, selectedQuestionId, submittedQuestionId])
 
+  const hasSubmittedHarajEstimate = Boolean(
+    (session && room?.haraj.submittedPlayerIds.includes(session.playerId)) ||
+      (harajRoundKey && submittedHarajRoundKey === harajRoundKey)
+  )
+
+  const canSubmitHarajEstimate = useMemo(() => {
+    if (!room || !session) {
+      return false
+    }
+    return (
+      room.state === "game_live" &&
+      room.haraj.status === "in_progress" &&
+      room.haraj.phase === "haraj_collecting" &&
+      Boolean(myTeamId) &&
+      !hasSubmittedHarajEstimate
+    )
+  }, [hasSubmittedHarajEstimate, myTeamId, room, session])
+
   const countdownSeconds = remainingSeconds(room?.trivia.countdownEndsAt ?? null, nowTs)
   const buzzSeconds = remainingSeconds(room?.trivia.buzzEndsAt ?? null, nowTs)
   const answerSeconds = remainingSeconds(room?.trivia.answerEndsAt ?? null, nowTs)
+  const harajCollectSeconds = remainingSeconds(room?.haraj.collectEndsAt ?? null, nowTs)
   const selectedClue = room?.trivia.selectedClue ?? null
   const isCountdownPhase = room?.trivia.phase === "countdown"
   const isQuestionRevealed =
     room?.trivia.phase === "buzzer_open" || room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal"
 
   const statusText = useMemo(() => {
-    if (!room || !session || room.trivia.status !== "in_progress") {
+    if (!room || !session) {
+      return "بانتظار بدء اللعبة من شاشة المضيف."
+    }
+
+    if (room.haraj.status === "in_progress") {
+      if (room.haraj.phase === "haraj_collecting") {
+        if (hasSubmittedHarajEstimate) {
+          return "تم إرسال تخمينك. انتظر كشف السعر الحقيقي."
+        }
+        return `احزر السعر الآن. الوقت المتبقي ${harajCollectSeconds} ثانية.`
+      }
+
+      if (room.haraj.phase === "haraj_reveal") {
+        return "تم كشف السعر الحقيقي ونتائج الجولة."
+      }
+
+      return "بانتظار انطلاق جولة الحراج."
+    }
+
+    if (room.trivia.status !== "in_progress") {
       return "بانتظار بدء اللعبة من شاشة المضيف."
     }
 
@@ -527,7 +589,18 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     return "بانتظار التحديث التالي."
-  }, [canAnswer, countdownSeconds, playerNameById, responderName, responderTeam?.name, room, session, teamById])
+  }, [
+    canAnswer,
+    countdownSeconds,
+    harajCollectSeconds,
+    hasSubmittedHarajEstimate,
+    playerNameById,
+    responderName,
+    responderTeam?.name,
+    room,
+    session,
+    teamById,
+  ])
 
   const submitBuzz = async () => {
     if (!session || busy || !canBuzz) {
@@ -597,6 +670,38 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
   }
 
+  const submitHarajEstimate = async () => {
+    if (!session || !room || busy || !canSubmitHarajEstimate || !harajRoundKey) {
+      return
+    }
+
+    const estimate = Number(harajEstimateDraft.trim())
+    if (!Number.isFinite(estimate) || estimate < 0) {
+      setError("أدخل رقمًا صحيحًا للتخمين.")
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    setNotice("جاري إرسال التخمين...")
+
+    try {
+      const ack = await sendAction(roomId, session.token, "player.submitHarajEstimate", { estimate })
+      syncServerClock(ack.ts)
+      setRoom(ack.payload.room)
+      setSubmittedHarajRoundKey(harajRoundKey)
+      setNotice("تم إرسال التخمين بنجاح.")
+    } catch (requestError) {
+      if (isTerminalControllerSessionError(requestError)) {
+        terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
+        return
+      }
+      setError(toErrorMessage(requestError))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden text-foreground">
       <div className="party-stage-bg" />
@@ -651,7 +756,89 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {selectedClue ? (
+            {room?.haraj.status === "in_progress" && room.haraj.phase === "haraj_collecting" && room.haraj.currentProduct ? (
+              <div className="mt-5 space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
+                  جولة {room.haraj.roundIndex + 1} من {room.haraj.totalRounds}
+                </p>
+                <h2 className="text-2xl font-black">{room.haraj.currentProduct.name}</h2>
+                <div className="overflow-hidden rounded-2xl border border-white/20 bg-black/30">
+                  <img
+                    src={room.haraj.currentProduct.imageUrl}
+                    alt={room.haraj.currentProduct.name}
+                    className="h-56 w-full object-cover"
+                  />
+                </div>
+                <p className="text-sm text-slate-200">
+                  الوقت المتبقي: <span className="font-black text-amber-300">{harajCollectSeconds}</span> ثانية
+                </p>
+                {hasSubmittedHarajEstimate ? (
+                  <p className="rounded-xl border border-emerald-300/40 bg-emerald-500/12 px-4 py-3 text-sm font-semibold text-emerald-100">
+                    تم إرسال التخمين ✅
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <label className="block text-sm font-semibold text-slate-200">تخمينك للسعر ({room.haraj.currentProduct.currency})</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={harajEstimateDraft}
+                      onChange={(event) => setHarajEstimateDraft(event.target.value)}
+                      className="h-12 w-full rounded-xl border border-white/20 bg-black/25 px-3 text-lg font-bold text-white outline-none focus:ring-2 focus:ring-cyan-400/45"
+                      placeholder="مثال: 499"
+                    />
+                    <Button
+                      type="button"
+                      disabled={busy || !canSubmitHarajEstimate}
+                      onClick={() => void submitHarajEstimate()}
+                      className={`${CONTROLLER_ACTION_BUTTON_CLASS} h-12 w-full text-base`}
+                    >
+                      إرسال التخمين
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {room?.haraj.status === "in_progress" && room.haraj.phase === "haraj_reveal" && room.haraj.lastReveal ? (
+              <div className="mt-5 space-y-4 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-300">كشف النتائج</p>
+                <h2 className="text-2xl font-black">{room.haraj.lastReveal.productName}</h2>
+                <p className="text-base text-slate-100">
+                  السعر الحقيقي:{" "}
+                  <span className="font-black text-amber-300">
+                    {room.haraj.lastReveal.actualPrice} {room.haraj.lastReveal.currency}
+                  </span>
+                </p>
+                {room.haraj.lastReveal.skipped ? (
+                  <p className="rounded-xl border border-amber-300/40 bg-amber-500/12 px-4 py-3 text-sm font-semibold text-amber-100">
+                    لم يرسل أي لاعب تخمينًا في هذه الجولة.
+                  </p>
+                ) : (
+                  (() => {
+                    const myResult = room.haraj.lastReveal?.results.find((entry) => entry.playerId === session.playerId) ?? null
+                    if (!myResult) {
+                      return (
+                        <p className="rounded-xl border border-white/20 bg-black/25 px-4 py-3 text-sm text-slate-200">
+                          لم يتم احتساب نتيجة لك في هذه الجولة.
+                        </p>
+                      )
+                    }
+
+                    return (
+                      <div className="rounded-xl border border-white/20 bg-black/25 px-4 py-3 text-sm text-slate-100">
+                        <p>تخمينك: {myResult.estimate}</p>
+                        <p>الفارق: {myResult.difference}</p>
+                        <p>الترتيب: {myResult.rank ?? "-"}</p>
+                        <p className="font-black text-amber-200">النقاط المكتسبة: {myResult.pointsAwarded}</p>
+                      </div>
+                    )
+                  })()
+                )}
+              </div>
+            ) : null}
+
+            {room?.haraj.status !== "in_progress" && selectedClue ? (
               <div className="mt-5 rounded-2xl border border-white/20 bg-white/10 p-4 shadow-lg">
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   {selectedClue.categoryName} | {selectedClue.points} points
@@ -669,7 +856,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 ) : null}
               </div>
             ) : null}
-            {canBuzz ? (
+            {room?.haraj.status !== "in_progress" && canBuzz ? (
               <div className="mt-8 mb-4 flex justify-center">
                 {/* Buzzer Base */}
                 <div className="relative flex h-[12rem] w-[12rem] sm:h-[16rem] sm:w-[16rem] items-center justify-center rounded-full bg-gradient-to-b from-slate-700 to-slate-950 p-3 sm:p-5 shadow-[0_15px_25px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.2)] ring-2 sm:ring-4 ring-slate-900">
@@ -691,7 +878,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.trivia.phase === "answer_active" ? (
+            {room?.haraj.status !== "in_progress" && room?.trivia.phase === "answer_active" ? (
               <div className="mt-5 space-y-3">
                 {canAnswer ? (
                   <>
@@ -727,7 +914,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
               </div>
             ) : null}
 
-            {room?.trivia.phase === "buzzer_open" ? (
+            {room?.haraj.status !== "in_progress" && room?.trivia.phase === "buzzer_open" ? (
               <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
                 <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي</p>
                 <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>

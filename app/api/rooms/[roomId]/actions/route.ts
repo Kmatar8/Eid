@@ -19,6 +19,9 @@ const HOST_REQUEST_ID_REQUIRED_ACTIONS = new Set([
   "host.startTeams",
   "host.startGame",
   "host.startTrivia",
+  "host.startHaraj",
+  "host.startHarajRound",
+  "host.nextHarajRound",
   "host.selectTriviaClue",
   "host.nextQuestion",
   "host.addTeamScore",
@@ -198,6 +201,18 @@ export async function POST(request: Request, context: RouteContext) {
 
       if (applied.code === "TRIVIA_INVALID_RESPONDER") {
         return errorResponse(403, "TRIVIA_INVALID_RESPONDER", "Only the selected responder can answer")
+      }
+
+      if (applied.code === "HARAJ_NOT_ACTIVE") {
+        return errorResponse(409, "HARAJ_NOT_ACTIVE", "Haraj session is not active")
+      }
+
+      if (applied.code === "HARAJ_INVALID_ESTIMATE") {
+        return errorResponse(400, "HARAJ_INVALID_ESTIMATE", "Estimate must be a valid non-negative number")
+      }
+
+      if (applied.code === "HARAJ_ALREADY_SUBMITTED") {
+        return errorResponse(409, "HARAJ_ALREADY_SUBMITTED", "Player already submitted an estimate for this round")
       }
 
       if (applied.code === "INVALID_OPTION") {

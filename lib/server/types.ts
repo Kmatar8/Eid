@@ -86,6 +86,14 @@ export type TriviaPhase =
   | "answer_reveal"
   | "next_question_or_end"
 
+export type HarajPhase =
+  | "haraj_intro"
+  | "haraj_collecting"
+  | "haraj_locked"
+  | "haraj_reveal"
+  | "haraj_scoreboard"
+  | "haraj_next_round_or_end"
+
 export type TriviaQuestion = {
   id: string
   categoryId: string
@@ -141,6 +149,41 @@ export type TriviaSnapshot = {
   } | null
 }
 
+export type HarajSnapshot = {
+  status: "idle" | "in_progress" | "completed"
+  phase: HarajPhase | null
+  roundIndex: number
+  totalRounds: number
+  collectEndsAt: number | null
+  currentProduct: {
+    productId: string
+    name: string
+    imageUrl: string
+    currency: string
+  } | null
+  submittedPlayerIds: string[]
+  roundSubmittedCount: number
+  roundEligiblePlayers: number
+  lastReveal: {
+    roundIndex: number
+    productId: string
+    productName: string
+    imageUrl: string
+    actualPrice: number
+    currency: string
+    skipped: boolean
+    results: Array<{
+      playerId: string
+      playerName: string
+      teamId: string | null
+      estimate: number
+      difference: number
+      rank: number | null
+      pointsAwarded: number
+    }>
+  } | null
+}
+
 export type RoomSnapshot = {
   roomId: string
   hostId: string
@@ -169,4 +212,5 @@ export type RoomSnapshot = {
     teamId: string
   }>
   trivia: TriviaSnapshot
+  haraj: HarajSnapshot
 }

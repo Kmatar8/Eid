@@ -1,6 +1,6 @@
 # T-0033: Haraj v1 Planning and Contracts
 
-- Status: planned
+- Status: in_progress
 - Milestone: M4
 - PRD Reference: 2, 6.1, 8.6, 11, 12, 15
 
@@ -78,6 +78,22 @@ Define the implementation-ready scope for a new Haraj game mode where players es
 - [ ] Manual scenario covers reconnect during collect/reveal without leaking hidden answers.
 - [ ] Manual scenario confirms no-submission timeout auto-skip with zero points.
 - [ ] Manual scenario confirms submission visibility without estimate visibility before reveal.
+
+## Validation Evidence (2026-03-01)
+1. Build/type validation:
+   - `npm run build` ✅
+2. Focused lint:
+   - `npx eslint lib/server/types.ts lib/server/protocol-v1.ts lib/server/store.ts lib/server/haraj-bank.ts 'app/api/rooms/[roomId]/actions/route.ts' 'app/api/rooms/[roomId]/stream/route.ts' app/host/page.tsx 'app/controller/[roomId]/page-client.tsx' components/live/room-state-panel.tsx` ✅ (warnings only, no errors)
+3. Implemented in this iteration:
+   - Haraj state/snapshot model in room payload.
+   - Host actions for Haraj lifecycle (`host.startHaraj`, `host.startHarajRound`, `host.nextHarajRound`).
+   - Player estimate submission action (`player.submitHarajEstimate`).
+   - Fixed 15-second round timeout with auto-reveal.
+   - Anti-stall rule: zero-submission timeout auto-skip with zero points.
+   - Tie-aware points sharing across occupied top-rank slots.
+   - Host and controller runtime UI branches for Haraj collecting/reveal stages.
+4. Remaining before marking done:
+   - Manual end-to-end walkthrough for all acceptance scenarios.
 
 ## Rollback Plan
 1. Gate Haraj behind feature flag and disable in game selection.

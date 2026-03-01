@@ -62,6 +62,15 @@ export default function RoomStatePanel({ room, highlightPlayerId }: RoomStatePan
         </article>
       </section>
 
+      <section className="rounded-xl border border-white/20 bg-white/10 p-4">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Haraj</p>
+        <p className="mt-1 text-lg font-semibold">{room.haraj.status}</p>
+        <p className="mt-2 text-xs text-slate-400">Phase: {room.haraj.phase ?? "-"}</p>
+        {room.haraj.currentProduct ? (
+          <p className="mt-2 text-xs text-slate-300">Current Product: {room.haraj.currentProduct.name}</p>
+        ) : null}
+      </section>
+
       <section className="grid gap-3 sm:grid-cols-2">
         {room.teams.map((team) => (
           <article key={team.teamId} className="rounded-xl border border-white/25 bg-white/12 p-4">
