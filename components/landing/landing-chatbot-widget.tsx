@@ -27,7 +27,7 @@ function makeMessageId() {
 const initialAssistantMessage: ChatMessage = {
   id: "initial-assistant-message",
   role: "assistant",
-  text: "هلا! أنا مساعد هروف. اسألني عن طريقة اللعب أو تفاصيل المنتج.",
+  text: "هلا فيك وكل عام وانت بخير وكل من يعز عليك، قولي كيف اقدر اساعدك .",
 }
 
 export function LandingChatbotWidget() {
@@ -146,8 +146,8 @@ export function LandingChatbotWidget() {
                   <MessageCircle className="size-4 text-cyan-50" />
                 </span>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-white">مساعد هروف</p>
-                  <p className="text-[11px] text-cyan-100/90">إجابات سريعة من قاعدة المعرفة</p>
+                  <p className="text-sm font-bold text-white">سارة</p>
+                  <p className="text-[11px] text-cyan-100/90">دعم فني ٢٤ ساعة</p>
                 </div>
               </div>
               <button
