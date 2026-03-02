@@ -173,15 +173,33 @@ export default function Home() {
       document.head.appendChild(viewportMeta)
     }
 
-    if (isTVMode) {
-      viewportMeta.setAttribute("content", "width=1280, initial-scale=0.3, user-scalable=yes")
-    } else {
-      viewportMeta.setAttribute(
-        "content",
-        "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-      )
+    // Always use standard responsive viewport
+    viewportMeta.setAttribute(
+      "content",
+      "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    )
+  }, [])
+
+  // Calculate CSS scale for TV mode based on screen width
+  const [scaleFactor, setScaleFactor] = useState(1);
+  useEffect(() => {
+    if (!isTVMode) {
+      setScaleFactor(1);
+      return;
     }
-  }, [isTVMode])
+
+    const handleResize = () => {
+      // If we are in TV mode, we want a virtual width of 1280px.
+      // We calculate how much we need to scale down the 1280px container to fit the physical screen.
+      // Max scale is 1 (don't scale up on huge screens).
+      const scale = Math.min(window.innerWidth / 1280, 1);
+      setScaleFactor(scale);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isTVMode]);
 
   const toggleFullscreen = () => {
     const doc = document as FullscreenDocument
@@ -224,217 +242,230 @@ export default function Home() {
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-foreground"
-      style={{
+      className={cn(
+        "relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-foreground",
+        isTVMode && "flex items-center justify-center bg-black" // Centering container for TV mode
+      )}
+      style={!isTVMode ? {
         background: `radial-gradient(circle at top, var(--festive-glow), transparent 50%), linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%)`
-      }}
+      } : {}}
     >
+      {/* Wrapper to apply scaling when in TV mode */}
       <div
-        className="pointer-events-none absolute inset-0 bg-[size:54px_54px] opacity-20"
+        className={cn(
+          "w-full h-full relative transition-transform duration-500 origin-center",
+          isTVMode && "w-[1280px] h-[720px] shrink-0 rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+        )}
         style={{
-          backgroundImage: `linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)`
+          transform: isTVMode ? `scale(${scaleFactor})` : 'none',
+          background: isTVMode ? `radial-gradient(circle at top, var(--festive-glow), transparent 50%), linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%)` : undefined
         }}
-      />
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
-        className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full blur-[120px] bg-violet-300/10 animate-glow-pulse"
-      />
-      <div className="pointer-events-none absolute -bottom-40 right-[-12%] h-[28rem] w-[28rem] rounded-full bg-cyan-400/5 blur-[130px] animate-glow-pulse" />
-
-      {/* Fireworks Effect - Increased for better visibility through glass */}
-      <FireworksBackground
-        population={1}
-        particleSpeed={4}
-        explosionHeight={{ min: 0, max: 0.15 }}
-        className="absolute inset-0 z-0 pointer-events-none opacity-80"
-      />
-
-      {festiveSymbols.map((item) => (
-        <motion.span
-          key={item.id}
-          className="pointer-events-none absolute text-xl text-primary/70 drop-shadow-[0_0_20px_var(--festive-glow)]"
-          style={{ left: item.left, top: item.top }}
-          initial={{ opacity: 0.15, y: 0, rotate: 0 }}
-          animate={{ opacity: [0.2, 0.7, 0.2], y: [0, -18, 0], rotate: [0, 10, 0] }}
-          transition={{
-            duration: item.duration,
-            repeat: Number.POSITIVE_INFINITY,
-            delay: item.delay,
-            ease: "easeInOut",
+      >
+        <div
+          className="pointer-events-none absolute inset-0 bg-[size:54px_54px] opacity-20"
+          style={{
+            backgroundImage: `linear-gradient(to right, var(--grid-line) 1px, transparent 1px), linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px)`
           }}
-        >
-          {item.symbol}
-        </motion.span>
-      ))}
+        />
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1 }}
+          className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[min(900px,92vw)] -translate-x-1/2 rounded-full blur-[120px] bg-violet-300/10 animate-glow-pulse"
+        />
+        <div className="pointer-events-none absolute -bottom-40 right-[-12%] h-[28rem] w-[28rem] rounded-full bg-cyan-400/5 blur-[130px] animate-glow-pulse" />
 
-      <main className="relative z-10 mx-auto flex min-h-screen w-full flex-col px-4 py-6 sm:px-8 sm:py-8 lg:px-12">
-        <motion.header
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="space-y-4 text-center mt-2 relative z-50 pt-4"
-        >
-          <div className="mx-auto mb-6 flex w-fit flex-wrap items-center justify-center gap-3 relative z-50">
-            <a
-              href="https://www.tiktok.com/@happytiime"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group relative inline-flex z-50 items-center gap-2 overflow-hidden rounded-full border border-white/20 bg-slate-950/80 px-5 py-2 text-base font-bold text-white shadow-lg backdrop-blur-md transition-all hover:scale-105 hover:bg-slate-900"
-            >
-              <BorderBeam
-                duration={4}
-                size={140}
-                className="from-transparent via-cyan-400 to-transparent"
-              />
-              <BorderBeam
-                duration={4}
-                delay={2}
-                size={140}
-                borderWidth={1.5}
-                className="from-transparent via-fuchsia-400 to-transparent"
-              />
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 15.68a6.34 6.34 0 0 0 6.27 6.36 6.34 6.34 0 0 0 6.25-6.36V7.94a8.27 8.27 0 0 0 3.76.92V5.38a5.04 5.04 0 0 1-1.69-.69z" />
-              </svg>
-              @happytiime
-            </a>
+        {/* Fireworks Effect - Increased for better visibility through glass */}
+        <FireworksBackground
+          population={1}
+          particleSpeed={4}
+          explosionHeight={{ min: 0, max: 0.15 }}
+          className="absolute inset-0 z-0 pointer-events-none opacity-80"
+        />
 
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
-              <MoonStar className="size-4" />
-              جمعة العيد العائلية
-              <Sparkles className="size-4" />
-            </div>
-          </div>
+        {festiveSymbols.map((item) => (
+          <motion.span
+            key={item.id}
+            className="pointer-events-none absolute text-xl text-primary/70 drop-shadow-[0_0_20px_var(--festive-glow)]"
+            style={{ left: item.left, top: item.top }}
+            initial={{ opacity: 0.15, y: 0, rotate: 0 }}
+            animate={{ opacity: [0.2, 0.7, 0.2], y: [0, -18, 0], rotate: [0, 10, 0] }}
+            transition={{
+              duration: item.duration,
+              repeat: Number.POSITIVE_INFINITY,
+              delay: item.delay,
+              ease: "easeInOut",
+            }}
+          >
+            {item.symbol}
+          </motion.span>
+        ))}
 
-          <div className="absolute left-6 top-6 z-50 flex items-center gap-3">
-            <ThemeToggle />
-            <Button
-              variant="outline"
-              size="icon"
-              className={cn(
-                "rounded-full border-glass-border text-foreground transition-all backdrop-blur-md",
-                isTVMode
-                  ? "border-primary/50 bg-primary/20 text-primary"
-                  : "bg-glass-bg hover:bg-glass-border"
-              )}
-              onClick={() => setIsTVMode(!isTVMode)}
-            >
-              <Monitor className="h-5 w-5" />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full border-glass-border bg-glass-bg text-foreground hover:bg-glass-border backdrop-blur-md"
-              onClick={toggleFullscreen}
-            >
-              <Maximize2 className="h-5 w-5" />
-            </Button>
-          </div>
-
-          <h1 className={cn(
-            "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
-            isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
-          )}>
-            فعالية العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
-          </h1>
-          <p className={cn(
-            "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
-            isTVMode ? "text-2xl sm:text-3xl lg:text-4xl opacity-100" : "text-base sm:text-xl"
-          )}>
-            جاهزين للمنافسة؟ اجمع العائلة، وزع الفرق، وابدأ التحدي الآن على الشاشة الكبيرة.
-          </p>
-        </motion.header>
-
-        {/* Hero Game Section (Family Trivia) */}
-        <motion.section
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="mx-auto mt-12 w-full max-w-5xl"
-        >
-          <div className="group relative overflow-hidden rounded-[2.75rem] border border-white/20 bg-slate-950/50 shadow-[0_28px_120px_rgba(6,182,212,0.24)]">
-            <Image
-              src="/images/landing-hero.jpg"
-              alt="أجواء فعالية العيد العائلية"
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 1200px"
-              className="object-cover object-center transition-transform duration-[1400ms] group-hover:scale-105"
-            />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/20" />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(251,191,36,0.34),transparent_46%),radial-gradient(circle_at_82%_18%,rgba(56,189,248,0.24),transparent_42%)]" />
-
-            <div className="relative z-10 flex min-h-[27rem] flex-col justify-end gap-5 p-5 sm:min-h-[31rem] sm:p-8 lg:min-h-[34rem] lg:p-12">
-              <span className="inline-flex w-fit items-center rounded-full border border-amber-300/40 bg-black/50 px-4 py-2 text-xs font-bold tracking-[0.18em] text-amber-200 backdrop-blur-md">
-                اللعبة الرئيسية
-              </span>
-
-              <h2
-                className={cn(
-                  "max-w-2xl font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 drop-shadow-[0_8px_22px_rgba(0,0,0,0.55)]",
-                  isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
-                )}
+        <main className="relative z-10 mx-auto flex min-h-screen w-full flex-col px-4 py-6 sm:px-8 sm:py-8 lg:px-12">
+          <motion.header
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="space-y-4 text-center mt-2 relative z-50 pt-4"
+          >
+            <div className="mx-auto mb-6 flex w-fit flex-wrap items-center justify-center gap-3 relative z-50">
+              <a
+                href="https://www.tiktok.com/@happytiime"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group relative inline-flex z-50 items-center gap-2 overflow-hidden rounded-full border border-white/20 bg-slate-950/80 px-5 py-2 text-base font-bold text-white shadow-lg backdrop-blur-md transition-all hover:scale-105 hover:bg-slate-900"
               >
-                مسابقات العائلة
-              </h2>
-              <p className="max-w-2xl text-lg font-medium text-cyan-100/95 drop-shadow-[0_8px_22px_rgba(0,0,0,0.6)] sm:text-xl">
-                قصص، ذكريات، ومفاجآت
-              </p>
-              <p className="max-w-2xl text-base leading-relaxed text-slate-100/95 drop-shadow-[0_8px_20px_rgba(0,0,0,0.62)] sm:text-lg">
-                اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
-              </p>
+                <BorderBeam
+                  duration={4}
+                  size={140}
+                  className="from-transparent via-cyan-400 to-transparent"
+                />
+                <BorderBeam
+                  duration={4}
+                  delay={2}
+                  size={140}
+                  borderWidth={1.5}
+                  className="from-transparent via-fuchsia-400 to-transparent"
+                />
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 15.68a6.34 6.34 0 0 0 6.27 6.36 6.34 6.34 0 0 0 6.25-6.36V7.94a8.27 8.27 0 0 0 3.76.92V5.38a5.04 5.04 0 0 1-1.69-.69z" />
+                </svg>
+                @happytiime
+              </a>
 
-              <div className="mt-2 grid max-w-2xl gap-3 sm:grid-cols-2">
-                <Button
-                  size="lg"
-                  onClick={() => {
-                    window.open("https://salla.sa/happyystoree/KRaxjOw", "_blank")
-                  }}
-                  className={cn(
-                    "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
-                    isTVMode ? "text-2xl" : ""
-                  )}
-                >
-                  <ShoppingCart className="mr-2 size-6 text-slate-900" />
-                  شراء اللعبة
-                </Button>
-
-                <Button
-                  size="lg"
-                  onClick={startSequence}
-                  className={cn(
-                    "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
-                    isTVMode ? "text-2xl" : ""
-                  )}
-                >
-                  <Sparkles className="mr-2 size-6 text-cyan-100" />
-                  ابدأ الفعالية الآن
-                </Button>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-2 text-xs font-semibold tracking-[0.16em] text-violet-100 backdrop-blur-md sm:text-sm">
+                <MoonStar className="size-4" />
+                جمعة العيد العائلية
+                <Sparkles className="size-4" />
               </div>
             </div>
-          </div>
-        </motion.section>
+
+            <div className="absolute left-6 top-6 z-50 flex items-center gap-3">
+              <ThemeToggle />
+              <Button
+                variant="outline"
+                size="icon"
+                className={cn(
+                  "rounded-full border-glass-border text-foreground transition-all backdrop-blur-md",
+                  isTVMode
+                    ? "border-primary/50 bg-primary/20 text-primary"
+                    : "bg-glass-bg hover:bg-glass-border"
+                )}
+                onClick={() => setIsTVMode(!isTVMode)}
+              >
+                <Monitor className="h-5 w-5" />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full border-glass-border bg-glass-bg text-foreground hover:bg-glass-border backdrop-blur-md"
+                onClick={toggleFullscreen}
+              >
+                <Maximize2 className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <h1 className={cn(
+              "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
+              isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
+            )}>
+              فعالية العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
+            </h1>
+            <p className={cn(
+              "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
+              isTVMode ? "text-2xl sm:text-3xl lg:text-4xl opacity-100" : "text-base sm:text-xl"
+            )}>
+              جاهزين للمنافسة؟ اجمع العائلة، وزع الفرق، وابدأ التحدي الآن على الشاشة الكبيرة.
+            </p>
+          </motion.header>
+
+          {/* Hero Game Section (Family Trivia) */}
+          <motion.section
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="mx-auto mt-12 w-full max-w-5xl"
+          >
+            <div className="group relative overflow-hidden rounded-[2.75rem] border border-white/20 bg-slate-950/50 shadow-[0_28px_120px_rgba(6,182,212,0.24)]">
+              <Image
+                src="/images/landing-hero.jpg"
+                alt="أجواء فعالية العيد العائلية"
+                fill
+                priority
+                sizes="(max-width: 1024px) 100vw, 1200px"
+                className="object-cover object-center transition-transform duration-[1400ms] group-hover:scale-105"
+              />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-900/20" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_24%,rgba(251,191,36,0.34),transparent_46%),radial-gradient(circle_at_82%_18%,rgba(56,189,248,0.24),transparent_42%)]" />
+
+              <div className="relative z-10 flex min-h-[27rem] flex-col justify-end gap-5 p-5 sm:min-h-[31rem] sm:p-8 lg:min-h-[34rem] lg:p-12">
+
+                <h2
+                  className={cn(
+                    "max-w-2xl font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 drop-shadow-[0_8px_22px_rgba(0,0,0,0.55)]",
+                    isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
+                  )}
+                >
+                  مسابقات العائلة
+                </h2>
+                <p className="max-w-2xl text-lg font-medium text-cyan-100/95 drop-shadow-[0_8px_22px_rgba(0,0,0,0.6)] sm:text-xl">
+                  قصص، ذكريات، ومفاجآت
+                </p>
+                <p className="max-w-2xl text-base leading-relaxed text-slate-100/95 drop-shadow-[0_8px_20px_rgba(0,0,0,0.62)] sm:text-lg">
+                  اختبر معلوماتكم عن قصص العائلة، التقاليد، ومواقف العيد المضحكة في تجربة تفاعلية مليئة بالحماس والضحك.
+                </p>
+
+                <div className="mt-2 grid max-w-2xl gap-3 sm:grid-cols-2">
+                  <Button
+                    size="lg"
+                    onClick={() => {
+                      window.open("https://salla.sa/happyystoree/KRaxjOw", "_blank")
+                    }}
+                    className={cn(
+                      "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
+                      isTVMode ? "text-2xl" : ""
+                    )}
+                  >
+                    <ShoppingCart className="mr-2 size-6 text-slate-900" />
+                    شراء اللعبة
+                  </Button>
+
+                  <Button
+                    size="lg"
+                    onClick={startSequence}
+                    className={cn(
+                      "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
+                      isTVMode ? "text-2xl" : ""
+                    )}
+                  >
+                    <Sparkles className="mr-2 size-6 text-cyan-100" />
+                    ابدأ الفعالية الآن
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </motion.section>
 
 
 
-        <motion.footer
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, duration: 0.5 }}
-          className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-md sm:mt-6 sm:flex sm:items-center sm:justify-between sm:px-6"
-        >
-          <p className="flex items-center gap-2 text-sm text-violet-50/95 sm:text-base font-cairo">
-            <Sparkles className="size-4 text-violet-200 ml-1" />
-            نصيحة للعرض: خلو واحد هو المضيف والبقية يتوزعون فرق.
-          </p>
-          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/90 sm:mt-0 font-cairo">
-            أجواء الاحتفال: شغالة
-          </p>
-        </motion.footer>
-      </main>
+          <motion.footer
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.5 }}
+            className="mt-5 rounded-2xl border border-white/20 bg-black/25 px-4 py-3 backdrop-blur-md sm:mt-6 sm:flex sm:items-center sm:justify-between sm:px-6"
+          >
+            <p className="flex items-center gap-2 text-sm text-violet-50/95 sm:text-base font-cairo">
+              <Sparkles className="size-4 text-violet-200 ml-1" />
+              نصيحة للعرض: خلو واحد هو المضيف والبقية يتوزعون فرق.
+            </p>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/90 sm:mt-0 font-cairo">
+              أجواء الاحتفال: شغالة
+            </p>
+          </motion.footer>
+        </main>
+
+      </div> {/* End of Scaling Wrapper */}
 
       <LandingChatbotWidget />
 
