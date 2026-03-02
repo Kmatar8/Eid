@@ -9,6 +9,7 @@ import { LiveApiError, getRoomState } from "@/lib/client/live-api"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import { getHostToken } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
+import { MirroringEnforcer } from "@/components/mirroring-enforcer"
 
 const POLL_MS = 2000
 
@@ -142,56 +143,58 @@ export default function RoomDisplayClientPage({ roomId }: RoomDisplayClientPageP
   }, [hostToken, isPageVisible, refreshState])
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-foreground">
-      <div className="party-stage-bg" />
-      <div className="party-stage-grid" />
-      <div className="pointer-events-none fixed -left-20 top-24 h-72 w-72 rounded-full bg-violet-400/20 blur-3xl" />
-      <div className="pointer-events-none fixed -right-20 top-40 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+    <MirroringEnforcer>
+      <div className="relative min-h-screen overflow-hidden text-foreground">
+        <div className="party-stage-bg" />
+        <div className="party-stage-grid" />
+        <div className="pointer-events-none fixed -left-20 top-24 h-72 w-72 rounded-full bg-violet-400/20 blur-3xl" />
+        <div className="pointer-events-none fixed -right-20 top-40 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
 
-      <main className="relative z-10 mx-auto min-h-screen w-full max-w-6xl px-4 py-8 text-white">
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-amber-200/80">Diagnostic View</p>
-            <h1 className="mt-1 text-4xl font-black">TV Room View</h1>
-            <p className="mt-1 text-sm text-slate-300">Room: {roomId}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" type="button" onClick={() => void refreshState()} disabled={!hostToken} className="border-white/30 bg-white/10">
-              Refresh
-            </Button>
-            <Link href="/host" className="text-cyan-300 underline">
-              Host Controls
-            </Link>
-          </div>
-        </header>
-
-        {!hostToken ? (
-          <section className="party-surface rounded-xl p-4 text-sm text-violet-100">
-            Host token is not available in this browser. Login first at <Link className="underline" href="/host">/host</Link>.
-          </section>
-        ) : null}
-
-        {error ? <p className="party-status-error mb-4 rounded-xl px-4 py-3 text-sm">{error}</p> : null}
-
-        {room ? (
-          <section className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {room.teams.map((team) => (
-                <article key={team.teamId} className="party-surface rounded-2xl p-6 text-center">
-                  <p className="text-xl text-slate-200">{team.name}</p>
-                  <p className="mt-2 text-7xl font-black text-amber-300">{team.score}</p>
-                  <p className="mt-2 text-sm text-slate-300">Players: {team.playerCount}</p>
-                </article>
-              ))}
+        <main className="relative z-10 mx-auto min-h-screen w-full max-w-6xl px-4 py-8 text-white">
+          <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-amber-200/80">Diagnostic View</p>
+              <h1 className="mt-1 text-4xl font-black">TV Room View</h1>
+              <p className="mt-1 text-sm text-slate-300">Room: {roomId}</p>
             </div>
-            <div className="party-surface rounded-2xl p-4">
-              <RoomStatePanel room={room} highlightPlayerId={room.trivia.currentResponderPlayerId} />
+            <div className="flex items-center gap-2">
+              <Button variant="outline" type="button" onClick={() => void refreshState()} disabled={!hostToken} className="border-white/30 bg-white/10">
+                Refresh
+              </Button>
+              <Link href="/host" className="text-cyan-300 underline">
+                Host Controls
+              </Link>
             </div>
-          </section>
-        ) : (
-          <p className="text-sm text-slate-300">Waiting for room state...</p>
-        )}
-      </main>
-    </div>
+          </header>
+
+          {!hostToken ? (
+            <section className="party-surface rounded-xl p-4 text-sm text-violet-100">
+              Host token is not available in this browser. Login first at <Link className="underline" href="/host">/host</Link>.
+            </section>
+          ) : null}
+
+          {error ? <p className="party-status-error mb-4 rounded-xl px-4 py-3 text-sm">{error}</p> : null}
+
+          {room ? (
+            <section className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {room.teams.map((team) => (
+                  <article key={team.teamId} className="party-surface rounded-2xl p-6 text-center">
+                    <p className="text-xl text-slate-200">{team.name}</p>
+                    <p className="mt-2 text-7xl font-black text-amber-300">{team.score}</p>
+                    <p className="mt-2 text-sm text-slate-300">Players: {team.playerCount}</p>
+                  </article>
+                ))}
+              </div>
+              <div className="party-surface rounded-2xl p-4">
+                <RoomStatePanel room={room} highlightPlayerId={room.trivia.currentResponderPlayerId} />
+              </div>
+            </section>
+          ) : (
+            <p className="text-sm text-slate-300">Waiting for room state...</p>
+          )}
+        </main>
+      </div>
+    </MirroringEnforcer>
   )
 }

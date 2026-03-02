@@ -163,7 +163,6 @@ type FullscreenElement = HTMLElement & {
 export default function Home() {
   const router = useRouter()
   const [showInstallPrompt, setShowInstallPrompt] = useState(false)
-  const [isTVMode, setIsTVMode] = useState(false)
 
   useEffect(() => {
     let viewportMeta = document.querySelector('meta[name="viewport"]')
@@ -180,26 +179,7 @@ export default function Home() {
     )
   }, [])
 
-  // Calculate CSS scale for TV mode based on screen width
-  const [scaleFactor, setScaleFactor] = useState(1);
-  useEffect(() => {
-    if (!isTVMode) {
-      setScaleFactor(1);
-      return;
-    }
 
-    const handleResize = () => {
-      // If we are in TV mode, we want a virtual width of 1280px.
-      // We calculate how much we need to scale down the 1280px container to fit the physical screen.
-      // Max scale is 1 (don't scale up on huge screens).
-      const scale = Math.min(window.innerWidth / 1280, 1);
-      setScaleFactor(scale);
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [isTVMode]);
 
   const toggleFullscreen = () => {
     const doc = document as FullscreenDocument
@@ -243,23 +223,16 @@ export default function Home() {
   return (
     <div
       className={cn(
-        "relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-foreground",
-        isTVMode && "flex items-center justify-center bg-black" // Centering container for TV mode
+        "relative min-h-screen overflow-hidden transition-colors duration-1000 ease-in-out text-foreground"
       )}
-      style={!isTVMode ? {
+      style={{
         background: `radial-gradient(circle at top, var(--festive-glow), transparent 50%), linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%)`
-      } : {}}
+      }}
     >
-      {/* Wrapper to apply scaling when in TV mode */}
       <div
         className={cn(
-          "w-full h-full relative transition-transform duration-500 origin-center",
-          isTVMode && "w-[1280px] h-[720px] shrink-0 rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+          "w-full h-full relative"
         )}
-        style={{
-          transform: isTVMode ? `scale(${scaleFactor})` : 'none',
-          background: isTVMode ? `radial-gradient(circle at top, var(--festive-glow), transparent 50%), linear-gradient(160deg, var(--background) 0%, var(--secondary) 46%, var(--background) 100%)` : undefined
-        }}
       >
         <div
           className="pointer-events-none absolute inset-0 bg-[size:54px_54px] opacity-20"
@@ -345,20 +318,6 @@ export default function Home() {
               <Button
                 variant="outline"
                 size="icon"
-                className={cn(
-                  "rounded-full border-glass-border text-foreground transition-all backdrop-blur-md",
-                  isTVMode
-                    ? "border-primary/50 bg-primary/20 text-primary"
-                    : "bg-glass-bg hover:bg-glass-border"
-                )}
-                onClick={() => setIsTVMode(!isTVMode)}
-              >
-                <Monitor className="h-5 w-5" />
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
                 className="rounded-full border-glass-border bg-glass-bg text-foreground hover:bg-glass-border backdrop-blur-md"
                 onClick={toggleFullscreen}
               >
@@ -367,14 +326,12 @@ export default function Home() {
             </div>
 
             <h1 className={cn(
-              "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500",
-              isTVMode ? "text-6xl sm:text-8xl lg:text-9xl mb-4" : "text-4xl sm:text-6xl lg:text-8xl"
+              "text-balance font-extrabold tracking-tight text-foreground drop-shadow-[0_12px_30px_rgba(0,0,0,0.15)] font-cairo transition-all duration-500 text-4xl sm:text-6xl lg:text-8xl"
             )}>
               فعالية العيد، <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-orange-500">لعب وتحدي</span>
             </h1>
             <p className={cn(
-              "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500",
-              isTVMode ? "text-2xl sm:text-3xl lg:text-4xl opacity-100" : "text-base sm:text-xl"
+              "mx-auto max-w-4xl text-pretty text-slate-100/85 font-cairo transition-all duration-500 text-base sm:text-xl"
             )}>
               جاهزين للمنافسة؟ اجمع العائلة، وزع الفرق، وابدأ التحدي الآن على الشاشة الكبيرة.
             </p>
@@ -403,8 +360,7 @@ export default function Home() {
 
                 <h2
                   className={cn(
-                    "max-w-2xl font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 drop-shadow-[0_8px_22px_rgba(0,0,0,0.55)]",
-                    isTVMode ? "text-6xl" : "text-4xl sm:text-5xl"
+                    "max-w-2xl font-cairo font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-indigo-300 drop-shadow-[0_8px_22px_rgba(0,0,0,0.55)] text-4xl sm:text-5xl"
                   )}
                 >
                   مسابقات العائلة
@@ -423,8 +379,7 @@ export default function Home() {
                       window.open("https://salla.sa/happyystoree/KRaxjOw", "_blank")
                     }}
                     className={cn(
-                      "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16",
-                      isTVMode ? "text-2xl" : ""
+                      "h-14 rounded-2xl bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-lg font-black text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.35)] transition-all hover:scale-[1.02] active:scale-[0.98] sm:h-16"
                     )}
                   >
                     <ShoppingCart className="mr-2 size-6 text-slate-900" />
@@ -435,8 +390,7 @@ export default function Home() {
                     size="lg"
                     onClick={startSequence}
                     className={cn(
-                      "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16",
-                      isTVMode ? "text-2xl" : ""
+                      "h-14 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-lg font-bold text-white shadow-[0_10px_30px_-10px_rgba(6,182,212,0.6)] transition-all hover:scale-[1.02] hover:from-cyan-400 hover:to-indigo-500 active:scale-[0.98] sm:h-16"
                     )}
                   >
                     <Sparkles className="mr-2 size-6 text-cyan-100" />
