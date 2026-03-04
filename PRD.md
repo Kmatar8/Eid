@@ -114,11 +114,13 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 ### 6.6 Landing Hero Social Row
 1. Landing hero social/profile chip and festive event pill are displayed beside each other in a single responsive row.
 
-### 6.7 Host Mobile Mirror Guidance
-1. When `/host` is opened on mobile devices, host should receive an in-app helper popup with clear setup guidance for TV mirroring use.
-2. If mobile host is in portrait orientation, UI should show a guidance alert to switch to landscape for better TV readability.
-3. Host UI on mobile must support a compact display mode that scales down the host canvas for mirrored/cast TV scenarios where the default layout appears oversized.
-4. Compact mode and helper-dismiss preference should persist per browser session/local storage without server persistence.
+### 6.7 Host Surface Device Access Policy
+1. Landing page (`/`) remains accessible on both mobile and laptop/desktop screens.
+2. Host-facing runtime surfaces (`/host/login`, `/host`, `/room/[roomId]`) are laptop/desktop only.
+3. On non-laptop viewports (below `1024px`), host-facing runtime surfaces must render a blocking overlay that states the app is laptop-only.
+4. The laptop-only overlay must not provide a manual close action on blocked viewports.
+5. The laptop-only overlay is removed only when viewport size reaches laptop width (`>=1024px`).
+6. Player mobile-controller surfaces remain unchanged for gameplay controllers.
 
 ## 7. Room Lifecycle
 ## 7.1 Room states

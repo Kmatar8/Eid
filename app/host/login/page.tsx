@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
+import { LaptopOnlyOverlay } from "@/components/laptop-only-overlay"
 import { LiveApiError, hostLogin } from "@/lib/client/live-api"
 import { getHostToken, setHostToken, setHostUsername } from "@/lib/client/live-session"
 
@@ -92,6 +93,10 @@ export default function HostLoginPage() {
           </p>
         </section>
       </main>
+      <LaptopOnlyOverlay
+        title="تسجيل المضيف يحتاج لابتوب"
+        description="لإكمال تسجيل الدخول وبدء الفعالية، افتح هذه الصفحة من شاشة لابتوب أو كمبيوتر."
+      />
     </div>
   )
 }

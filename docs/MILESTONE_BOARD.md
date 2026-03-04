@@ -46,6 +46,7 @@ This board tracks implementation order, ownership, and execution status.
 | 26 | T-0055 | M5 | Cloudflare Deploy Retry Hardening | done | AI-Agent | T-0054 | Add deploy retry wrapper for transient API 502 failures and update CI command guidance |
 | 27 | T-0057 | M1 | Landing Social Row Layout Adjustment | done | AI-Agent | T-0055 | Render TikTok profile chip beside festive pill in responsive row |
 | 28 | T-0058 | M4 | Host Mobile TV-Mirror Guidance + Compact Mode | done | AI-Agent | T-0057 | Added mobile helper modal, portrait guidance alert, and persisted compact mirror scaling mode on `/host` |
+| 29 | T-0059 | M1 | Host Surfaces Laptop-Only Access Gate | done | AI-Agent | T-0058 | Enforced non-dismissible laptop-only overlay on `/host/login` and host/room runtime wrappers |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.
