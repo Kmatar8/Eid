@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FeedbackOverlay, type FeedbackOverlayContext } from "@/components/ui/feedback-animations"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { LiveApiError, getRoomState, makeRequestId, reconnectPlayer, sendAction } from "@/lib/client/live-api"
+import { preferNewerRoomSnapshot } from "@/lib/client/room-snapshot"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import { clearPlayerSession, getPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/client/live-session"
 import type { RoomSnapshot } from "@/lib/server/types"
@@ -232,6 +233,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
   }, [])
 
+  const applyRoomSnapshot = useCallback((incomingRoom: RoomSnapshot) => {
+    setRoom((currentRoom) => preferNewerRoomSnapshot(currentRoom, incomingRoom))
+  }, [])
+
   const terminateControllerSession = useCallback(
     (reason: unknown, message?: string) => {
       clearPlayerSession(roomId)
@@ -303,7 +308,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         )
         return
       }
-      setRoom(response.room)
+      applyRoomSnapshot(response.room)
       setSession((previous) => {
         const next = {
           roomId,
@@ -322,7 +327,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
       setError(toErrorMessage(requestError))
     }
-  }, [roomId, session, terminateControllerSession])
+  }, [applyRoomSnapshot, roomId, session, terminateControllerSession])
 
   const refreshState = useCallback(async () => {
     if (!session) {
@@ -344,7 +349,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         )
         return
       }
-      setRoom(response.payload.room)
+      applyRoomSnapshot(response.payload.room)
       setError(null)
     } catch (requestError) {
       if (isTerminalControllerSessionError(requestError)) {
@@ -355,7 +360,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [roomId, session, syncServerClock, terminateControllerSession])
+  }, [applyRoomSnapshot, roomId, session, syncServerClock, terminateControllerSession])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -415,7 +420,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           )
           return
         }
-        setRoom(envelope.payload.room)
+        applyRoomSnapshot(envelope.payload.room)
         setError(null)
       },
     })
@@ -423,7 +428,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return () => {
       unsubscribe()
     }
-  }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
+  }, [applyRoomSnapshot, isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
 
   useEffect(() => {
     if (!session) {
@@ -671,7 +676,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     try {
       const ack = await sendAction(roomId, session.token, "player.input", { intent: "buzz" })
       syncServerClock(ack.ts)
-      setRoom(ack.payload.room)
+      applyRoomSnapshot(ack.payload.room)
       setNotice("تم تسجيل ضغطتك.")
     } catch (requestError) {
       if (isTerminalControllerSessionError(requestError)) {
@@ -707,7 +712,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
 
       syncServerClock(ack.ts)
-      setRoom(ack.payload.room)
+      applyRoomSnapshot(ack.payload.room)
       setNotice(`تم إرسال الإجابة: ${option}`)
     } catch (requestError) {
       setSubmittedQuestionId(null)
@@ -746,7 +751,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     try {
       const ack = await sendAction(roomId, session.token, "player.submitHarajEstimate", { estimate })
       syncServerClock(ack.ts)
-      setRoom(ack.payload.room)
+      applyRoomSnapshot(ack.payload.room)
       setSubmittedHarajRoundKey(harajRoundKey)
       setNotice("تم إرسال التخمين بنجاح.")
     } catch (requestError) {

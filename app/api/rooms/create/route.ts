@@ -6,7 +6,7 @@ import {
   ensureHostSessionRecord,
   isHostSessionActive,
 } from "@/lib/server/store"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { isRoomScopedStoreEnabled, persistRoomShardToDurable, withSharedStore } from "@/lib/server/store-sync"
 import { isHostToken, verifyToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -65,6 +65,10 @@ export async function POST(request: Request) {
     const snapshot = buildRoomSnapshot(created.room.id)
     if (!snapshot) {
       return errorResponse(500, "ROOM_SNAPSHOT_FAILED", "Unable to create room snapshot")
+    }
+
+    if (isRoomScopedStoreEnabled()) {
+      await persistRoomShardToDurable(created.room.id)
     }
 
     const origin = new URL(request.url).origin

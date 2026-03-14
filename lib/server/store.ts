@@ -478,6 +478,22 @@ export function getStoreRevision() {
   return getStore().revision
 }
 
+function shouldIgnoreIncomingRoomShard(currentRoom: RoomRecord | undefined, incomingRoom: RoomRecord | null | undefined) {
+  if (!currentRoom) {
+    return false
+  }
+
+  if (!incomingRoom) {
+    return true
+  }
+
+  if (incomingRoom.version < currentRoom.version) {
+    return true
+  }
+
+  return incomingRoom.version === currentRoom.version && incomingRoom.updatedAt < currentRoom.updatedAt
+}
+
 export function importRoomShardSnapshot(roomId: string, snapshot: unknown): boolean {
   if (!snapshot || typeof snapshot !== "object") {
     return false
@@ -506,6 +522,12 @@ export function importRoomShardSnapshot(roomId: string, snapshot: unknown): bool
     }
 
     const store = getStore()
+    const currentRoom = store.rooms.get(roomId)
+    const incomingRoom = candidate.room ?? null
+    if (shouldIgnoreIncomingRoomShard(currentRoom, incomingRoom)) {
+      return false
+    }
+
     removeRoomScopedStoreData(store, roomId)
 
     if (candidate.room) {

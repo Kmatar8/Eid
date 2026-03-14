@@ -2,7 +2,7 @@ import { errorResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor, type RoomActor } from "@/lib/server/room-auth"
 import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState, subscribeRoomEvents } from "@/lib/server/store"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { hydrateRoomShardFromDurable, withRoomShardStore } from "@/lib/server/store-sync"
 import type { RoomSnapshot } from "@/lib/server/types"
 
 export const runtime = "nodejs"
@@ -20,6 +20,10 @@ type RouteContext = {
 type SnapshotReadResult =
   | { ok: true; snapshot: RoomSnapshot }
   | { ok: false; status: number; code: string; message: string; details?: Record<string, unknown> }
+
+type SnapshotReadOptions = {
+  forceRefresh?: boolean
+}
 
 type StreamSubscriber = {
   id: string
@@ -130,14 +134,35 @@ function authorizeSnapshotForSubscriber(
   return { ok: true }
 }
 
-async function readAuthorizedSnapshot(roomId: string, actor: RoomActor): Promise<SnapshotReadResult> {
+async function readAuthorizedSnapshot(
+  roomId: string,
+  actor: RoomActor,
+  options: SnapshotReadOptions = {}
+): Promise<SnapshotReadResult> {
   return withRoomShardStore(roomId, async () => {
-    const room = getRoom(roomId)
+    if (options.forceRefresh) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+    }
+
+    let room = getRoom(roomId)
+    if (!room) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId)
+    }
     if (!room) {
       return { ok: false, status: 404, code: "ROOM_NOT_FOUND", message: "Room not found" }
     }
 
     if (actor.role === "host" && room.hostId !== actor.actorId) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId) ?? room
+      if (room.hostId === actor.actorId) {
+        const snapshot = buildRoomSnapshot(roomId)
+        if (!snapshot) {
+          return { ok: false, status: 500, code: "ROOM_SNAPSHOT_FAILED", message: "Unable to build room snapshot" }
+        }
+        return { ok: true, snapshot }
+      }
       return { ok: false, status: 403, code: "HOST_ROOM_MISMATCH", message: "Room does not belong to host" }
     }
 
@@ -152,7 +177,21 @@ async function readAuthorizedSnapshot(roomId: string, actor: RoomActor): Promise
         }
       }
 
-      const player = getPlayerInRoom(roomId, actor.actorId)
+      let player = getPlayerInRoom(roomId, actor.actorId)
+      if (!player) {
+        await hydrateRoomShardFromDurable(roomId, { force: true })
+        room = getRoom(roomId) ?? room
+        if (!isRoomActiveState(room.state)) {
+          return {
+            ok: false,
+            status: 409,
+            code: "ROOM_NOT_ACTIVE",
+            message: "Room is no longer active",
+            details: { state: room.state },
+          }
+        }
+        player = getPlayerInRoom(roomId, actor.actorId)
+      }
       if (!player) {
         return { ok: false, status: 404, code: "PLAYER_NOT_FOUND", message: "Player not found in this room" }
       }
@@ -167,9 +206,17 @@ async function readAuthorizedSnapshot(roomId: string, actor: RoomActor): Promise
   })
 }
 
-async function readSnapshotForBroadcast(roomId: string): Promise<SnapshotReadResult> {
+async function readSnapshotForBroadcast(roomId: string, options: SnapshotReadOptions = {}): Promise<SnapshotReadResult> {
   return withRoomShardStore(roomId, async () => {
-    const room = getRoom(roomId)
+    if (options.forceRefresh) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+    }
+
+    let room = getRoom(roomId)
+    if (!room) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId)
+    }
     if (!room) {
       return { ok: false, status: 404, code: "ROOM_NOT_FOUND", message: "Room not found" }
     }
@@ -312,14 +359,19 @@ function scheduleHubPoll(hub: RoomStreamHub, delayMs: number) {
 
     hub.inFlight = true
     try {
-      const snapshotResult = await readSnapshotForBroadcast(hub.roomId)
+      let snapshotResult = await readSnapshotForBroadcast(hub.roomId)
+      if (snapshotResult.ok && hub.currentSnapshot && snapshotResult.snapshot.version < hub.lastVersion) {
+        snapshotResult = await readSnapshotForBroadcast(hub.roomId, { forceRefresh: true })
+      }
       if (!snapshotResult.ok) {
         fanOutErrorAndClose(hub, snapshotResult)
         return
       }
 
       const nextSnapshot = snapshotResult.snapshot
-      if (!hub.currentSnapshot || nextSnapshot.version !== hub.lastVersion) {
+      if (hub.currentSnapshot && nextSnapshot.version < hub.lastVersion) {
+        // Ignore stale reads without rewinding the stream hub version.
+      } else if (!hub.currentSnapshot || nextSnapshot.version !== hub.lastVersion) {
         hub.currentSnapshot = nextSnapshot
         hub.lastVersion = nextSnapshot.version
         fanOutSnapshot(hub, nextSnapshot)

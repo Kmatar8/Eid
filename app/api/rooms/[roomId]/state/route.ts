@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
 import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState } from "@/lib/server/store"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { hydrateRoomShardFromDurable, withRoomShardStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
 
@@ -22,12 +22,25 @@ export async function GET(request: Request, context: RouteContext) {
       return errorResponse(actor.status, actor.code, actor.message)
     }
 
-    const room = getRoom(roomId)
+    let room = getRoom(roomId)
+    if (!room) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId)
+    }
     if (!room) {
       return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
     }
 
     if (actor.actor.role === "host" && room.hostId !== actor.actor.actorId) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId) ?? room
+      if (room.hostId === actor.actor.actorId) {
+        const snapshot = buildRoomSnapshot(roomId)
+        if (!snapshot) {
+          return errorResponse(500, "ROOM_SNAPSHOT_FAILED", "Unable to build room snapshot")
+        }
+        return jsonResponse(200, makeServerEnvelope("room.state", { room: snapshot }))
+      }
       return errorResponse(403, "HOST_ROOM_MISMATCH", "Room does not belong to host")
     }
 
@@ -36,7 +49,15 @@ export async function GET(request: Request, context: RouteContext) {
         return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active", { state: room.state })
       }
 
-      const player = getPlayerInRoom(roomId, actor.actor.actorId)
+      let player = getPlayerInRoom(roomId, actor.actor.actorId)
+      if (!player) {
+        await hydrateRoomShardFromDurable(roomId, { force: true })
+        room = getRoom(roomId) ?? room
+        if (!isRoomActiveState(room.state)) {
+          return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active", { state: room.state })
+        }
+        player = getPlayerInRoom(roomId, actor.actor.actorId)
+      }
       if (!player) {
         return errorResponse(404, "PLAYER_NOT_FOUND", "Player not found in this room")
       }

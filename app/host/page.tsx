@@ -14,6 +14,7 @@ import confetti from "canvas-confetti"
 import { AvatarGroup, AvatarGroupTooltip } from "@/components/animate-ui/components/animate/avatar-group"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LiveApiError, createRoom, getRoomState, sendAction } from "@/lib/client/live-api"
+import { preferNewerRoomSnapshot } from "@/lib/client/room-snapshot"
 import { subscribeRoomStateStream } from "@/lib/client/live-stream"
 import {
   clearHostRoomId,
@@ -478,6 +479,10 @@ export default function HostStagePage() {
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
   }, [])
 
+  const applyRoomSnapshot = useCallback((incomingRoom: RoomSnapshot) => {
+    setRoom((currentRoom) => preferNewerRoomSnapshot(currentRoom, incomingRoom))
+  }, [])
+
   const releaseRoomBinding = useCallback((message?: string) => {
     clearHostRoomId()
     setRoomId(null)
@@ -911,7 +916,7 @@ export default function HostStagePage() {
         releaseRoomBinding("انتهت الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
         return
       }
-      setRoom(response.payload.room)
+      applyRoomSnapshot(response.payload.room)
       setError(null)
     } catch (requestError) {
       if (
@@ -930,7 +935,7 @@ export default function HostStagePage() {
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [hostToken, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
+  }, [applyRoomSnapshot, hostToken, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
 
   const bootstrapRoom = useCallback(async () => {
     if (!hostToken || roomId || isBootstrappingRoom) {
@@ -946,7 +951,7 @@ export default function HostStagePage() {
       const created = await createRoom(hostToken)
       setRoomId(created.room.roomId)
       setHostRoomId(created.room.roomId)
-      setRoom(created.room)
+      applyRoomSnapshot(created.room)
       setNotice("تم إنشاء غرفة جديدة. اعرض رمز QR ليبدأ اللاعبون بالانضمام.")
     } catch (requestError) {
       if (requestError instanceof LiveApiError && requestError.code === "HOST_ALREADY_ACTIVE") {
@@ -969,7 +974,7 @@ export default function HostStagePage() {
     } finally {
       setIsBootstrappingRoom(false)
     }
-  }, [hostToken, isBootstrappingRoom, recoverFromHostSessionError, roomId])
+  }, [applyRoomSnapshot, hostToken, isBootstrappingRoom, recoverFromHostSessionError, roomId])
 
   useEffect(() => {
     if (!hostToken) {
@@ -1020,7 +1025,7 @@ export default function HostStagePage() {
           releaseRoomBinding("تم إغلاق الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
           return
         }
-        setRoom(envelope.payload.room)
+        applyRoomSnapshot(envelope.payload.room)
         setError(null)
       },
     })
@@ -1029,7 +1034,7 @@ export default function HostStagePage() {
       streamConnectedRef.current = false
       unsubscribe()
     }
-  }, [hostToken, isPageVisible, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
+  }, [applyRoomSnapshot, hostToken, isPageVisible, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
 
   useEffect(() => {
     if (!hostToken || !roomId) {
@@ -1110,7 +1115,7 @@ export default function HostStagePage() {
       try {
         const ack = await sendAction(roomId, hostToken, type, payload)
         syncServerClock(ack.ts)
-        setRoom(ack.payload.room)
+        applyRoomSnapshot(ack.payload.room)
         return ack.payload.room
       } catch (requestError) {
         if (recoverFromHostSessionError(requestError)) {
@@ -1128,7 +1133,7 @@ export default function HostStagePage() {
         setBusyAction(null)
       }
     },
-    [hostToken, recoverFromHostSessionError, refreshState, room, roomId, syncServerClock]
+    [applyRoomSnapshot, hostToken, recoverFromHostSessionError, refreshState, room, roomId, syncServerClock]
   )
 
   const assignPlayer = useCallback(
@@ -1197,7 +1202,7 @@ export default function HostStagePage() {
 
       try {
         const lockAck = await sendAction(roomId, hostToken, "host.lockLobby")
-        setRoom(lockAck.payload.room)
+        applyRoomSnapshot(lockAck.payload.room)
       } catch (requestError) {
         if (!isInvalidTransitionAt(requestError, ["lobby_locked", "teams_ready", "game_live"])) {
           throw requestError
@@ -1206,7 +1211,7 @@ export default function HostStagePage() {
 
       try {
         const teamsAck = await sendAction(roomId, hostToken, "host.startTeams")
-        setRoom(teamsAck.payload.room)
+        applyRoomSnapshot(teamsAck.payload.room)
       } catch (requestError) {
         if (!isInvalidTransitionAt(requestError, ["teams_ready", "game_live"])) {
           throw requestError
@@ -1223,7 +1228,7 @@ export default function HostStagePage() {
     } finally {
       setBusyAction(null)
     }
-  }, [hostToken, recoverFromHostSessionError, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
+  }, [applyRoomSnapshot, hostToken, recoverFromHostSessionError, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
 
   const handleAssignPlayerFromPicker = useCallback(
     async (teamId: string) => {

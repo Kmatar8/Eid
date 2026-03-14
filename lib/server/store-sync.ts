@@ -3,6 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 import {
   exportRoomShardSnapshot,
   exportStoreSnapshot,
+  getRoom,
   getStoreRevision,
   importRoomShardSnapshot,
   importStoreSnapshot,
@@ -43,6 +44,10 @@ type ScopeSyncState = {
   lastPersistedRevision: number
   hydrateInFlight: Promise<void> | null
   persistInFlight: Promise<void> | null
+}
+
+type HydrateRoomShardOptions = {
+  force?: boolean
 }
 
 const roomScopeSyncByRoomId = new Map<string, ScopeSyncState>()
@@ -263,19 +268,21 @@ export async function persistSharedStoreToDurable() {
   }
 }
 
-export async function hydrateRoomShardFromDurable(roomId: string) {
+export async function hydrateRoomShardFromDurable(roomId: string, options: HydrateRoomShardOptions = {}) {
   if (!roomId) {
-    return
+    return false
   }
 
   const syncState = getRoomScopeSyncState(roomId)
-  if (Date.now() - syncState.lastHydratedAt < getRoomHydrateTtlMs()) {
-    return
+  if (!options.force && Date.now() - syncState.lastHydratedAt < getRoomHydrateTtlMs()) {
+    return Boolean(getRoom(roomId))
   }
 
   if (syncState.hydrateInFlight) {
     await syncState.hydrateInFlight
-    return
+    if (!options.force || getRoom(roomId)) {
+      return Boolean(getRoom(roomId))
+    }
   }
 
   syncState.hydrateInFlight = (async () => {
@@ -311,6 +318,8 @@ export async function hydrateRoomShardFromDurable(roomId: string) {
   } finally {
     syncState.hydrateInFlight = null
   }
+
+  return Boolean(getRoom(roomId))
 }
 
 export async function persistRoomShardToDurable(roomId: string) {
@@ -410,7 +419,10 @@ async function withRoomStoreInternal<T>(roomId: string, operation: () => Promise
   if (syncGlobalStore) {
     await hydrateSharedStoreFromDurable()
   }
-  await hydrateRoomShardFromDurable(roomId)
+  const roomAvailable = await hydrateRoomShardFromDurable(roomId)
+  if (!syncGlobalStore && !roomAvailable) {
+    await hydrateSharedStoreFromDurable()
+  }
 
   try {
     return await operation()

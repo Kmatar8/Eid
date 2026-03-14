@@ -1,6 +1,6 @@
 import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState, touchPlayer } from "@/lib/server/store"
 import { errorResponse, getBearerToken, jsonResponse } from "@/lib/server/http"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { hydrateRoomShardFromDurable, withRoomShardStore } from "@/lib/server/store-sync"
 import { isPlayerToken, verifyToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -30,7 +30,11 @@ export async function POST(request: Request, context: RouteContext) {
       return errorResponse(403, "ROOM_TOKEN_MISMATCH", "Token does not belong to this room")
     }
 
-    const room = getRoom(roomId)
+    let room = getRoom(roomId)
+    if (!room) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId)
+    }
     if (!room) {
       return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
     }
@@ -39,7 +43,15 @@ export async function POST(request: Request, context: RouteContext) {
       return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active")
     }
 
-    const player = getPlayerInRoom(roomId, claims.playerId)
+    let player = getPlayerInRoom(roomId, claims.playerId)
+    if (!player) {
+      await hydrateRoomShardFromDurable(roomId, { force: true })
+      room = getRoom(roomId) ?? room
+      if (!isRoomActiveState(room.state)) {
+        return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active")
+      }
+      player = getPlayerInRoom(roomId, claims.playerId)
+    }
     if (!player) {
       return errorResponse(404, "PLAYER_NOT_FOUND", "Player not found in this room")
     }
