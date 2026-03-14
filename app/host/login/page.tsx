@@ -1,14 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
 import { LaptopOnlyOverlay } from "@/components/laptop-only-overlay"
 import { LiveApiError, hostLogin } from "@/lib/client/live-api"
-import { getHostToken, setHostToken, setHostUsername } from "@/lib/client/live-session"
+import { clearHostSession, getHostToken, setHostToken, setHostUsername } from "@/lib/client/live-session"
 
 function toErrorMessage(error: unknown) {
   if (error instanceof LiveApiError) {
@@ -22,17 +22,68 @@ function toErrorMessage(error: unknown) {
   return "Unknown error"
 }
 
+function parseTokenPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".")
+  if (parts.length !== 3 || !parts[1]) {
+    return null
+  }
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
+    const padded = `${base64}${"=".repeat((4 - (base64.length % 4)) % 4)}`
+    const decoded = window.atob(padded)
+    return JSON.parse(decoded) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function isHostTokenLikelyUsable(token: string) {
+  const payload = parseTokenPayload(token)
+  if (!payload) {
+    return false
+  }
+
+  if (payload.role !== "host") {
+    return false
+  }
+
+  if (typeof payload.exp !== "number") {
+    return false
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  return payload.exp > nowSeconds
+}
+
 export default function HostLoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (getHostToken()) {
-      router.replace("/host")
+    const token = getHostToken()
+    if (!token) {
+      return
     }
+
+    if (!isHostTokenLikelyUsable(token)) {
+      clearHostSession()
+      return
+    }
+
+    router.replace("/host")
   }, [router])
+
+  const reason = searchParams.get("reason")
+  const reauthNotice =
+    reason === "access_revoked"
+      ? "انتهت صلاحية وصول المضيف. سجّل الدخول بالكود مرة أخرى."
+      : reason === "session_expired"
+      ? "انتهت جلسة المضيف السابقة أو تم تسجيل الدخول من جهاز آخر. سجّل الدخول مرة أخرى."
+      : null
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -83,6 +134,9 @@ export default function HostLoginPage() {
             </Button>
           </form>
 
+          {reauthNotice ? (
+            <p className="mt-4 rounded-xl bg-amber-500/20 px-3 py-2 text-sm text-amber-50">{reauthNotice}</p>
+          ) : null}
           {error ? <p className="mt-4 rounded-xl bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
 
           <p className="mt-4 text-center text-sm text-slate-300">

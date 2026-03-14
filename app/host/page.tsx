@@ -107,6 +107,22 @@ function isFatalHostSessionError(error: unknown) {
   )
 }
 
+function isStaleHostSessionError(error: unknown) {
+  if (!(error instanceof LiveApiError)) {
+    return false
+  }
+
+  if (error.code === "HOST_SESSION_REVOKED" || error.code === "HOST_ACCESS_REVOKED") {
+    return true
+  }
+
+  if (error.status === 401) {
+    return error.code === "UNAUTHORIZED" || error.code === "FORBIDDEN"
+  }
+
+  return false
+}
+
 function isTerminalRoomState(state: RoomSnapshot["state"] | null | undefined) {
   return state === "session_completed" || state === "expired" || state === "superseded"
 }
@@ -418,6 +434,44 @@ export default function HostStagePage() {
   const lastHarajSnapshotRef = useRef<RoomSnapshot["haraj"] | null>(null)
   const processedHarajRevealRoundKeyRef = useRef<string | null>(null)
   const playedHarajRevealConfettiRoundKeyRef = useRef<string | null>(null)
+  const sessionInvalidatedRef = useRef(false)
+
+  const invalidateHostSession = useCallback(
+    (reason: "session_expired" | "access_revoked") => {
+      if (sessionInvalidatedRef.current) {
+        return
+      }
+
+      sessionInvalidatedRef.current = true
+      clearHostSession()
+      setHostTokenState(null)
+      setRoomId(null)
+      setRoom(null)
+      setBootstrapBlocked(false)
+      setIsBootstrappingRoom(false)
+      setBusyAction(null)
+      setNotice(null)
+      setError(null)
+      router.replace(`/host/login?reason=${reason}`)
+    },
+    [router]
+  )
+
+  const recoverFromHostSessionError = useCallback(
+    (requestError: unknown) => {
+      if (!isStaleHostSessionError(requestError)) {
+        return false
+      }
+
+      const reason =
+        requestError instanceof LiveApiError && requestError.code === "HOST_ACCESS_REVOKED"
+          ? "access_revoked"
+          : "session_expired"
+      invalidateHostSession(reason)
+      return true
+    },
+    [invalidateHostSession]
+  )
 
   const syncServerClock = useCallback((serverTs: number) => {
     const measuredOffset = serverTs - Date.now()
@@ -868,11 +922,15 @@ export default function HostStagePage() {
         return
       }
 
+      if (recoverFromHostSessionError(requestError)) {
+        return
+      }
+
       setError(toErrorMessage(requestError))
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [hostToken, releaseRoomBinding, roomId, syncServerClock])
+  }, [hostToken, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
 
   const bootstrapRoom = useCallback(async () => {
     if (!hostToken || roomId || isBootstrappingRoom) {
@@ -902,12 +960,16 @@ export default function HostStagePage() {
         }
       }
 
+      if (recoverFromHostSessionError(requestError)) {
+        return
+      }
+
       setError(toErrorMessage(requestError))
       setBootstrapBlocked(true)
     } finally {
       setIsBootstrappingRoom(false)
     }
-  }, [hostToken, isBootstrappingRoom, roomId])
+  }, [hostToken, isBootstrappingRoom, recoverFromHostSessionError, roomId])
 
   useEffect(() => {
     if (!hostToken) {
@@ -942,6 +1004,9 @@ export default function HostStagePage() {
       },
       onError: (streamError) => {
         streamConnectedRef.current = false
+        if (recoverFromHostSessionError(streamError)) {
+          return
+        }
         if (isFatalHostSessionError(streamError)) {
           releaseRoomBinding("انتهت صلاحية الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
           return
@@ -964,7 +1029,7 @@ export default function HostStagePage() {
       streamConnectedRef.current = false
       unsubscribe()
     }
-  }, [hostToken, isPageVisible, releaseRoomBinding, roomId, syncServerClock])
+  }, [hostToken, isPageVisible, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
 
   useEffect(() => {
     if (!hostToken || !roomId) {
@@ -1048,6 +1113,10 @@ export default function HostStagePage() {
         setRoom(ack.payload.room)
         return ack.payload.room
       } catch (requestError) {
+        if (recoverFromHostSessionError(requestError)) {
+          throw requestError
+        }
+
         if (
           requestError instanceof LiveApiError &&
           (requestError.code === "INVALID_STATE_TRANSITION" || requestError.code === "ROOM_NOT_ACTIVE")
@@ -1059,7 +1128,7 @@ export default function HostStagePage() {
         setBusyAction(null)
       }
     },
-    [hostToken, refreshState, room, roomId, syncServerClock]
+    [hostToken, recoverFromHostSessionError, refreshState, room, roomId, syncServerClock]
   )
 
   const assignPlayer = useCallback(
@@ -1147,11 +1216,14 @@ export default function HostStagePage() {
       setNotice("تم تثبيت الفرق. استعرض القواعد ثم ابدأ لوحة اللعبة.")
       await refreshState()
     } catch (requestError) {
+      if (recoverFromHostSessionError(requestError)) {
+        return
+      }
       setError(toErrorMessage(requestError))
     } finally {
       setBusyAction(null)
     }
-  }, [hostToken, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
+  }, [hostToken, recoverFromHostSessionError, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
 
   const handleAssignPlayerFromPicker = useCallback(
     async (teamId: string) => {
