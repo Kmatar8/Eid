@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useEffect, useState, type FormEvent } from "react"
+import { Suspense, useEffect, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { FireworksBackground } from "@/components/ui/fireworks"
@@ -56,9 +56,27 @@ function isHostTokenLikelyUsable(token: string) {
   return payload.exp > nowSeconds
 }
 
+function getReauthNotice(reason: string | null) {
+  return reason === "access_revoked"
+    ? "انتهت صلاحية وصول المضيف. سجّل الدخول بالكود مرة أخرى."
+    : reason === "session_expired"
+      ? "انتهت جلسة المضيف السابقة أو تم تسجيل الدخول من جهاز آخر. سجّل الدخول مرة أخرى."
+      : null
+}
+
+function ReauthNotice() {
+  const searchParams = useSearchParams()
+  const reauthNotice = getReauthNotice(searchParams.get("reason"))
+
+  if (!reauthNotice) {
+    return null
+  }
+
+  return <p className="mt-4 rounded-xl bg-amber-500/20 px-3 py-2 text-sm text-amber-50">{reauthNotice}</p>
+}
+
 export default function HostLoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -76,14 +94,6 @@ export default function HostLoginPage() {
 
     router.replace("/host")
   }, [router])
-
-  const reason = searchParams.get("reason")
-  const reauthNotice =
-    reason === "access_revoked"
-      ? "انتهت صلاحية وصول المضيف. سجّل الدخول بالكود مرة أخرى."
-      : reason === "session_expired"
-      ? "انتهت جلسة المضيف السابقة أو تم تسجيل الدخول من جهاز آخر. سجّل الدخول مرة أخرى."
-      : null
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -134,9 +144,9 @@ export default function HostLoginPage() {
             </Button>
           </form>
 
-          {reauthNotice ? (
-            <p className="mt-4 rounded-xl bg-amber-500/20 px-3 py-2 text-sm text-amber-50">{reauthNotice}</p>
-          ) : null}
+          <Suspense fallback={null}>
+            <ReauthNotice />
+          </Suspense>
           {error ? <p className="mt-4 rounded-xl bg-red-500/20 px-3 py-2 text-sm text-red-100">{error}</p> : null}
 
           <p className="mt-4 text-center text-sm text-slate-300">
