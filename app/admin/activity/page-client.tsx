@@ -24,7 +24,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 const SESSION_TOKEN_KEY = "hroof:activity-monitor:token"
 const DEFAULT_HOST_PRESENCE_MS = 30_000
 const DEFAULT_CONTROLLER_PRESENCE_MS = 45_000
-const DEFAULT_INTERVAL_MS = 5_000
+const DEFAULT_INTERVAL_MS = 600_000
 
 type MonitorSummary = {
   hosts: {
