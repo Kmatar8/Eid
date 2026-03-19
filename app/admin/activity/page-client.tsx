@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts"
 
 import {
   Activity,
@@ -216,6 +217,8 @@ export default function ActivityMonitorPageClient() {
   const [appliedIntervalMs, setAppliedIntervalMs] = useState(DEFAULT_INTERVAL_MS)
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [payload, setPayload] = useState<MonitorPayload | null>(null)
+  const [historyPayload, setHistoryPayload] = useState<Record<string, unknown>[]>([])
+  const [historyRange, setHistoryRange] = useState("25h")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -289,6 +292,38 @@ export default function ActivityMonitorPageClient() {
       controller.abort()
     }
   }, [appliedControllerPresenceMs, appliedHostPresenceMs, appliedAuth, refreshNonce])
+
+  useEffect(() => {
+    if (!appliedAuth) {
+      return
+    }
+
+    const controller = new AbortController()
+    const url = new URL("/api/admin/activity/history", window.location.origin)
+    url.searchParams.set("range", historyRange)
+
+    async function fetchHistory() {
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            authorization: `Basic ${appliedAuth}`,
+          },
+        })
+
+        const body = (await response.json().catch(() => null)) as { history?: Record<string, unknown>[] }
+        if (response.ok && body?.history) {
+          setHistoryPayload(body.history)
+        }
+      } catch {
+        if (controller.signal.aborted) return
+        console.error("Failed to load history")
+      }
+    }
+
+    void fetchHistory()
+    return () => controller.abort()
+  }, [appliedAuth, historyRange, refreshNonce])
 
   useEffect(() => {
     if (!watchEnabled || !appliedAuth) {
@@ -593,6 +628,118 @@ export default function ActivityMonitorPageClient() {
           <SummaryList title="Active Room States" entries={stateEntries} />
           <SummaryList title="Active Games" entries={activeGameEntries} />
         </section>
+
+        {payload && (
+          <section className="mt-8 space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
+              <div>
+                <h2 className="text-2xl font-black text-white">Historical Trends</h2>
+                <p className="text-sm text-white/60 mt-1">Snapshots are taken every 15 minutes.</p>
+              </div>
+              <div className="flex gap-2 rounded-xl bg-black/20 p-1 border border-white/10">
+                {["25h", "7d", "30d"].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setHistoryRange(range)}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-lg transition-colors ${
+                      historyRange === range 
+                        ? "bg-white/15 text-white" 
+                        : "text-white/50 hover:text-white/80"
+                    }`}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {historyPayload.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="border-white/15 bg-white/8 text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] flex flex-col h-[300px]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Hosts Present</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 min-h-0 pb-6 pr-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={historyPayload}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" vertical={false} />
+                        <XAxis 
+                          dataKey="observed_at" 
+                          stroke="#ffffff66" 
+                          fontSize={10} 
+                          tickFormatter={(val) => historyRange === "25h" ? new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(val).toLocaleDateString()}
+                          tickMargin={8}
+                        />
+                        <YAxis stroke="#ffffff66" fontSize={10} allowDecimals={false} width={30} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                          labelFormatter={(val) => new Date(val).toLocaleString()}
+                        />
+                        <Line type="monotone" dataKey="hosts_present" stroke="#10b981" strokeWidth={2} dot={false} name="Present" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/15 bg-white/8 text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] flex flex-col h-[300px]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Active Rooms</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 min-h-0 pb-6 pr-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={historyPayload}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" vertical={false} />
+                        <XAxis 
+                          dataKey="observed_at" 
+                          stroke="#ffffff66" 
+                          fontSize={10} 
+                          tickFormatter={(val) => historyRange === "25h" ? new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(val).toLocaleDateString()}
+                          tickMargin={8}
+                        />
+                        <YAxis stroke="#ffffff66" fontSize={10} allowDecimals={false} width={30} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                          labelFormatter={(val) => new Date(val).toLocaleString()}
+                        />
+                        <Line type="monotone" dataKey="rooms_active" stroke="#0ea5e9" strokeWidth={2} dot={false} name="Active" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/15 bg-white/8 text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)] flex flex-col h-[300px]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Active Controllers</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 min-h-0 pb-6 pr-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={historyPayload}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff1a" vertical={false} />
+                        <XAxis 
+                          dataKey="observed_at" 
+                          stroke="#ffffff66" 
+                          fontSize={10} 
+                          tickFormatter={(val) => historyRange === "25h" ? new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date(val).toLocaleDateString()}
+                          tickMargin={8}
+                        />
+                        <YAxis stroke="#ffffff66" fontSize={10} allowDecimals={false} width={30} />
+                        <RechartsTooltip 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', color: '#fff' }}
+                          labelFormatter={(val) => new Date(val).toLocaleString()}
+                        />
+                        <Line type="monotone" dataKey="controllers_active" stroke="#8b5cf6" strokeWidth={2} dot={false} name="Active" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-black/15 py-12 text-center text-sm text-white/50">
+                Not enough historical data collected yet.
+              </div>
+            )}
+          </section>
+        )}
 
         <section>
           <Card className="border-white/15 bg-white/8 text-white shadow-[0_24px_70px_rgba(0,0,0,0.22)]">

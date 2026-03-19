@@ -1,0 +1,11 @@
+name = "hroof-activity-cron"
+main = "src/index.ts"
+compatibility_date = "2024-02-21"
+
+[triggers]
+crons = ["*/15 * * * *"] # Run every 15 minutes
+
+[vars]
+SNAPSHOT_ENDPOINT = "https://hroof.dev/api/admin/activity/snapshot"
+# ADMIN_EMAIL = ""
+# ADMIN_PASS = ""
