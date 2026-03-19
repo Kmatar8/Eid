@@ -204,12 +204,13 @@ function SummaryList({
 }
 
 export default function ActivityMonitorPageClient() {
-  const [tokenInput, setTokenInput] = useState("")
+  const [emailInput, setEmailInput] = useState("")
+  const [passwordInput, setPasswordInput] = useState("")
   const [hostPresenceInput, setHostPresenceInput] = useState(String(DEFAULT_HOST_PRESENCE_MS))
   const [controllerPresenceInput, setControllerPresenceInput] = useState(String(DEFAULT_CONTROLLER_PRESENCE_MS))
   const [intervalInput, setIntervalInput] = useState(String(DEFAULT_INTERVAL_MS))
   const [watchEnabled, setWatchEnabled] = useState(true)
-  const [appliedToken, setAppliedToken] = useState("")
+  const [appliedAuth, setAppliedAuth] = useState("")
   const [appliedHostPresenceMs, setAppliedHostPresenceMs] = useState(DEFAULT_HOST_PRESENCE_MS)
   const [appliedControllerPresenceMs, setAppliedControllerPresenceMs] = useState(DEFAULT_CONTROLLER_PRESENCE_MS)
   const [appliedIntervalMs, setAppliedIntervalMs] = useState(DEFAULT_INTERVAL_MS)
@@ -228,12 +229,21 @@ export default function ActivityMonitorPageClient() {
       return
     }
 
-    setTokenInput(savedToken)
-    setAppliedToken(savedToken)
+    try {
+      const decoded = window.atob(savedToken)
+      const [email, password] = decoded.split(":")
+      if (email && password) {
+        setEmailInput(email)
+        setPasswordInput(password)
+        setAppliedAuth(savedToken)
+      }
+    } catch {
+      window.sessionStorage.removeItem(SESSION_TOKEN_KEY)
+    }
   }, [])
 
   useEffect(() => {
-    if (!appliedToken) {
+    if (!appliedAuth) {
       return
     }
 
@@ -249,7 +259,7 @@ export default function ActivityMonitorPageClient() {
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
-            authorization: `Bearer ${appliedToken}`,
+            authorization: `Basic ${appliedAuth}`,
           },
         })
 
@@ -278,10 +288,10 @@ export default function ActivityMonitorPageClient() {
     return () => {
       controller.abort()
     }
-  }, [appliedControllerPresenceMs, appliedHostPresenceMs, appliedToken, refreshNonce])
+  }, [appliedControllerPresenceMs, appliedHostPresenceMs, appliedAuth, refreshNonce])
 
   useEffect(() => {
-    if (!watchEnabled || !appliedToken) {
+    if (!watchEnabled || !appliedAuth) {
       return
     }
 
@@ -292,7 +302,7 @@ export default function ActivityMonitorPageClient() {
     return () => {
       window.clearInterval(intervalId)
     }
-  }, [appliedIntervalMs, appliedToken, watchEnabled])
+  }, [appliedIntervalMs, appliedAuth, watchEnabled])
 
   const observedAtLabel = payload ? formatTimestamp(payload.observedAt) : "Waiting for first snapshot"
   const stateEntries = payload ? Object.entries(payload.summary.rooms.byState) : []
@@ -302,7 +312,11 @@ export default function ActivityMonitorPageClient() {
     const nextHostPresenceMs = parsePositiveInt(hostPresenceInput, DEFAULT_HOST_PRESENCE_MS)
     const nextControllerPresenceMs = parsePositiveInt(controllerPresenceInput, DEFAULT_CONTROLLER_PRESENCE_MS)
     const nextIntervalMs = parsePositiveInt(intervalInput, DEFAULT_INTERVAL_MS)
-    const trimmedToken = tokenInput.trim()
+    
+    const email = emailInput.trim()
+    const password = passwordInput.trim()
+    const validCredentials = email.length > 0 && password.length > 0
+    const authToken = validCredentials ? window.btoa(`${email}:${password}`) : ""
 
     setHostPresenceInput(String(nextHostPresenceMs))
     setControllerPresenceInput(String(nextControllerPresenceMs))
@@ -310,26 +324,27 @@ export default function ActivityMonitorPageClient() {
     setAppliedHostPresenceMs(nextHostPresenceMs)
     setAppliedControllerPresenceMs(nextControllerPresenceMs)
     setAppliedIntervalMs(nextIntervalMs)
-    setAppliedToken(trimmedToken)
+    setAppliedAuth(authToken)
     setPayload(null)
-    setError(trimmedToken ? null : "Enter the monitor bearer token to load activity.")
+    setError(authToken ? null : "Enter admin email and password.")
 
     if (typeof window !== "undefined") {
-      if (trimmedToken) {
-        window.sessionStorage.setItem(SESSION_TOKEN_KEY, trimmedToken)
+      if (authToken) {
+        window.sessionStorage.setItem(SESSION_TOKEN_KEY, authToken)
       } else {
         window.sessionStorage.removeItem(SESSION_TOKEN_KEY)
       }
     }
 
-    if (trimmedToken) {
+    if (authToken) {
       setRefreshNonce((current) => current + 1)
     }
   }
 
   function clearToken() {
-    setTokenInput("")
-    setAppliedToken("")
+    setEmailInput("")
+    setPasswordInput("")
+    setAppliedAuth("")
     setPayload(null)
     setError(null)
 
@@ -370,8 +385,8 @@ export default function ActivityMonitorPageClient() {
               <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.24em] text-amber-100/70">Watcher</p>
                 <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-amber-50">
-                  <Activity className={`h-4 w-4 ${watchEnabled && appliedToken ? "animate-pulse" : ""}`} />
-                  {watchEnabled && appliedToken ? `Polling every ${appliedIntervalMs}ms` : "Manual refresh"}
+                  <Activity className={`h-4 w-4 ${watchEnabled && appliedAuth ? "animate-pulse" : ""}`} />
+                  {watchEnabled && appliedAuth ? `Polling every ${appliedIntervalMs}ms` : "Manual refresh"}
                 </p>
               </div>
             </div>
@@ -382,21 +397,31 @@ export default function ActivityMonitorPageClient() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Lock className="h-5 w-5 text-cyan-200" />
-                  Access
+                  Admin Login
                 </CardTitle>
                 <CardDescription className="text-white/70">
-                  Enter the existing monitor bearer token. The token stays in this browser tab only.
+                  Enter the admin email and password. Your session is securely kept in this tab.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <label className="grid gap-2 text-sm">
-                    <span className="text-white/72">Monitor token</span>
+                    <span className="text-white/72">Admin Email</span>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(event) => setEmailInput(event.target.value)}
+                      placeholder="Admin email"
+                      className="h-11 rounded-xl border border-white/12 bg-white/8 px-3 text-sm text-white placeholder:text-white/35"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm">
+                    <span className="text-white/72">Password</span>
                     <input
                       type="password"
-                      value={tokenInput}
-                      onChange={(event) => setTokenInput(event.target.value)}
-                      placeholder="Bearer token"
+                      value={passwordInput}
+                      onChange={(event) => setPasswordInput(event.target.value)}
+                      placeholder="Password"
                       className="h-11 rounded-xl border border-white/12 bg-white/8 px-3 text-sm text-white placeholder:text-white/35"
                     />
                   </label>
@@ -446,7 +471,7 @@ export default function ActivityMonitorPageClient() {
                       variant="outline"
                       className="border-white/15 bg-white/10 text-white hover:bg-white/18 hover:text-white"
                       onClick={() => setRefreshNonce((current) => current + 1)}
-                      disabled={!appliedToken || loading}
+                      disabled={!appliedAuth || loading}
                     >
                       <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                       Refresh
@@ -466,7 +491,7 @@ export default function ActivityMonitorPageClient() {
                       onClick={clearToken}
                     >
                       <Trash2 className="h-4 w-4" />
-                      Clear token
+                      Logout
                     </Button>
                   </div>
                 </div>
@@ -503,9 +528,9 @@ export default function ActivityMonitorPageClient() {
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.24em] text-white/45">Token storage</p>
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/45">Session storage</p>
                   <p className="mt-2">
-                    Stored in `sessionStorage` for this tab only. Clearing the token disconnects the page immediately.
+                    Stored in `sessionStorage` for this tab only. Logging out disconnects the page immediately.
                   </p>
                 </div>
               </CardContent>
@@ -668,7 +693,7 @@ export default function ActivityMonitorPageClient() {
                   </div>
                   <h2 className="mt-4 text-xl font-bold">No activity snapshot loaded</h2>
                   <p className="mt-2 text-sm text-white/65">
-                    Connect with the monitor token to view active hosts, rooms, and controllers on this deployment.
+                    Connect with your admin credentials to view active hosts, rooms, and controllers on this deployment.
                   </p>
                 </div>
               )}

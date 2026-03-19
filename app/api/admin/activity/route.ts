@@ -1,9 +1,7 @@
 import { getRuntimeActivitySummary } from "@/lib/server/activity-monitor"
-import { errorResponse, getBearerToken, jsonResponse } from "@/lib/server/http"
+import { errorResponse, jsonResponse } from "@/lib/server/http"
 
 export const runtime = "nodejs"
-
-const MONITOR_TOKEN_ENV_NAME = "HROOF_ACTIVITY_MONITOR_TOKEN"
 
 function parsePositiveInt(raw: string | null) {
   if (!raw) {
@@ -18,54 +16,31 @@ function parsePositiveInt(raw: string | null) {
   return parsed
 }
 
-import { getCloudflareContext } from "@opennextjs/cloudflare"
-
-async function getEnvVar(name: string): Promise<string | undefined> {
-  // First try process.env (works locally and on traditional Node.js hosts)
-  if (process.env[name]) {
-    return process.env[name]
-  }
-  
-  // As a fallback for Cloudflare open-next, check the request context env
-  try {
-    const context = await getCloudflareContext({ async: true })
-    const env = context?.env as any
-    if (env && env[name]) {
-      return env[name]
-    }
-  } catch (e) {
-    // getCloudflareContext might throw if we are not in a Cloudflare environment
-  }
-  
-  return undefined
-}
-
-async function isAuthorized(request: Request) {
-  const configuredToken = (await getEnvVar(MONITOR_TOKEN_ENV_NAME))?.trim()
-  if (!configuredToken) {
-    return { ok: false as const, reason: "missing_config" }
-  }
-
-  const providedToken = getBearerToken(request)
-  if (!providedToken || providedToken !== configuredToken) {
+function isAuthorized(request: Request) {
+  const authHeader = request.headers.get("authorization")
+  if (!authHeader || !authHeader.startsWith("Basic ")) {
     return { ok: false as const, reason: "unauthorized" }
   }
 
-  return { ok: true as const }
+  try {
+    const base64 = authHeader.split(" ")[1]
+    const decoded = Buffer.from(base64, "base64").toString("utf-8")
+    const [email, password] = decoded.split(":")
+
+    if (email === "k.matar@me.com" && password === "Classic123$") {
+      return { ok: true as const }
+    }
+  } catch (err) {
+    return { ok: false as const, reason: "unauthorized" }
+  }
+
+  return { ok: false as const, reason: "unauthorized" }
 }
 
 export async function GET(request: Request) {
-  const auth = await isAuthorized(request)
+  const auth = isAuthorized(request)
   if (!auth.ok) {
-    if (auth.reason === "missing_config") {
-      return errorResponse(
-        503,
-        "MONITOR_DISABLED",
-        `${MONITOR_TOKEN_ENV_NAME} is not configured on this deployment`
-      )
-    }
-
-    return errorResponse(401, "UNAUTHORIZED", "Missing or invalid monitor bearer token")
+    return errorResponse(401, "UNAUTHORIZED", "Missing or invalid admin credentials")
   }
 
   const url = new URL(request.url)
