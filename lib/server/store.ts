@@ -2233,6 +2233,12 @@ type HostAuthFailure = {
 
 export type HostAuthResult = HostAuthSuccess | HostAuthFailure
 
+export type HostRoomAssignment = {
+  hostId: string
+  username: string
+  activeRoomId: string | null
+}
+
 function resolveHostByUsername(store: InMemoryStore, username: string) {
   const normalizedUsername = username.trim()
   const hostId =
@@ -2299,6 +2305,19 @@ export function getRoom(roomId: string): RoomRecord | null {
   applyTimeouts(store, room)
   resolveRoomActiveGame(store, room, { persist: true })
   return room
+}
+
+export function listHostRoomAssignments(): HostRoomAssignment[] {
+  const store = getStore()
+  return Array.from(store.hosts.values()).map((host) => ({
+    hostId: host.id,
+    username: host.username,
+    activeRoomId: host.activeRoomId,
+  }))
+}
+
+export function getHostLastSeenAt(roomId: string): number | null {
+  return getStore().hostLastSeenByRoom.get(roomId) ?? null
 }
 
 export function createRoomForHost(hostId: string):
