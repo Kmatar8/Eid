@@ -18,8 +18,30 @@ function parsePositiveInt(raw: string | null) {
   return parsed
 }
 
-function isAuthorized(request: Request) {
-  const configuredToken = process.env[MONITOR_TOKEN_ENV_NAME]?.trim()
+import { getCloudflareContext } from "@opennextjs/cloudflare"
+
+async function getEnvVar(name: string): Promise<string | undefined> {
+  // First try process.env (works locally and on traditional Node.js hosts)
+  if (process.env[name]) {
+    return process.env[name]
+  }
+  
+  // As a fallback for Cloudflare open-next, check the request context env
+  try {
+    const context = await getCloudflareContext({ async: true })
+    const env = context?.env as any
+    if (env && env[name]) {
+      return env[name]
+    }
+  } catch (e) {
+    // getCloudflareContext might throw if we are not in a Cloudflare environment
+  }
+  
+  return undefined
+}
+
+async function isAuthorized(request: Request) {
+  const configuredToken = (await getEnvVar(MONITOR_TOKEN_ENV_NAME))?.trim()
   if (!configuredToken) {
     return { ok: false as const, reason: "missing_config" }
   }
@@ -33,7 +55,7 @@ function isAuthorized(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const auth = isAuthorized(request)
+  const auth = await isAuthorized(request)
   if (!auth.ok) {
     if (auth.reason === "missing_config") {
       return errorResponse(
