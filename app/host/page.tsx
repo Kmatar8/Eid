@@ -201,9 +201,9 @@ function getHarajResultCardClasses(rank: number | null, pointsAwarded: number) {
       container: "border-white/10 bg-white/5",
       player: "text-white",
       estimate: "text-white",
-      meta: "text-slate-200",
-      points: "text-amber-200",
-      badge: "border-white/15 bg-black/25 text-slate-200",
+      pointsRow: "border-white/15 bg-black/25",
+      pointsLabel: "text-slate-300",
+      pointsValue: "text-amber-200",
     }
   }
 
@@ -212,9 +212,9 @@ function getHarajResultCardClasses(rank: number | null, pointsAwarded: number) {
       container: "border-emerald-300/45 bg-emerald-500/12",
       player: "text-emerald-100",
       estimate: "text-emerald-50",
-      meta: "text-emerald-100",
-      points: "text-emerald-200",
-      badge: "border-emerald-300/45 bg-emerald-400/18 text-emerald-100",
+      pointsRow: "border-emerald-300/45 bg-emerald-400/18",
+      pointsLabel: "text-emerald-100",
+      pointsValue: "text-emerald-200",
     }
   }
 
@@ -223,9 +223,9 @@ function getHarajResultCardClasses(rank: number | null, pointsAwarded: number) {
       container: "border-cyan-300/45 bg-cyan-500/12",
       player: "text-cyan-100",
       estimate: "text-cyan-50",
-      meta: "text-cyan-100",
-      points: "text-cyan-200",
-      badge: "border-cyan-300/45 bg-cyan-400/18 text-cyan-100",
+      pointsRow: "border-cyan-300/45 bg-cyan-400/18",
+      pointsLabel: "text-cyan-100",
+      pointsValue: "text-cyan-200",
     }
   }
 
@@ -233,9 +233,9 @@ function getHarajResultCardClasses(rank: number | null, pointsAwarded: number) {
     container: "border-fuchsia-300/40 bg-fuchsia-500/10",
     player: "text-fuchsia-100",
     estimate: "text-fuchsia-50",
-    meta: "text-fuchsia-100",
-    points: "text-fuchsia-200",
-    badge: "border-fuchsia-300/40 bg-fuchsia-400/18 text-fuchsia-100",
+    pointsRow: "border-fuchsia-300/40 bg-fuchsia-400/18",
+    pointsLabel: "text-fuchsia-100",
+    pointsValue: "text-fuchsia-200",
   }
 }
 
@@ -820,7 +820,6 @@ export default function HostStagePage() {
     () => new Map((room?.players ?? []).map((player) => [player.playerId, player])),
     [room?.players]
   )
-  const teamById = useMemo(() => new Map((room?.teams ?? []).map((team) => [team.teamId, team])), [room?.teams])
 
   const playersByTeam = useMemo(() => {
     const grouped = {
@@ -2415,32 +2414,26 @@ export default function HostStagePage() {
                         <div className="grid min-h-0 w-full max-w-[40rem] flex-1 auto-rows-fr gap-2 self-center sm:grid-cols-4 lg:grid-cols-5">
                           {haraj.lastReveal.results.map((result) => {
                             const tone = getHarajResultCardClasses(result.rank, result.pointsAwarded)
-                            const resultTeamName = result.teamId ? teamById.get(result.teamId)?.name ?? "فريق" : "بدون فريق"
                             return (
                               <article
                                 key={`haraj-result-${result.playerId}`}
                                 className={`aspect-square min-h-0 rounded-2xl border p-2 shadow-sm ${tone.container}`}
                               >
                                 <div className="flex h-full flex-col text-center">
-                                  <div className="flex items-start justify-between gap-1">
-                                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black ${tone.badge}`}>
-                                      {result.rank ? `#${result.rank}` : "--"}
-                                    </span>
-                                    <span className={`text-[10px] font-black ${tone.points}`}>{result.pointsAwarded > 0 ? `+${result.pointsAwarded}` : "0"}</span>
+                                  <div className={`rounded-xl border px-2 py-1.5 ${tone.pointsRow}`}>
+                                    <p className={`text-[9px] font-black tracking-[0.18em] ${tone.pointsLabel}`}>النقاط</p>
+                                    <p className={`mt-1 text-2xl font-black leading-none ${tone.pointsValue}`}>
+                                      {result.pointsAwarded > 0 ? `+${result.pointsAwarded}` : "0"}
+                                    </p>
                                   </div>
                                   <div className="mt-2 min-w-0">
                                     <p className={`line-clamp-2 text-sm font-black leading-tight ${tone.player}`}>{result.playerName}</p>
-                                    <p className="mt-1 truncate text-[10px] text-slate-300">{resultTeamName}</p>
                                   </div>
                                   <div className="flex flex-1 items-center justify-center">
                                     <div>
                                       <p className={`text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
                                       <p className="mt-1 text-[10px] text-slate-300">{haraj.lastReveal?.currency}</p>
                                     </div>
-                                  </div>
-                                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-300">
-                                    <span>فرق {result.difference}</span>
-                                    <span className={`${tone.meta}`}>{result.pointsAwarded > 0 ? "فائز" : "بدون نقاط"}</span>
                                   </div>
                                 </div>
                               </article>

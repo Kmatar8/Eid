@@ -16,6 +16,7 @@ Increase the Haraj estimate collection window to one minute and improve Haraj ru
 5. Replace the host Haraj reveal results table with compact square player tiles that emphasize the submitted estimate in large numerals.
 6. Reshape host collecting submission states into compact square tiles showing the player name and submission check mark.
 7. Keep the square tile layout dense enough for at least 20 players without requiring vertical page scroll on the host stage.
+8. Make awarded points clearly visible inside each reveal tile via a color-graded top row and remove rank/team/winner text clutter.
 
 ### Out
 1. Haraj scoring-rule changes.
@@ -44,7 +45,8 @@ Increase the Haraj estimate collection window to one minute and improve Haraj ru
 4. Replace the host reveal table with compact square result tiles sized for dense display.
 5. Promote the controller Haraj timer into a clearer, larger timer card.
 6. Tighten collecting/reveal tile geometry so the host grid fits at least 20 squares without scroll.
-7. Run scoped lint and full typecheck, then record validation evidence.
+7. Simplify reveal tiles so the top area highlights points and the body focuses on player name + estimate.
+8. Run scoped lint and full typecheck, then record validation evidence.
 
 ## Acceptance Criteria
 1. A Haraj round stays open for 60 seconds unless all eligible players submit earlier.
@@ -53,7 +55,8 @@ Increase the Haraj estimate collection window to one minute and improve Haraj ru
 4. Host collecting stage shows square submission tiles with player names and a visible check mark for submitted players.
 5. Host Haraj reveal no longer uses a table; each player's submitted estimate is shown inside a compact square tile with a large number.
 6. Host tile layouts fit at least 20 player squares without requiring vertical page scroll in the active game stage.
-7. Scoped lint and typecheck pass.
+7. Host reveal tiles show awarded points clearly in a color-graded top row and no longer show rank/team/winner text.
+8. Scoped lint and typecheck pass.
 
 ## Validation Checklist
 - [x] Verify PRD updated to 60-second Haraj collection timing and card-based reveal layout.
@@ -61,6 +64,7 @@ Increase the Haraj estimate collection window to one minute and improve Haraj ru
 - [x] Verify host collecting stage timer block is centered between the two team score cards.
 - [x] Verify host reveal uses square player tiles instead of a table.
 - [x] Verify host collecting stage uses square submission tiles with player names and submission check marks.
+- [x] Verify host reveal tiles use a color-graded points row and no longer show rank/team/winner text.
 - [x] Verify controller Haraj timer is more prominent and clearly labeled.
 - [x] Scoped lint pass.
 - [x] Typecheck pass.
@@ -78,6 +82,7 @@ Increase the Haraj estimate collection window to one minute and improve Haraj ru
 4. Updated `app/controller/[roomId]/page-client.tsx` to promote Haraj countdown visibility into a dedicated timer card with explicit labeling.
 5. `npx eslint lib/server/store.ts app/host/page.tsx 'app/controller/[roomId]/page-client.tsx'` passed with warnings only and no errors for the broader T-0067 change set, and the follow-up `npx eslint app/host/page.tsx` pass also returned warnings only with no errors.
 6. `npx tsc --noEmit` passed for both the original T-0067 implementation and this square-tile follow-up.
+7. Follow-up refinement updated the reveal tiles so the top row now shows awarded points in a color-graded header, while rank/team/winner text was removed to keep focus on points + estimate.
 
 ## Rollback Plan
 1. Revert `PRD.md`.
