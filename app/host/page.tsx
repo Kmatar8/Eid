@@ -2414,6 +2414,7 @@ export default function HostStagePage() {
                         <div className="grid min-h-0 w-full max-w-[40rem] flex-1 auto-rows-fr gap-2 self-center sm:grid-cols-4 lg:grid-cols-5">
                           {haraj.lastReveal.results.map((result) => {
                             const tone = getHarajResultCardClasses(result.rank, result.pointsAwarded)
+                            const revealPlayer = playerById.get(result.playerId) ?? null
                             return (
                               <article
                                 key={`haraj-result-${result.playerId}`}
@@ -2426,13 +2427,21 @@ export default function HostStagePage() {
                                       {result.pointsAwarded > 0 ? `+${result.pointsAwarded}` : "0"}
                                     </p>
                                   </div>
-                                  <div className="mt-2 min-w-0">
-                                    <p className={`line-clamp-2 text-sm font-black leading-tight ${tone.player}`}>{result.playerName}</p>
+                                  <div className="mt-2 flex min-w-0 items-center justify-center gap-2">
+                                    <Avatar className="size-8 shrink-0 border border-white/20 shadow-sm">
+                                      {revealPlayer?.avatarValue ? (
+                                        <AvatarImage src={revealPlayer.avatarValue} className="object-cover" />
+                                      ) : null}
+                                      <AvatarFallback className="bg-slate-700 text-sm">
+                                        {revealPlayer?.avatarType === "emoji" ? revealPlayer.avatarValue : "🙂"}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                    <p className={`line-clamp-2 text-right text-sm font-black leading-tight ${tone.player}`}>{result.playerName}</p>
                                   </div>
                                   <div className="flex flex-1 items-center justify-center">
-                                    <div>
+                                    <div className="flex items-end justify-center gap-1">
                                       <p className={`text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
-                                      <p className="mt-1 text-[10px] text-slate-300">{haraj.lastReveal?.currency}</p>
+                                      <p className={`text-sm font-black leading-none ${tone.estimate}`}>{haraj.lastReveal?.currency}</p>
                                     </div>
                                   </div>
                                 </div>
