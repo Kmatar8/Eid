@@ -2418,7 +2418,7 @@ export default function HostStagePage() {
                             return (
                               <article
                                 key={`haraj-result-${result.playerId}`}
-                                className={`aspect-square min-h-0 rounded-2xl border p-2 shadow-sm ${tone.container}`}
+                                className={`aspect-square min-h-0 overflow-hidden rounded-2xl border p-2 shadow-sm ${tone.container}`}
                               >
                                 <div className="flex h-full flex-col text-center">
                                   <div className={`rounded-xl border px-2 py-1.5 ${tone.pointsRow}`}>
@@ -2428,7 +2428,7 @@ export default function HostStagePage() {
                                     </p>
                                   </div>
                                   <div className="mt-2 flex min-w-0 items-center justify-center gap-2">
-                                    <Avatar className="size-8 shrink-0 border border-white/20 shadow-sm">
+                                    <Avatar className="size-7 shrink-0 border border-white/20 shadow-sm">
                                       {revealPlayer?.avatarValue ? (
                                         <AvatarImage src={revealPlayer.avatarValue} className="object-cover" />
                                       ) : null}
@@ -2438,10 +2438,17 @@ export default function HostStagePage() {
                                     </Avatar>
                                     <p className={`line-clamp-2 text-right text-sm font-black leading-tight ${tone.player}`}>{result.playerName}</p>
                                   </div>
-                                  <div className="flex flex-1 items-center justify-center">
-                                    <div className="flex items-end justify-center gap-1">
-                                      <p className={`text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
-                                      <p className={`text-sm font-black leading-none ${tone.estimate}`}>{haraj.lastReveal?.currency}</p>
+                                  <div className="flex flex-1 items-center justify-center px-1">
+                                    <div className="flex max-w-full items-end justify-center gap-1 overflow-hidden whitespace-nowrap">
+                                      <p
+                                        className={`min-w-0 font-black leading-none tracking-tight ${tone.estimate}`}
+                                        style={{ fontSize: "clamp(1rem, 1.5vw, 1.65rem)" }}
+                                      >
+                                        {result.estimate}
+                                      </p>
+                                      <p className={`shrink-0 text-[0.68rem] font-black leading-none ${tone.estimate}`}>
+                                        {haraj.lastReveal?.currency}
+                                      </p>
                                     </div>
                                   </div>
                                 </div>
