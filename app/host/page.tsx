@@ -1734,10 +1734,11 @@ export default function HostStagePage() {
                           const teamId = assignmentByPlayer.get(player.playerId) ?? null
                           const tone = getTeamTone(teamId)
                           const isPickerOpen = teamPickerPlayerId === player.playerId
+                          const showPickerButton = !teamId
                           return (
-                            <div key={player.playerId} className="relative">
+                            <div key={player.playerId} className="relative z-0">
                               <Avatar
-                                className={`size-16 border-2 shadow-xl hover:z-50 sm:size-20 ${teamId ? tone.border : "border-slate-500"} ${isPickerOpen ? "ring-2 ring-amber-300/60" : ""}`}
+                                className={`relative z-10 size-16 border-2 shadow-xl hover:z-50 sm:size-20 ${teamId ? tone.border : "border-slate-500"} ${isPickerOpen ? "ring-2 ring-amber-300/60" : ""}`}
                               >
                                 {player.avatarValue ? (
                                   <AvatarImage src={player.avatarValue} className="object-cover" />
@@ -1747,14 +1748,16 @@ export default function HostStagePage() {
                                 </AvatarFallback>
                                 <AvatarGroupTooltip>{player.displayName}</AvatarGroupTooltip>
                               </Avatar>
-                              <button
-                                type="button"
-                                onClick={() => setTeamPickerPlayerId(player.playerId)}
-                                className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-amber-300 text-slate-950 shadow-lg transition hover:scale-105 active:scale-95 animate-[pulse_1s_ease-in-out_infinite]"
-                                aria-label={`تعيين ${player.displayName} إلى فريق`}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </button>
+                              {showPickerButton ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setTeamPickerPlayerId(player.playerId)}
+                                  className="absolute -right-1 -top-1 z-30 flex h-7 w-7 items-center justify-center rounded-full border border-white/35 bg-amber-300 text-slate-950 shadow-lg transition hover:scale-105 active:scale-95 animate-[pulse_1s_ease-in-out_infinite]"
+                                  aria-label={`تعيين ${player.displayName} إلى فريق`}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              ) : null}
                             </div>
                           )
                         })}
@@ -1788,9 +1791,15 @@ export default function HostStagePage() {
                           {teamPlayers.map((player) => (
                             <div
                               key={`${team.teamId}-${player.playerId}`}
-                              className="rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-sm"
+                              className="flex items-center gap-3 rounded-xl border border-white/20 bg-white/15 px-3 py-2 text-sm"
                             >
-                              {player.displayName}
+                              <Avatar className="size-9 border border-white/20 shadow-sm">
+                                {player.avatarValue ? <AvatarImage src={player.avatarValue} className="object-cover" /> : null}
+                                <AvatarFallback className={`${tone.bg} text-base`}>
+                                  {player.avatarType === "emoji" ? player.avatarValue : "🙂"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium text-white">{player.displayName}</span>
                             </div>
                           ))}
                         </div>
@@ -2338,16 +2347,22 @@ export default function HostStagePage() {
                     <div className="flex min-h-0 flex-col rounded-2xl border border-white/15 bg-black/20 p-4">
                       <p className="shrink-0 text-sm font-semibold text-slate-200">حالة الإرسال الحالية</p>
                       <p className="mt-1 shrink-0 text-xs text-slate-400">بدون كشف أي تخمين قبل نهاية المؤقت.</p>
-                      <div className="mt-3 grid min-h-0 flex-1 auto-rows-fr gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      <div className="mt-3 grid min-h-0 w-full max-w-[40rem] flex-1 auto-rows-fr gap-2 self-center sm:grid-cols-4 lg:grid-cols-5">
                         {room.players.map((player) => {
                           const submitted = harajSubmittedSet.has(player.playerId)
                           return (
                             <div
                               key={`haraj-submit-${player.playerId}`}
-                              className={`flex min-h-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm ${submitted ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-200"}`}
+                              className={`aspect-square min-h-0 rounded-2xl border p-2 shadow-sm ${submitted ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-200"}`}
                             >
-                              <span className="truncate font-semibold">{player.displayName}</span>
-                              <span className="shrink-0 text-xs font-black">{submitted ? "تم الإرسال" : "بانتظار"}</span>
+                              <div className="flex h-full flex-col items-center justify-center text-center">
+                                <p className="line-clamp-3 text-sm font-black leading-tight">{player.displayName}</p>
+                                {submitted ? (
+                                  <Check className="mt-2 size-7 shrink-0 text-emerald-200" />
+                                ) : (
+                                  <p className="mt-2 text-[10px] font-semibold text-slate-400">بانتظار</p>
+                                )}
+                              </div>
                             </div>
                           )
                         })}
@@ -2397,39 +2412,35 @@ export default function HostStagePage() {
                           لم يرسل أي لاعب تخمينًا خلال الوقت المحدد. تم تخطي الجولة بدون نقاط.
                         </p>
                       ) : (
-                        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                        <div className="grid min-h-0 w-full max-w-[40rem] flex-1 auto-rows-fr gap-2 self-center sm:grid-cols-4 lg:grid-cols-5">
                           {haraj.lastReveal.results.map((result) => {
                             const tone = getHarajResultCardClasses(result.rank, result.pointsAwarded)
                             const resultTeamName = result.teamId ? teamById.get(result.teamId)?.name ?? "فريق" : "بدون فريق"
                             return (
                               <article
                                 key={`haraj-result-${result.playerId}`}
-                                className={`flex min-h-0 flex-col justify-between rounded-2xl border px-3 py-3 shadow-sm ${tone.container}`}
+                                className={`aspect-square min-h-0 rounded-2xl border p-2 shadow-sm ${tone.container}`}
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <p className={`truncate text-sm font-black ${tone.player}`}>{result.playerName}</p>
-                                    <p className="mt-1 truncate text-[11px] text-slate-300">{resultTeamName}</p>
+                                <div className="flex h-full flex-col text-center">
+                                  <div className="flex items-start justify-between gap-1">
+                                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-black ${tone.badge}`}>
+                                      {result.rank ? `#${result.rank}` : "--"}
+                                    </span>
+                                    <span className={`text-[10px] font-black ${tone.points}`}>{result.pointsAwarded > 0 ? `+${result.pointsAwarded}` : "0"}</span>
                                   </div>
-                                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${tone.badge}`}>
-                                    {result.rank ? `#${result.rank}` : "بدون ترتيب"}
-                                  </span>
-                                </div>
-
-                                <div className="mt-3">
-                                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Guess</p>
-                                  <p className={`mt-2 text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
-                                  <p className="mt-1 text-[11px] text-slate-300">{haraj.lastReveal?.currency}</p>
-                                </div>
-
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
-                                    <p className="text-[10px] text-slate-300">الفارق</p>
-                                    <p className={`mt-1 text-lg font-black leading-none ${tone.meta}`}>{result.difference}</p>
+                                  <div className="mt-2 min-w-0">
+                                    <p className={`line-clamp-2 text-sm font-black leading-tight ${tone.player}`}>{result.playerName}</p>
+                                    <p className="mt-1 truncate text-[10px] text-slate-300">{resultTeamName}</p>
                                   </div>
-                                  <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
-                                    <p className="text-[10px] text-slate-300">النقاط</p>
-                                    <p className={`mt-1 text-lg font-black leading-none ${tone.points}`}>{result.pointsAwarded}</p>
+                                  <div className="flex flex-1 items-center justify-center">
+                                    <div>
+                                      <p className={`text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
+                                      <p className="mt-1 text-[10px] text-slate-300">{haraj.lastReveal?.currency}</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-300">
+                                    <span>فرق {result.difference}</span>
+                                    <span className={`${tone.meta}`}>{result.pointsAwarded > 0 ? "فائز" : "بدون نقاط"}</span>
                                   </div>
                                 </div>
                               </article>

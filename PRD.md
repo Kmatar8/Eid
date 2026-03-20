@@ -206,9 +206,9 @@ Per round:
 9. On reveal, host sees actual price and all player estimates with absolute difference from actual price.
 10. Closest estimates receive points (`50` for rank 1, `30` for rank 2, `10` for rank 3), credited to player teams.
 11. If all eligible players submit before timeout, host sees a `5`-second overlay countdown before reveal details are shown.
-12. During collection, host shows a dedicated centered timer block between the two team score cards with clear `الوقت المتبقي / Time Remaining` labeling and submission progress.
-13. Haraj reveal layout on host is split: product image on the left and a dense grid of player result cards on the right, with a large `السعر الحقيقي` headline above the cards.
-14. Each reveal card emphasizes the player's submitted estimate in large numerals and the layout must fit at least `20` player cards on the host screen without requiring vertical page scroll.
+12. During collection, host shows a dedicated centered timer block between the two team score cards with clear `الوقت المتبقي / Time Remaining` labeling and submission progress, plus a dense grid of compact square submission tiles showing each player's name and a check mark once they submit.
+13. Haraj reveal layout on host is split: product image on the left and a dense grid of compact square player-result tiles on the right, with a large `السعر الحقيقي` headline above the tiles.
+14. Each reveal tile must show the player's name and emphasize the submitted estimate in large numerals; the layout must fit at least `20` player tiles on the host screen without requiring vertical page scroll.
 15. On reveal, host plays a celebratory confetti effect when the real price is shown.
 16. Reveal result cards visually highlight only players who gained points, using rank-based winner colors.
 
