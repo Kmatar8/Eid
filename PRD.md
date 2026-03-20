@@ -197,8 +197,8 @@ Per turn:
 Per round:
 1. Host starts a Haraj round with a selected product image and known actual price.
 2. Product image is visible to all participants.
-3. Controllers accept one numeric estimate per player using Arabic or English digits; runtime normalizes to English numeric value for scoring and reveal table display.
-4. Collection timer is fixed at `15` seconds.
+3. Controllers accept one numeric estimate per player using Arabic or English digits; runtime normalizes to English numeric value for scoring and reveal result display.
+4. Collection timer is fixed at `60` seconds.
 5. Estimates are hidden from all participants until lock/reveal.
 6. Submission status is visible (who submitted vs who did not submit).
 7. Round locks when timer expires or all players submit.
@@ -206,9 +206,11 @@ Per round:
 9. On reveal, host sees actual price and all player estimates with absolute difference from actual price.
 10. Closest estimates receive points (`50` for rank 1, `30` for rank 2, `10` for rank 3), credited to player teams.
 11. If all eligible players submit before timeout, host sees a `5`-second overlay countdown before reveal details are shown.
-12. Haraj reveal layout on host is split: product image on the left and player guesses table on the right, with a large `السعر الحقيقي` headline above the table.
-13. On reveal, host plays a celebratory confetti effect when the real price is shown.
-14. Reveal results table visually highlights only players who gained points, using rank-based winner colors.
+12. During collection, host shows a dedicated centered timer block between the two team score cards with clear `الوقت المتبقي / Time Remaining` labeling and submission progress.
+13. Haraj reveal layout on host is split: product image on the left and a dense grid of player result cards on the right, with a large `السعر الحقيقي` headline above the cards.
+14. Each reveal card emphasizes the player's submitted estimate in large numerals and the layout must fit at least `20` player cards on the host screen without requiring vertical page scroll.
+15. On reveal, host plays a celebratory confetti effect when the real price is shown.
+16. Reveal result cards visually highlight only players who gained points, using rank-based winner colors.
 
 ## 8.6.2 Haraj round phases
 1. `haraj_intro`
@@ -344,7 +346,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 
 ## M4: Trivia v1 + Haraj v1
 - Jeopardy board flow, buzzer lock, responder fairness, live score commits.
-- Haraj round flow, 15-second estimate collection, hidden answers until reveal, tie-aware scoring.
+- Haraj round flow, 60-second estimate collection, hidden answers until reveal, tie-aware scoring.
 
 ## M5: Reliability + Scale Hardening
 - Timeout enforcement, load tests for target concurrency, observability + alerts.

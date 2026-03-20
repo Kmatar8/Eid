@@ -47,6 +47,8 @@ This board tracks implementation order, ownership, and execution status.
 | 27 | T-0057 | M1 | Landing Social Row Layout Adjustment | done | AI-Agent | T-0055 | Render TikTok profile chip beside festive pill in responsive row |
 | 28 | T-0058 | M4 | Host Mobile TV-Mirror Guidance + Compact Mode | done | AI-Agent | T-0057 | Added mobile helper modal, portrait guidance alert, and persisted compact mirror scaling mode on `/host` |
 | 29 | T-0059 | M1 | Host Surfaces Laptop-Only Access Gate | done | AI-Agent | T-0058 | Enforced non-dismissible laptop-only overlay on `/host/login` and host/room runtime wrappers |
+| 30 | T-0066 | M4 | Jeopardy Category Refresh for Tech Slot | done | AI-Agent | T-0004 | Replaced `تقنية` with `دين` and refreshed the five clues as Islamic trivia |
+| 31 | T-0067 | M4 | Haraj Timer and Reveal Layout Refresh | done | AI-Agent | T-0033, T-0008 | Increased Haraj collection to 60 seconds and replaced reveal table with dense player cards |
 
 ## Execution Rules
 1. Only one `in_progress` task per milestone unless explicitly approved.

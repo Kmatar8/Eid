@@ -195,35 +195,47 @@ function remainingSeconds(targetTs: number | null, nowTs: number) {
   return Math.max(0, Math.ceil((targetTs - nowTs) / 1000))
 }
 
-function getHarajWinnerRowClasses(rank: number | null, pointsAwarded: number) {
+function getHarajResultCardClasses(rank: number | null, pointsAwarded: number) {
   if (pointsAwarded <= 0) {
     return {
-      row: "border-white/10",
-      player: "",
+      container: "border-white/10 bg-white/5",
+      player: "text-white",
+      estimate: "text-white",
+      meta: "text-slate-200",
       points: "text-amber-200",
+      badge: "border-white/15 bg-black/25 text-slate-200",
     }
   }
 
   if (rank === 1) {
     return {
-      row: "border-emerald-300/45 bg-emerald-500/12",
+      container: "border-emerald-300/45 bg-emerald-500/12",
       player: "text-emerald-100",
+      estimate: "text-emerald-50",
+      meta: "text-emerald-100",
       points: "text-emerald-200",
+      badge: "border-emerald-300/45 bg-emerald-400/18 text-emerald-100",
     }
   }
 
   if (rank === 2) {
     return {
-      row: "border-cyan-300/45 bg-cyan-500/12",
+      container: "border-cyan-300/45 bg-cyan-500/12",
       player: "text-cyan-100",
+      estimate: "text-cyan-50",
+      meta: "text-cyan-100",
       points: "text-cyan-200",
+      badge: "border-cyan-300/45 bg-cyan-400/18 text-cyan-100",
     }
   }
 
   return {
-    row: "border-fuchsia-300/40 bg-fuchsia-500/10",
+    container: "border-fuchsia-300/40 bg-fuchsia-500/10",
     player: "text-fuchsia-100",
+    estimate: "text-fuchsia-50",
+    meta: "text-fuchsia-100",
     points: "text-fuchsia-200",
+    badge: "border-fuchsia-300/40 bg-fuchsia-400/18 text-fuchsia-100",
   }
 }
 
@@ -808,6 +820,7 @@ export default function HostStagePage() {
     () => new Map((room?.players ?? []).map((player) => [player.playerId, player])),
     [room?.players]
   )
+  const teamById = useMemo(() => new Map((room?.teams ?? []).map((team) => [team.teamId, team])), [room?.teams])
 
   const playersByTeam = useMemo(() => {
     const grouped = {
@@ -1249,7 +1262,7 @@ export default function HostStagePage() {
   const handleStartHaraj = useCallback(async () => {
     try {
       await runAction("host.startHaraj")
-      setNotice("بدأت لعبة الحراج. أمام اللاعبين 15 ثانية لتخمين السعر.")
+      setNotice("بدأت لعبة الحراج. أمام اللاعبين دقيقة واحدة لتخمين السعر.")
     } catch (requestError) {
       setError(toErrorMessage(requestError))
     }
@@ -1900,7 +1913,7 @@ export default function HostStagePage() {
                     <ul className="mt-3 space-y-2 text-base text-slate-200">
                       <li>1. يظهر المنتج للجميع على شاشة المضيف.</li>
                       <li>2. كل لاعب يدخل تخمين السعر من جواله.</li>
-                      <li>3. وقت التخمين 15 ثانية أو حتى يرسل الجميع.</li>
+                      <li>3. وقت التخمين 60 ثانية أو حتى يرسل الجميع.</li>
                       <li>4. بعد الإغلاق يتم كشف السعر الحقيقي والترتيب.</li>
                     </ul>
                   </article>
@@ -2250,35 +2263,71 @@ export default function HostStagePage() {
           ) : null}
 
           {room && stage === "haraj" ? (
-            <section className="space-y-4">
-              <div className="grid gap-3 lg:grid-cols-2">
-                {orderedTeams.map((team) => {
-                  const tone = getTeamTone(team.teamId)
-                  return (
-                    <article key={`haraj-score-${team.teamId}`} className={`rounded-2xl border p-4 text-center ${tone.border} ${tone.bg}`}>
-                      <p className={`text-xl font-semibold ${tone.text}`}>{team.name}</p>
-                      <p className="mt-1 text-6xl font-black leading-none">{team.score}</p>
-                    </article>
-                  )
-                })}
+            <section className="flex h-full min-h-0 flex-col gap-4">
+              <div className="grid shrink-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,23rem)_minmax(0,1fr)]">
+                {orderedTeams[0] ? (
+                  <article
+                    key={`haraj-score-${orderedTeams[0].teamId}`}
+                    className={`rounded-2xl border p-4 text-center ${getTeamTone(orderedTeams[0].teamId).border} ${getTeamTone(orderedTeams[0].teamId).bg}`}
+                  >
+                    <p className={`text-xl font-semibold ${getTeamTone(orderedTeams[0].teamId).text}`}>{orderedTeams[0].name}</p>
+                    <p className="mt-1 text-6xl font-black leading-none">{orderedTeams[0].score}</p>
+                  </article>
+                ) : null}
+
+                <article className="party-surface relative flex min-h-[9.75rem] flex-col items-center justify-center overflow-hidden rounded-2xl border border-amber-300/30 bg-amber-500/12 p-4 text-center shadow-xl">
+                  {haraj?.phase === "haraj_collecting" ? (
+                    <>
+                      <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Time Remaining</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-100">الوقت المتبقي لإرسال التخمينات</p>
+                      <p className="mt-3 text-6xl font-black leading-none text-amber-300 drop-shadow-[0_0_22px_rgba(251,191,36,0.35)] sm:text-7xl">
+                        {harajCollectSeconds}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-200">ثانية</p>
+                      <p className="mt-3 text-xs font-semibold text-cyan-100">
+                        التخمينات المستلمة {haraj?.roundSubmittedCount ?? 0}/{haraj?.roundEligiblePlayers ?? 0}
+                      </p>
+                    </>
+                  ) : haraj?.phase === "haraj_reveal" && haraj.lastReveal ? (
+                    <>
+                      <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Haraj Reveal</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-100">تم كشف نتائج الجولة</p>
+                      <p className="mt-3 text-4xl font-black leading-none text-amber-300 sm:text-5xl">
+                        {haraj.lastReveal.actualPrice} {haraj.lastReveal.currency}
+                      </p>
+                      <p className="mt-2 text-xs font-semibold text-slate-200">
+                        {haraj.lastReveal.skipped ? "بدون تخمينات" : `${haraj.lastReveal.results.length} بطاقة نتيجة`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs uppercase tracking-[0.24em] text-amber-100/85">Haraj</p>
+                      <p className="mt-2 text-sm font-semibold text-slate-100">بانتظار بداية الجولة التالية</p>
+                    </>
+                  )}
+                </article>
+
+                {orderedTeams[1] ? (
+                  <article
+                    key={`haraj-score-${orderedTeams[1].teamId}`}
+                    className={`rounded-2xl border p-4 text-center ${getTeamTone(orderedTeams[1].teamId).border} ${getTeamTone(orderedTeams[1].teamId).bg}`}
+                  >
+                    <p className={`text-xl font-semibold ${getTeamTone(orderedTeams[1].teamId).text}`}>{orderedTeams[1].name}</p>
+                    <p className="mt-1 text-6xl font-black leading-none">{orderedTeams[1].score}</p>
+                  </article>
+                ) : null}
               </div>
 
               {haraj?.phase === "haraj_collecting" && haraj.currentProduct ? (
-                <article className="party-surface-strong rounded-3xl p-5">
-                  <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Round</p>
-                  <h2 className="mt-2 text-3xl font-black">{haraj.currentProduct.name}</h2>
-                  <p className="mt-2 text-sm text-slate-200">
-                    الوقت المتبقي: <span className="font-black text-amber-300">{harajCollectSeconds}</span> ثانية
-                  </p>
-                  <p className="mt-1 text-sm text-slate-200">
-                    تم استلام التخمينات:{" "}
-                    <span className="font-black text-cyan-200">
-                      {haraj.roundSubmittedCount}/{haraj.roundEligiblePlayers}
-                    </span>
-                  </p>
+                <article className="party-surface-strong flex min-h-0 flex-1 flex-col rounded-3xl p-5">
+                  <div className="shrink-0">
+                    <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Round</p>
+                    <h2 className="mt-2 text-3xl font-black">{haraj.currentProduct.name}</h2>
+                    <p className="mt-2 text-sm text-slate-200">تابع استلام التخمينات بدون كشف الأسعار حتى انتهاء الجولة أو إرسال الجميع.</p>
+                  </div>
 
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[28rem_1fr]">
-                    <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2">
+                  <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[24rem_1fr]">
+                    <div className="flex min-h-[18rem] items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:min-h-0">
                       <img
                         src={haraj.currentProduct.imageUrl}
                         alt={haraj.currentProduct.name}
@@ -2286,20 +2335,19 @@ export default function HostStagePage() {
                         decoding="async"
                       />
                     </div>
-                    <div className="rounded-2xl border border-white/15 bg-black/20 p-4">
-                      <p className="text-sm font-semibold text-slate-200">حالة الإرسال (بدون كشف التخمين):</p>
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="flex min-h-0 flex-col rounded-2xl border border-white/15 bg-black/20 p-4">
+                      <p className="shrink-0 text-sm font-semibold text-slate-200">حالة الإرسال الحالية</p>
+                      <p className="mt-1 shrink-0 text-xs text-slate-400">بدون كشف أي تخمين قبل نهاية المؤقت.</p>
+                      <div className="mt-3 grid min-h-0 flex-1 auto-rows-fr gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                         {room.players.map((player) => {
                           const submitted = harajSubmittedSet.has(player.playerId)
                           return (
                             <div
                               key={`haraj-submit-${player.playerId}`}
-                              className={`rounded-xl border px-3 py-2 text-sm ${submitted ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-200"}`}
+                              className={`flex min-h-0 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-sm ${submitted ? "border-emerald-300/45 bg-emerald-500/15 text-emerald-100" : "border-white/15 bg-white/5 text-slate-200"}`}
                             >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="font-semibold">{player.displayName}</span>
-                                <span className="text-xs font-black">{submitted ? "تم الإرسال" : "بانتظار"}</span>
-                              </div>
+                              <span className="truncate font-semibold">{player.displayName}</span>
+                              <span className="shrink-0 text-xs font-black">{submitted ? "تم الإرسال" : "بانتظار"}</span>
                             </div>
                           )
                         })}
@@ -2310,12 +2358,15 @@ export default function HostStagePage() {
               ) : null}
 
               {haraj?.phase === "haraj_reveal" && haraj.lastReveal ? (
-                <article className="party-surface-strong relative rounded-3xl p-5">
-                  <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
-                  <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
-                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,24rem)_1fr] lg:items-start">
-                    <div className="space-y-4">
-                      <div className="flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:h-[30rem]">
+                <article className="party-surface-strong relative flex min-h-0 flex-1 flex-col rounded-3xl p-5">
+                  <div className="shrink-0">
+                    <p className="text-xs uppercase tracking-[0.25em] text-amber-200/85">Haraj Reveal</p>
+                    <h2 className="mt-2 text-3xl font-black">{haraj.lastReveal.productName}</h2>
+                  </div>
+
+                  <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,22rem)_1fr]">
+                    <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(0,1fr)_auto]">
+                      <div className="flex min-h-[18rem] items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 p-2 lg:min-h-0">
                         <img
                           src={haraj.lastReveal.imageUrl}
                           alt={haraj.lastReveal.productName}
@@ -2333,8 +2384,8 @@ export default function HostStagePage() {
                       </Button>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-5 text-center">
+                    <div className="flex min-h-0 flex-col gap-4">
+                      <div className="shrink-0 rounded-2xl border border-amber-300/45 bg-amber-500/14 px-4 py-5 text-center">
                         <p className="text-sm font-bold tracking-[0.12em] text-amber-100">السعر الحقيقي</p>
                         <p className="mt-2 text-5xl font-black leading-none text-amber-300 sm:text-6xl">
                           {haraj.lastReveal.actualPrice} {haraj.lastReveal.currency}
@@ -2346,34 +2397,44 @@ export default function HostStagePage() {
                           لم يرسل أي لاعب تخمينًا خلال الوقت المحدد. تم تخطي الجولة بدون نقاط.
                         </p>
                       ) : (
-                        <div className="overflow-x-auto rounded-2xl border border-white/15 bg-black/20">
-                          <table className="min-w-full text-right text-sm">
-                            <thead className="bg-white/10 text-slate-200">
-                              <tr>
-                                <th className="px-3 py-2">اللاعب</th>
-                                <th className="px-3 py-2">التخمين</th>
-                                <th className="px-3 py-2">الفارق</th>
-                                <th className="px-3 py-2">الترتيب</th>
-                                <th className="px-3 py-2">النقاط</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {haraj.lastReveal.results.map((result) => {
-                                const tone = getHarajWinnerRowClasses(result.rank, result.pointsAwarded)
-                                return (
-                                  <tr key={`haraj-result-${result.playerId}`} className={`border-t ${tone.row}`}>
-                                    <td className={`px-3 py-2 font-semibold ${tone.player}`}>{result.playerName}</td>
-                                    <td className="px-3 py-2">
-                                      {result.estimate} {haraj.lastReveal?.currency}
-                                    </td>
-                                    <td className="px-3 py-2">{result.difference}</td>
-                                    <td className="px-3 py-2">{result.rank ?? "-"}</td>
-                                    <td className={`px-3 py-2 font-black ${tone.points}`}>{result.pointsAwarded}</td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
+                        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                          {haraj.lastReveal.results.map((result) => {
+                            const tone = getHarajResultCardClasses(result.rank, result.pointsAwarded)
+                            const resultTeamName = result.teamId ? teamById.get(result.teamId)?.name ?? "فريق" : "بدون فريق"
+                            return (
+                              <article
+                                key={`haraj-result-${result.playerId}`}
+                                className={`flex min-h-0 flex-col justify-between rounded-2xl border px-3 py-3 shadow-sm ${tone.container}`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className={`truncate text-sm font-black ${tone.player}`}>{result.playerName}</p>
+                                    <p className="mt-1 truncate text-[11px] text-slate-300">{resultTeamName}</p>
+                                  </div>
+                                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-black ${tone.badge}`}>
+                                    {result.rank ? `#${result.rank}` : "بدون ترتيب"}
+                                  </span>
+                                </div>
+
+                                <div className="mt-3">
+                                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-300">Guess</p>
+                                  <p className={`mt-2 text-3xl font-black leading-none ${tone.estimate}`}>{result.estimate}</p>
+                                  <p className="mt-1 text-[11px] text-slate-300">{haraj.lastReveal?.currency}</p>
+                                </div>
+
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
+                                    <p className="text-[10px] text-slate-300">الفارق</p>
+                                    <p className={`mt-1 text-lg font-black leading-none ${tone.meta}`}>{result.difference}</p>
+                                  </div>
+                                  <div className="rounded-xl border border-white/10 bg-black/20 px-2 py-2">
+                                    <p className="text-[10px] text-slate-300">النقاط</p>
+                                    <p className={`mt-1 text-lg font-black leading-none ${tone.points}`}>{result.pointsAwarded}</p>
+                                  </div>
+                                </div>
+                              </article>
+                            )
+                          })}
                         </div>
                       )}
                     </div>

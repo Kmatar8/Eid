@@ -819,10 +819,27 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   جولة {room.haraj.roundIndex + 1} من {room.haraj.totalRounds}
                 </p>
-                <p className="text-sm text-slate-200">أدخل قيمة المنتج فقط.</p>
-                <p className="text-sm text-slate-200">
-                  الوقت المتبقي: <span className="font-black text-amber-300">{harajCollectSeconds}</span> ثانية
-                </p>
+                <p className="text-sm text-slate-200">أدخل قيمة المنتج فقط قبل انتهاء الدقيقة الحالية.</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-amber-300/40 bg-amber-500/12 p-4 text-center shadow-inner">
+                    <p className="text-xs uppercase tracking-[0.22em] text-amber-100">Time Remaining</p>
+                    <p className="mt-2 text-sm font-semibold text-amber-50">الوقت المتبقي</p>
+                    <p className="mt-3 text-6xl font-black leading-none text-amber-300 drop-shadow-[0_0_18px_rgba(251,191,36,0.35)]">
+                      {harajCollectSeconds}
+                    </p>
+                    <p className="mt-2 text-sm text-amber-50/90">ثانية</p>
+                  </div>
+                  <div className="rounded-2xl border border-cyan-300/35 bg-cyan-500/12 p-4 text-center shadow-inner">
+                    <p className="text-xs uppercase tracking-[0.22em] text-cyan-100">Submissions</p>
+                    <p className="mt-2 text-sm font-semibold text-cyan-50">حالة الإرسال</p>
+                    <p className="mt-3 text-5xl font-black leading-none text-cyan-200">
+                      {room.haraj.roundSubmittedCount}/{room.haraj.roundEligiblePlayers}
+                    </p>
+                    <p className="mt-2 text-xs text-cyan-50/90">
+                      {hasSubmittedHarajEstimate ? "تم حفظ تخمينك" : "أرسل قبل انتهاء الوقت"}
+                    </p>
+                  </div>
+                </div>
                 {hasSubmittedHarajEstimate ? (
                   <p className="rounded-xl border border-emerald-300/40 bg-emerald-500/12 px-4 py-3 text-sm font-semibold text-emerald-100">
                     تم إرسال التخمين ✅
