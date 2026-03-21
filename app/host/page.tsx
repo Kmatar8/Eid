@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { AnimatePresence, motion } from "framer-motion"
 import { Check, Gamepad2, LogOut, Plus, Power, X } from "lucide-react"
@@ -30,6 +30,7 @@ const HOST_POLL_BOARD_MS = 850
 const HOST_POLL_ACTIVE_MS = 260
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
+const HOST_BACKGROUND_HEARTBEAT_MS = 60000
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
@@ -181,7 +182,7 @@ function getGameLabel(gameId: ActiveGame) {
 }
 
 function isTriviaTimedPhase(phase: RoomSnapshot["trivia"]["phase"]) {
-  return phase === "countdown" || phase === "buzzer_open" || phase === "answer_active"
+  return phase === "countdown" || phase === "answer_active"
 }
 
 function isHarajTimedPhase(phase: RoomSnapshot["haraj"]["phase"]) {
@@ -262,7 +263,6 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
     }
     if (
       room.trivia.phase === "countdown" ||
-      room.trivia.phase === "buzzer_open" ||
       room.trivia.phase === "answer_active" ||
       room.trivia.phase === "answer_reveal"
     ) {
@@ -284,7 +284,6 @@ function resolveHostPollMs(room: RoomSnapshot | null) {
     }
     if (
       room.trivia.phase === "countdown" ||
-      room.trivia.phase === "buzzer_open" ||
       room.trivia.phase === "answer_active" ||
       room.trivia.phase === "answer_reveal"
     ) {
@@ -400,7 +399,6 @@ function getHostActionGuardError(room: RoomSnapshot | null, action: HostActionTy
       room.trivia.status === "in_progress" &&
       (room.trivia.phase === "answer_reveal" ||
         room.trivia.phase === "countdown" ||
-        room.trivia.phase === "buzzer_open" ||
         room.trivia.phase === "answer_active")
       ? null
       : "الانتقال للسؤال التالي غير متاح في هذه المرحلة."
@@ -429,7 +427,6 @@ export default function HostStagePage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
-  const [renamingTeamId, setRenamingTeamId] = useState<string | null>(null)
   const [feedbackState, setFeedbackState] = useState<FeedbackType>(null)
   const [feedbackScoreDelta, setFeedbackScoreDelta] = useState<number | null>(null)
   const [feedbackContext, setFeedbackContext] = useState<FeedbackOverlayContext | null>(null)
@@ -651,7 +648,7 @@ export default function HostStagePage() {
     const qId = room?.trivia?.selectedClue?.questionId
     if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
       const { reason, wasCorrect } = room.trivia.lastResult
-      if (reason !== "no_buzz" && reason !== "host_skip") {
+      if (reason !== "host_skip") {
         const responderPlayerId = room.trivia.currentResponderPlayerId
         const responderPlayerName = responderPlayerId
           ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
@@ -1083,9 +1080,6 @@ export default function HostStagePage() {
     }
 
     const timer = window.setInterval(() => {
-      if (!isPageVisible) {
-        return
-      }
       void sendAction(roomId, hostToken, "host.heartbeat")
         .then((ack) => {
           syncServerClock(ack.ts)
@@ -1093,7 +1087,7 @@ export default function HostStagePage() {
         .catch(() => {
           // Ignore transient heartbeat failures; polling path handles visible errors.
         })
-    }, HOST_HEARTBEAT_MS)
+    }, isPageVisible ? HOST_HEARTBEAT_MS : HOST_BACKGROUND_HEARTBEAT_MS)
 
     return () => {
       window.clearInterval(timer)
@@ -1152,30 +1146,6 @@ export default function HostStagePage() {
       }
     },
     [runAction]
-  )
-
-  const handleRenameTeam = useCallback(
-    async (teamId: string) => {
-      const draft = teamNameDrafts[teamId] ?? ""
-      const name = draft
-        .trim()
-        .replace(/\s+/g, " ")
-      if (name.length < 1 || name.length > 24) {
-        setError("اسم الفريق يجب أن يكون بين حرف واحد و24 حرفًا.")
-        return
-      }
-
-      try {
-        setRenamingTeamId(teamId)
-        await runAction("host.renameTeam", { teamId, name })
-        setNotice(`تم تحديث اسم الفريق إلى: ${name}`)
-      } catch (requestError) {
-        setError(toErrorMessage(requestError))
-      } finally {
-        setRenamingTeamId(null)
-      }
-    },
-    [runAction, teamNameDrafts]
   )
 
   const handleStartSession = useCallback(async () => {
@@ -1376,8 +1346,6 @@ export default function HostStagePage() {
   const selectedClue = trivia?.selectedClue ?? null
   const currentTone = getTeamTone(responderTeam?.teamId ?? currentTurnTeam?.teamId ?? null)
   const countdownSeconds = remainingSeconds(trivia?.countdownEndsAt ?? null, nowTs)
-  const buzzSeconds = remainingSeconds(trivia?.buzzEndsAt ?? null, nowTs)
-  const answerSeconds = remainingSeconds(trivia?.answerEndsAt ?? null, nowTs)
 
   const canSelectAnotherResponder =
     room?.activeGame === "trivia" &&
@@ -1434,16 +1402,12 @@ export default function HostStagePage() {
   const canAdvanceFromQuestionModal =
     room?.activeGame === "trivia" &&
     trivia?.status === "in_progress" &&
-    (trivia.phase === "answer_reveal" ||
-      trivia.phase === "countdown" ||
-      trivia.phase === "buzzer_open" ||
-      trivia.phase === "answer_active")
+    (trivia.phase === "answer_reveal" || trivia.phase === "countdown" || trivia.phase === "answer_active")
   const isCountdownPhase = trivia?.phase === "countdown"
-  const isQuestionRevealed =
-    trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active" || trivia?.phase === "answer_reveal"
+  const isQuestionRevealed = trivia?.phase === "answer_active" || trivia?.phase === "answer_reveal"
   const revealResult =
     trivia?.phase === "answer_reveal" && trivia?.lastResult?.questionId === selectedClue?.questionId ? trivia.lastResult : null
-  const hasScoredReveal = Boolean(revealResult && revealResult.reason !== "no_buzz" && revealResult.reason !== "host_skip")
+  const hasScoredReveal = Boolean(revealResult && revealResult.reason !== "host_skip")
 
   const handleQuestionModalExit = useCallback(async () => {
     setFeedbackState(null)
@@ -1527,15 +1491,21 @@ export default function HostStagePage() {
   const liveStatusCommandText = useMemo(() => {
     const teamName = currentTurnTeam?.name ?? "الفريق الحالي"
     const pickerName = currentPicker?.displayName ?? "لاعب الفريق"
+    const isStealTurn =
+      Boolean(trivia?.currentResponderTeamId) &&
+      Boolean(trivia?.currentTeamId) &&
+      trivia?.currentResponderTeamId !== trivia?.currentTeamId
 
     if (trivia?.phase === "board_turn") {
       return `${pickerName} من ${teamName} اختر سؤال`
     }
 
-    if (trivia?.phase === "countdown" || trivia?.phase === "buzzer_open" || trivia?.phase === "answer_active") {
+    if (trivia?.phase === "countdown" || trivia?.phase === "answer_active") {
       const responderName = responderPlayer?.displayName ?? pickerName
       const responderTeamName = responderTeam?.name ?? teamName
-      return `${responderName} من ${responderTeamName} يجيب الآن`
+      return isStealTurn
+        ? `فرصة السرقة: ${responderName} من ${responderTeamName} يجيب الآن`
+        : `${responderName} من ${responderTeamName} يجيب الآن`
     }
 
     if (trivia?.phase === "answer_reveal") {
@@ -1543,7 +1513,15 @@ export default function HostStagePage() {
     }
 
     return `${pickerName} من ${teamName} اختر سؤال`
-  }, [currentPicker?.displayName, currentTurnTeam?.name, responderPlayer?.displayName, responderTeam?.name, trivia?.phase])
+  }, [
+    currentPicker?.displayName,
+    currentTurnTeam?.name,
+    responderPlayer?.displayName,
+    responderTeam?.name,
+    trivia?.currentResponderTeamId,
+    trivia?.currentTeamId,
+    trivia?.phase,
+  ])
 
   const winningSummary = useMemo(() => {
     if (!room) {
@@ -1735,9 +1713,25 @@ export default function HostStagePage() {
                           const isPickerOpen = teamPickerPlayerId === player.playerId
                           const showPickerButton = !teamId
                           return (
-                            <div key={player.playerId} className="relative z-0">
+                            <div
+                              key={player.playerId}
+                              className={`relative z-0 ${showPickerButton ? "cursor-pointer" : ""}`}
+                              role={showPickerButton ? "button" : undefined}
+                              tabIndex={showPickerButton ? 0 : undefined}
+                              onClick={showPickerButton ? () => setTeamPickerPlayerId(player.playerId) : undefined}
+                              onKeyDown={
+                                showPickerButton
+                                  ? (event) => {
+                                      if (event.key === "Enter" || event.key === " ") {
+                                        event.preventDefault()
+                                        setTeamPickerPlayerId(player.playerId)
+                                      }
+                                    }
+                                  : undefined
+                              }
+                            >
                               <Avatar
-                                className={`relative z-10 size-16 border-2 shadow-xl hover:z-50 sm:size-20 ${teamId ? tone.border : "border-slate-500"} ${isPickerOpen ? "ring-2 ring-amber-300/60" : ""}`}
+                                className={`relative z-10 size-16 border-2 shadow-xl hover:z-50 sm:size-20 ${teamId ? tone.border : "border-slate-500"} ${isPickerOpen ? "ring-2 ring-amber-300/60" : ""} ${showPickerButton ? "transition-transform hover:scale-[1.04]" : ""}`}
                               >
                                 {player.avatarValue ? (
                                   <AvatarImage src={player.avatarValue} className="object-cover" />
@@ -2143,7 +2137,9 @@ export default function HostStagePage() {
                                     <div className="min-w-[24rem] rounded-2xl border border-white/20 bg-white/5 px-6 py-4">
                                       <p className="text-sm font-semibold text-slate-300/90">الحالة الحالية</p>
                                       <span className="mt-1 block text-2xl font-black text-slate-200">
-                                        {trivia?.phase === "board_turn" ? `دور فريق: ${currentTurnTeam?.name ?? "..."}` : "لالي يضغط اول يجاوب.."}
+                                        {trivia?.phase === "board_turn"
+                                          ? `دور فريق: ${currentTurnTeam?.name ?? "..."}`
+                                          : "سيتم تعيين اللاعب المكلّف بالإجابة تلقائيًا."}
                                       </span>
                                     </div>
                                   )}

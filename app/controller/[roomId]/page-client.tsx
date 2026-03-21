@@ -19,8 +19,6 @@ const CLOCK_TICK_MS = 300
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
 const CONTROLLER_ACTION_BUTTON_CLASS = `${JOIN_CTA_GRADIENT_CLASS} rounded-2xl border-0 font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 disabled:hover:brightness-100`
-const CONTROLLER_ROUND_ACTION_BUTTON_CLASS =
-  "group relative flex h-full w-full items-center justify-center rounded-full bg-gradient-to-b from-red-500 via-red-600 to-red-800 shadow-[inset_0_10px_20px_rgba(255,255,255,0.4),inset_0_-10px_20px_rgba(0,0,0,0.6),0_10px_25px_rgba(225,29,72,0.8)] transition-all duration-100 active:translate-y-3 active:scale-[0.98] active:shadow-[inset_0_20px_30px_rgba(0,0,0,0.7),0_0_10px_rgba(225,29,72,0.4)] disabled:opacity-50 disabled:pointer-events-none"
 
 type ControllerClientPageProps = {
   roomId: string
@@ -165,7 +163,6 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
 
     if (
       room.trivia.phase === "countdown" ||
-      room.trivia.phase === "buzzer_open" ||
       room.trivia.phase === "answer_active" ||
       room.trivia.phase === "answer_reveal"
     ) {
@@ -188,7 +185,6 @@ function resolveControllerPollMs(room: RoomSnapshot | null) {
     }
     if (
       room.trivia.phase === "countdown" ||
-      room.trivia.phase === "buzzer_open" ||
       room.trivia.phase === "answer_active" ||
       room.trivia.phase === "answer_reveal"
     ) {
@@ -259,7 +255,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       qId !== processedFeedbackQuestionId
     ) {
       const { reason, wasCorrect } = room.trivia.lastResult
-      if (reason !== "no_buzz" && reason !== "host_skip") {
+      if (reason !== "host_skip") {
         const responderPlayerId = room.trivia.currentResponderPlayerId
         const responderPlayerName = responderPlayerId
           ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
@@ -520,19 +516,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const responderName = responderId ? playerNameById.get(responderId) ?? "لاعب" : null
   const responderTeam = responderTeamId ? teamById.get(responderTeamId) ?? null : null
   const activeTone = getTeamTone(responderTeamId ?? myTeamId)
-
-  const canBuzz = useMemo(() => {
-    if (!room || !session) {
-      return false
-    }
-    return (
-      room.state === "game_live" &&
-      room.activeGame === "trivia" &&
-      room.trivia.status === "in_progress" &&
-      room.trivia.phase === "buzzer_open" &&
-      !room.trivia.currentResponderPlayerId
-    )
-  }, [room, session])
+  const isStealTurn =
+    Boolean(room?.trivia.currentTeamId) &&
+    Boolean(responderTeamId) &&
+    room?.trivia.currentTeamId !== responderTeamId
 
   const canAnswer = useMemo(() => {
     if (!room || !session || !selectedQuestionId) {
@@ -572,14 +559,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   }, [hasSubmittedHarajEstimate, myTeamId, room, session])
 
   const countdownSeconds = remainingSeconds(room?.trivia.countdownEndsAt ?? null, nowTs)
-  const buzzSeconds = remainingSeconds(room?.trivia.buzzEndsAt ?? null, nowTs)
   const answerSeconds = remainingSeconds(room?.trivia.answerEndsAt ?? null, nowTs)
   const harajCollectSeconds = remainingSeconds(room?.haraj.collectEndsAt ?? null, nowTs)
   const selectedClue = isTriviaActiveGame ? room?.trivia.selectedClue ?? null : null
   const isCountdownPhase = isTriviaActiveGame && room?.trivia.phase === "countdown"
-  const isQuestionRevealed =
-    isTriviaActiveGame &&
-    (room?.trivia.phase === "buzzer_open" || room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal")
+  const isQuestionRevealed = isTriviaActiveGame && (room?.trivia.phase === "answer_active" || room?.trivia.phase === "answer_reveal")
 
   const statusText = useMemo(() => {
     if (!room || !session) {
@@ -618,11 +602,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     if (room.trivia.phase === "countdown") {
-      return `السؤال سيظهر بعد ${countdownSeconds} ثوانٍ. جهّز البازر.`
-    }
-
-    if (room.trivia.phase === "buzzer_open") {
-      return null
+      return `السؤال سيظهر بعد ${countdownSeconds} ثوانٍ. استعد لدور اللاعب المكلّف بالإجابة.`
     }
 
     if (room.trivia.phase === "answer_active") {
@@ -631,13 +611,12 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
       const teamName = responderTeam?.name ?? "فريق"
       const playerName = responderName ?? "لاعب"
-      return `السؤال للاعب ${playerName} من ${teamName}.`
+      return isStealTurn
+        ? `فرصة السرقة الآن للاعب ${playerName} من ${teamName}.`
+        : `السؤال للاعب ${playerName} من ${teamName}.`
     }
 
     if (room.trivia.phase === "answer_reveal" && room.trivia.lastResult) {
-      if (room.trivia.lastResult.reason === "no_buzz") {
-        return "لم يضغط أحد البازر. انتظر السؤال التالي."
-      }
       if (room.trivia.lastResult.reason === "host_skip") {
         return "تم تخطي السؤال بواسطة المضيف."
       }
@@ -656,33 +635,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     room,
     session,
     teamById,
+    isStealTurn,
     isHarajActiveGame,
     isTriviaActiveGame,
   ])
-
-  const submitBuzz = async () => {
-    if (!session || busy || !canBuzz) {
-      return
-    }
-
-    setBusy(true)
-    setError(null)
-    setNotice("تم إرسال إشارة البازر...")
-    try {
-      const ack = await sendAction(roomId, session.token, "player.input", { intent: "buzz" })
-      syncServerClock(ack.ts)
-      setRoom(ack.payload.room)
-      setNotice("تم تسجيل ضغطتك.")
-    } catch (requestError) {
-      if (isTerminalControllerSessionError(requestError)) {
-        terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
-        return
-      }
-      setError(toErrorMessage(requestError))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const submitAnswer = async (option: string) => {
     if (!session || !selectedQuestionId || busy || !canAnswer) {
@@ -914,7 +870,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 </p>
                 {isCountdownPhase ? (
                   <div className="mt-3 rounded-2xl border border-amber-300/35 bg-amber-500/12 p-4 text-center">
-                    <p className="text-sm text-amber-100">استعد للبازر</p>
+                    <p className="text-sm text-amber-100">استعد للإجابة المخصّصة</p>
                     <p className="mt-1 text-7xl font-black leading-none text-amber-300 animate-pulse">
                       {countdownSeconds}
                     </p>
@@ -923,27 +879,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 {isQuestionRevealed ? (
                   <p className="mt-3 text-xl font-semibold leading-relaxed text-white">{selectedClue.prompt}</p>
                 ) : null}
-              </div>
-            ) : null}
-            {isTriviaActiveGame && canBuzz ? (
-              <div className="mt-8 mb-4 flex justify-center">
-                {/* Buzzer Base */}
-                <div className="relative flex h-[12rem] w-[12rem] sm:h-[16rem] sm:w-[16rem] items-center justify-center rounded-full bg-gradient-to-b from-slate-700 to-slate-950 p-3 sm:p-5 shadow-[0_15px_25px_rgba(0,0,0,0.8),inset_0_2px_4px_rgba(255,255,255,0.2)] ring-2 sm:ring-4 ring-slate-900">
-                  {/* The Button */}
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void submitBuzz()}
-                    className={CONTROLLER_ROUND_ACTION_BUTTON_CLASS}
-                    style={{ WebkitTapHighlightColor: "transparent", WebkitUserSelect: "none" }}
-                  >
-                    {/* Top glare for domed 3D plastic effect */}
-                    <div className="pointer-events-none absolute left-1/2 top-4 h-[35%] w-[65%] -translate-x-1/2 rounded-[100%] bg-gradient-to-b from-white/40 to-transparent blur-[2px]" />
-                    <span className="relative z-10 -translate-y-1 text-4xl sm:text-6xl font-black uppercase text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)]">
-                      جاوب
-                    </span>
-                  </button>
-                </div>
               </div>
             ) : null}
 
@@ -977,17 +912,10 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                   </>
                 ) : (
                   <p className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm text-slate-100">
+                    {isStealTurn ? "فرصة السرقة الآن: " : ""}
                     {responderName ?? "لاعب"} من {responderTeam?.name ?? "فريق"} يجيب الآن.
                   </p>
                 )}
-              </div>
-            ) : null}
-
-            {isTriviaActiveGame && room?.trivia.phase === "buzzer_open" ? (
-              <div className="mt-5 rounded-2xl border border-rose-300/45 bg-rose-500/18 px-4 py-5 text-center shadow-[0_0_30px_rgba(244,63,94,0.18)]">
-                <p className="text-sm font-bold tracking-wide text-rose-100 sm:text-base">الوقت المتبقي</p>
-                <p className="mt-2 text-7xl font-black leading-none text-amber-200 tabular-nums sm:text-8xl">{buzzSeconds}</p>
-                <p className="mt-1 text-sm font-semibold text-rose-100/90">ثانية</p>
               </div>
             ) : null}
 

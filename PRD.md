@@ -46,7 +46,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 3. Players scan QR and join room.
 4. Host locks lobby and starts team assignment.
 5. Host starts first game.
-6. During gameplay, controllers switch between buzzer and answer modes and actions are sent in real time.
+6. During gameplay, controllers switch between assigned-answer and waiting modes with only the server-selected player allowed to answer each trivia round.
 7. Host screen always shows live team scores.
 8. Host advances through games and ends session.
 
@@ -66,7 +66,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 6. During Trivia, host always sees:
    - Horizontal team scoreboard.
    - Turn context (which team picks category/points next).
-   - Active responder context (player + team) after buzzer lock.
+   - Active responder context (player + team) for the currently assigned answering player.
    - Manual fallback control to randomly select another responder from the same team.
 7. When Trivia ends, host sees a celebration/winner screen with scores and a CTA to move to the next game.
 8. During Haraj rounds, host sees product image, submission progress, reveal ranking, and team score updates.
@@ -82,7 +82,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 2. Controller must use team color cues consistent with host screen for active team context.
 3. For active responder, controller shows explicit prompt like: `"X player, this question is for you."`
 4. For non-active players, controller shows who should answer and from which team.
-5. During buzzer phase, all players see a buzzer control and no answer choices until responder lock.
+5. During countdown and non-assigned answer phases, non-selected players see a waiting state and no answer choices.
 
 ### 6.3 Theme Policy
 1. Runtime UI is dark-mode only in v1.
@@ -140,14 +140,16 @@ A room is considered active in: `lobby_open`, `lobby_locked`, `teams_ready`, `ga
 Room becomes inactive when:
 1. Host ends session manually -> `session_completed`.
 2. Host creates a new room -> old room `superseded`.
-3. Host disconnect grace expires -> `expired`.
+3. Active-session inactivity grace expires -> `expired`.
 4. Hard lifetime cap reached -> `expired`.
 
 ## 7.3 Timeouts (recommended)
 1. `lobby_open` idle timeout: `45 minutes`.
-2. Host inactivity detection threshold (active non-lobby states): `10 minutes`.
-3. `paused_wait_host` grace: `20 minutes`.
-   - Triggered after host inactivity detection while room is in active non-lobby game/setup states.
+2. Active non-lobby inactivity detection threshold: `30 minutes`.
+   - The inactivity window is refreshed by room activity, including host heartbeats/actions and controller heartbeats/actions.
+   - This protects live sessions from silent teardown when the host device is backgrounded but the room is still active.
+3. `paused_wait_host` grace: `30 minutes`.
+   - Triggered after the inactivity threshold expires while room is in active non-lobby game/setup states.
    - Host can resume session before grace expiry.
 4. Hard cap: `4 hours` from room creation.
 
@@ -163,34 +165,32 @@ Per turn:
 1. Team turns alternate strictly (`Team A`, then `Team B`, then repeat).
 2. A random player from the active turn team is shown as picker for that turn.
 3. Host selects one available category/point clue.
-4. All controllers switch to buzzer mode.
-5. A `5` second countdown runs before question reveal.
-6. A `20` second buzzer window runs after reveal.
-7. First player to buzz becomes the locked responder.
-8. Only locked responder sees answer choices on their controller.
-9. Correct answer gives responder team `+clue points`.
-10. Wrong answer subtracts `-clue points` from responder team.
-11. No steal mechanic in this mode.
-12. Host can select another responder from the same team if locked responder is absent/inactive.
-13. Host advances to the next team turn until board completion.
+4. The same randomly selected picker becomes the first assigned responder for that clue.
+5. A `5` second countdown runs before the question reveal and answer phase begins.
+6. Only the assigned responder sees answer choices on their controller.
+7. Correct answer gives responder team `+clue points`.
+8. Wrong answer subtracts `-clue points` from responder team and passes one steal chance to a random player from the other team.
+9. If the steal player also answers wrong, the steal team also loses `-clue points` and host advances to the next question.
+10. If the assigned responder times out, treat it as a wrong answer for scoring and pass control using the same primary-then-steal sequence.
+11. Host can select another responder from the currently active answering team if the assigned player is absent/inactive.
+12. Host advances to the next team turn until board completion.
 
 ## 8.3 Trivia game phases
 1. `board_turn`
 2. `countdown`
-3. `buzzer_open`
-4. `answer_active`
-5. `answer_reveal`
-6. `next_question_or_end`
+3. `answer_active`
+4. `answer_reveal`
+5. `next_question_or_end`
 
 ## 8.4 Scoring (team only)
 - Correct answer: `+points`
 - Wrong answer: `-points`
-- No buzz in buzzer window: `0`
+- Two failed teams on the same clue: net result can be `-points` for both teams before advancing.
 
 ## 8.5 Fairness
 - Team turn ownership alternates by rule, independent of scoring outcome.
-- Picker selection inside a team is randomized with usage balancing.
-- Buzzer eligibility is open to all players.
+- Picker/responders inside a team are randomized with usage balancing.
+- Only one server-assigned responder is answer-eligible at a time.
 
 ## 8.6 Haraj v1 Functional Spec (Price Estimation)
 ## 8.6.1 Round structure
@@ -345,7 +345,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 - Team assignment, team-only scoring model, persistent snapshots.
 
 ## M4: Trivia v1 + Haraj v1
-- Jeopardy board flow, buzzer lock, responder fairness, live score commits.
+- Jeopardy board flow, assigned responder rotation, limited steal chance, live score commits.
 - Haraj round flow, 60-second estimate collection, hidden answers until reveal, tie-aware scoring.
 
 ## M5: Reliability + Scale Hardening
@@ -359,7 +359,7 @@ Cloudflare Workers Paid + Durable Objects + D1 is sufficient for this use case i
 5. Session completion rate.
 
 ## 17. Open Decisions
-1. Whether to tune point ladder/timers beyond current defaults (`10-50`, `5s` countdown, `20s` buzz window).
+1. Whether to tune point ladder/timers beyond current defaults (`10-50`, `5s` countdown, `20s` answer window).
 2. Question source and authoring workflow (seeded DB vs external CMS).
 3. Whether to support mid-game late join for players.
 4. Required minimum question count per room based on player count policy.

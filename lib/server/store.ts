@@ -27,12 +27,11 @@ import type {
 } from "@/lib/server/types"
 
 const LOBBY_OPEN_TIMEOUT_MS = 45 * 60 * 1000
-const HOST_PAUSE_GRACE_MS = 20 * 60 * 1000
+const HOST_PAUSE_GRACE_MS = 30 * 60 * 1000
 const HARD_ROOM_CAP_MS = 4 * 60 * 60 * 1000
-const HOST_INACTIVITY_MS = 10 * 60 * 1000
+const HOST_INACTIVITY_MS = 30 * 60 * 1000
 const MAX_ROOM_EVENTS = 4000
 const TRIVIA_COUNTDOWN_MS = 5 * 1000
-const TRIVIA_BUZZ_WINDOW_MS = 20 * 1000
 const TRIVIA_ANSWER_WINDOW_MS = 20 * 1000
 const HARAJ_COLLECT_WINDOW_MS = 60 * 1000
 const HARAJ_TOP_RANK_POINTS = [50, 30, 10] as const
@@ -226,7 +225,7 @@ function resolveRoomActiveGame(
 }
 
 function isTriviaTimedPhase(phase: TriviaPhase | null) {
-  return phase === "countdown" || phase === "buzzer_open" || phase === "answer_active"
+  return phase === "countdown" || phase === "answer_active"
 }
 
 function isHarajTimedPhase(phase: HarajPhase | null) {
@@ -1106,6 +1105,11 @@ function touchHostPresence(store: InMemoryStore, roomId: string) {
   store.hostLastSeenByRoom.set(roomId, nowMs())
 }
 
+function getLatestRoomActivityAt(store: InMemoryStore, room: RoomRecord) {
+  const hostLastSeenAt = store.hostLastSeenByRoom.get(room.id) ?? 0
+  return Math.max(room.createdAt, room.updatedAt, hostLastSeenAt)
+}
+
 function pauseRoomForHostInactivity(store: InMemoryStore, room: RoomRecord) {
   if (!shouldPauseForHostInactivity(room.state)) {
     return
@@ -1127,13 +1131,9 @@ function maybePauseForHostInactivity(store: InMemoryStore, room: RoomRecord) {
     return
   }
 
-  const lastSeenAt = store.hostLastSeenByRoom.get(room.id)
-  if (!lastSeenAt) {
-    touchHostPresence(store, room.id)
-    return
-  }
+  const lastActivityAt = getLatestRoomActivityAt(store, room)
 
-  if (nowMs() - lastSeenAt > HOST_INACTIVITY_MS) {
+  if (nowMs() - lastActivityAt > HOST_INACTIVITY_MS) {
     pauseRoomForHostInactivity(store, room)
   }
 }
@@ -1513,6 +1513,31 @@ function getNextTurnTeamId(store: InMemoryStore, roomId: string, currentTeamId: 
   return teamsWithPlayers[0] ?? null
 }
 
+function getNextTriviaAnswerTeamId(store: InMemoryStore, roomId: string, excludedTeamId: string | null): string | null {
+  if (!excludedTeamId) {
+    return null
+  }
+
+  const teamIds = getTeamIdsInOrder(store, roomId)
+  if (teamIds.length === 0) {
+    return null
+  }
+
+  const currentIndex = teamIds.indexOf(excludedTeamId)
+  if (currentIndex < 0) {
+    return null
+  }
+
+  for (let offset = 1; offset < teamIds.length; offset += 1) {
+    const candidate = teamIds[(currentIndex + offset) % teamIds.length]
+    if (candidate && candidate !== excludedTeamId && getTeamPlayerIds(store, roomId, candidate).length > 0) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
 function setTurnTeam(
   store: InMemoryStore,
   roomId: string,
@@ -1619,6 +1644,93 @@ function setAnswerReveal(
   })
 }
 
+function tryStartTriviaStealTurn(
+  store: InMemoryStore,
+  room: RoomRecord,
+  session: TriviaSession,
+  question: TriviaQuestion,
+  input: {
+    previousResponderPlayerId: string | null
+    previousResponderTeamId: string
+    previousPenaltyPoints: number
+    reason: "wrong" | "timeout"
+  }
+) {
+  const stealTeamId = getNextTriviaAnswerTeamId(store, room.id, session.currentTeamId)
+  if (!stealTeamId || stealTeamId === input.previousResponderTeamId) {
+    return false
+  }
+
+  const stealResponderPlayerId = pickTeamMemberForRole(store, room.id, stealTeamId, session, "responder")
+  if (!stealResponderPlayerId) {
+    return false
+  }
+
+  session.currentResponderTeamId = stealTeamId
+  session.currentResponderPlayerId = stealResponderPlayerId
+  session.phase = "answer_active"
+  session.countdownEndsAt = null
+  session.buzzEndsAt = null
+  session.answerEndsAt = nowMs() + TRIVIA_ANSWER_WINDOW_MS
+
+  recordRoomEvent(store, room.id, "trivia.steal_started", {
+    questionId: question.id,
+    fromTeamId: input.previousResponderTeamId,
+    fromResponderPlayerId: input.previousResponderPlayerId,
+    toTeamId: stealTeamId,
+    toResponderPlayerId: stealResponderPlayerId,
+    reason: input.reason,
+    appliedPenaltyPoints: input.previousPenaltyPoints,
+    answerEndsAt: session.answerEndsAt,
+  })
+
+  return true
+}
+
+function resolveIncorrectTriviaAttempt(
+  store: InMemoryStore,
+  room: RoomRecord,
+  session: TriviaSession,
+  input: {
+    question: TriviaQuestion
+    answeredOption: TriviaOption | null
+    reason: "wrong" | "timeout"
+  }
+) {
+  const responderTeamId = session.currentResponderTeamId
+  if (!responderTeamId) {
+    return false
+  }
+
+  const responderPlayerId = session.currentResponderPlayerId
+  const wasPrimaryResponder = responderTeamId === session.currentTeamId
+  const scoreResult = addTeamScore(store, room.id, responderTeamId, -input.question.points)
+  const awardedPoints = scoreResult.ok ? -input.question.points : 0
+
+  if (
+    wasPrimaryResponder &&
+    tryStartTriviaStealTurn(store, room, session, input.question, {
+      previousResponderPlayerId: responderPlayerId,
+      previousResponderTeamId: responderTeamId,
+      previousPenaltyPoints: awardedPoints,
+      reason: input.reason,
+    })
+  ) {
+    return true
+  }
+
+  setAnswerReveal(store, room.id, session, {
+    answeredOption: input.answeredOption,
+    correctOption: input.question.correctOption,
+    awardedTeamId: responderTeamId,
+    awardedPoints,
+    wasCorrect: false,
+    questionId: input.question.id,
+    reason: input.reason,
+  })
+  return true
+}
+
 function applyTriviaTimedTransitions(store: InMemoryStore, room: RoomRecord, session: TriviaSession) {
   if (session.status !== "in_progress") {
     return
@@ -1631,26 +1743,16 @@ function applyTriviaTimedTransitions(store: InMemoryStore, room: RoomRecord, ses
   }
 
   if (session.phase === "countdown" && session.countdownEndsAt && now >= session.countdownEndsAt) {
-    session.phase = "buzzer_open"
+    session.phase = "answer_active"
     session.countdownEndsAt = null
-    session.buzzEndsAt = now + TRIVIA_BUZZ_WINDOW_MS
+    session.buzzEndsAt = null
+    session.answerEndsAt = now + TRIVIA_ANSWER_WINDOW_MS
     recordRoomEvent(store, room.id, "trivia.question_revealed", {
       questionId: question.id,
       teamId: session.currentTeamId,
-      buzzEndsAt: session.buzzEndsAt,
-    })
-    return
-  }
-
-  if (session.phase === "buzzer_open" && session.buzzEndsAt && now >= session.buzzEndsAt) {
-    setAnswerReveal(store, room.id, session, {
-      answeredOption: null,
-      correctOption: question.correctOption,
-      awardedTeamId: null,
-      awardedPoints: 0,
-      wasCorrect: false,
-      questionId: question.id,
-      reason: "no_buzz",
+      responderPlayerId: session.currentResponderPlayerId,
+      responderTeamId: session.currentResponderTeamId,
+      answerEndsAt: session.answerEndsAt,
     })
     return
   }
@@ -1658,18 +1760,11 @@ function applyTriviaTimedTransitions(store: InMemoryStore, room: RoomRecord, ses
   if (
     session.phase === "answer_active" &&
     session.answerEndsAt &&
-    now >= session.answerEndsAt &&
-    session.currentResponderTeamId
+    now >= session.answerEndsAt
   ) {
-    const scoreResult = addTeamScore(store, room.id, session.currentResponderTeamId, -question.points)
-    const awardedPoints = scoreResult.ok ? -question.points : 0
-    setAnswerReveal(store, room.id, session, {
+    resolveIncorrectTriviaAttempt(store, room, session, {
+      question,
       answeredOption: null,
-      correctOption: question.correctOption,
-      awardedTeamId: session.currentResponderTeamId,
-      awardedPoints,
-      wasCorrect: false,
-      questionId: question.id,
       reason: "timeout",
     })
   }
@@ -3016,8 +3111,8 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
 
       session.selectedQuestionId = questionId
       session.questionIndex = session.totalQuestions - getRemainingQuestionCount(session)
-      session.currentResponderPlayerId = null
-      session.currentResponderTeamId = null
+      session.currentResponderPlayerId = session.currentPickerPlayerId
+      session.currentResponderTeamId = session.currentTeamId
       session.phase = "countdown"
       session.countdownEndsAt = nowMs() + TRIVIA_COUNTDOWN_MS
       session.buzzEndsAt = null
@@ -3046,11 +3141,7 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
 
       if (session.phase === "answer_reveal") {
         moveToNextTurn(store, room, session)
-      } else if (
-        session.phase === "countdown" ||
-        session.phase === "buzzer_open" ||
-        session.phase === "answer_active"
-      ) {
+      } else if (session.phase === "countdown" || session.phase === "answer_active") {
         const question = getCurrentTriviaQuestion(session)
         if (!question) {
           return { ok: false, code: "TRIVIA_NOT_ACTIVE" }
@@ -3175,44 +3266,10 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     }
 
     touchPlayer(input.roomId, input.actorId)
-
-    const session = store.triviaByRoom.get(room.id)
-    const isBuzzIntent =
-      input.payload?.intent === "buzz" ||
-      input.payload?.kind === "buzz" ||
-      input.payload?.action === "buzz" ||
-      Object.keys(input.payload ?? {}).length === 0
-    if (
-      isBuzzIntent &&
-      session &&
-      session.status === "in_progress" &&
-      session.phase === "buzzer_open" &&
-      !session.currentResponderPlayerId
-    ) {
-      const responderTeamId = getPlayerTeamId(store, room.id, input.actorId)
-      if (!responderTeamId) {
-        return { ok: false, code: "INVALID_STATE_TRANSITION", state: room.state }
-      }
-
-      session.currentResponderPlayerId = input.actorId
-      session.currentResponderTeamId = responderTeamId
-      session.phase = "answer_active"
-      session.buzzEndsAt = null
-      session.answerEndsAt = nowMs() + TRIVIA_ANSWER_WINDOW_MS
-
-      const question = getCurrentTriviaQuestion(session)
-      recordRoomEvent(store, room.id, "trivia.buzzer_locked", {
-        questionId: question?.id ?? null,
-        responderPlayerId: input.actorId,
-        responderTeamId,
-        answerEndsAt: session.answerEndsAt,
-      })
-    } else {
-      recordRoomEvent(store, room.id, "player.input", {
-        playerId: input.actorId,
-        payload: input.payload ?? {},
-      })
-    }
+    recordRoomEvent(store, room.id, "player.input", {
+      playerId: input.actorId,
+      payload: input.payload ?? {},
+    })
   } else if (input.actionType === "player.submitAnswer") {
     if (input.requestId) {
       const processedSubmits = store.processedPlayerSubmitByRoom.get(room.id) ?? new Map<string, RoomEventRecord>()
@@ -3256,21 +3313,29 @@ export function applyRoomAction(input: ApplyRoomActionInput): ApplyRoomActionRes
     session.answersByPlayer.set(input.actorId, (session.answersByPlayer.get(input.actorId) ?? 0) + 1)
 
     const wasCorrect = selectedOption === question.correctOption
-    const scoreDelta = wasCorrect ? question.points : -question.points
-    const scoreResult = addTeamScore(store, room.id, session.currentResponderTeamId, scoreDelta)
-    if (!scoreResult.ok) {
-      return { ok: false, code: scoreResult.code }
-    }
+    if (wasCorrect) {
+      const scoreDelta = question.points
+      const scoreResult = addTeamScore(store, room.id, session.currentResponderTeamId, scoreDelta)
+      if (!scoreResult.ok) {
+        return { ok: false, code: scoreResult.code }
+      }
 
-    setAnswerReveal(store, room.id, session, {
-      answeredOption: selectedOption,
-      correctOption: question.correctOption,
-      awardedTeamId: session.currentResponderTeamId,
-      awardedPoints: scoreDelta,
-      wasCorrect,
-      questionId: question.id,
-      reason: wasCorrect ? "correct" : "wrong",
-    })
+      setAnswerReveal(store, room.id, session, {
+        answeredOption: selectedOption,
+        correctOption: question.correctOption,
+        awardedTeamId: session.currentResponderTeamId,
+        awardedPoints: scoreDelta,
+        wasCorrect: true,
+        questionId: question.id,
+        reason: "correct",
+      })
+    } else {
+      resolveIncorrectTriviaAttempt(store, room, session, {
+        question,
+        answeredOption: selectedOption,
+        reason: "wrong",
+      })
+    }
   } else if (input.actionType === "player.submitHarajEstimate") {
     const session = store.harajByRoom.get(room.id)
     if (!session || session.status !== "in_progress") {
