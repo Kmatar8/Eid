@@ -147,6 +147,8 @@ export type TriviaSnapshot = {
     correctOption: TriviaOption
     answeredOption: TriviaOption | null
     wasCorrect: boolean
+    responderPlayerId: string | null
+    responderTeamId: string | null
     awardedTeamId: string | null
     awardedPoints: number
     reason: "correct" | "wrong" | "timeout" | "no_buzz" | "host_skip"

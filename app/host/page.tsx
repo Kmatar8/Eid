@@ -642,33 +642,56 @@ export default function HostStagePage() {
     }
   }, [room?.trivia?.selectedClue?.questionId, lastQuestionId])
 
-  const [processedFeedbackQuestionId, setProcessedFeedbackQuestionId] = useState<string | null>(null)
+  const [processedFeedbackKey, setProcessedFeedbackKey] = useState<string | null>(null)
 
   useEffect(() => {
     const qId = room?.trivia?.selectedClue?.questionId
-    if (room?.trivia?.phase === "answer_reveal" && room?.trivia.lastResult && qId && qId !== processedFeedbackQuestionId) {
-      const { reason, wasCorrect } = room.trivia.lastResult
-      if (reason !== "host_skip") {
-        const responderPlayerId = room.trivia.currentResponderPlayerId
+    const lastResult = room?.trivia.lastResult
+    const isStealHandoff =
+      room?.trivia.phase === "answer_active" &&
+      Boolean(lastResult?.responderTeamId) &&
+      Boolean(room.trivia.currentResponderTeamId) &&
+      lastResult?.responderTeamId !== room.trivia.currentResponderTeamId
+
+    if (
+      qId &&
+      lastResult &&
+      lastResult.questionId === qId &&
+      (room?.trivia?.phase === "answer_reveal" || isStealHandoff) &&
+      lastResult.reason !== "host_skip"
+    ) {
+      const feedbackKey = `${room.trivia.phase}:${qId}:${lastResult.reason}:${lastResult.awardedPoints}:${lastResult.responderPlayerId ?? "none"}:${room.trivia.currentResponderPlayerId ?? "none"}`
+
+      if (feedbackKey !== processedFeedbackKey) {
+        const responderPlayerId = lastResult.responderPlayerId
         const responderPlayerName = responderPlayerId
           ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
           : "لاعب"
-        const awardedTeamId = room.trivia.lastResult.awardedTeamId ?? room.trivia.currentResponderTeamId
+        const awardedTeamId = lastResult.awardedTeamId ?? lastResult.responderTeamId
         const awardedTeamName = awardedTeamId
           ? room.teams.find((team) => team.teamId === awardedTeamId)?.name ?? "فريق"
           : "فريق"
+        const nextResponderPlayerName = room.trivia.currentResponderPlayerId
+          ? room.players.find((player) => player.playerId === room.trivia.currentResponderPlayerId)?.displayName ?? "لاعب"
+          : "لاعب"
+        const nextResponderTeamName = room.trivia.currentResponderTeamId
+          ? room.teams.find((team) => team.teamId === room.trivia.currentResponderTeamId)?.name ?? "فريق"
+          : "فريق"
 
-        setFeedbackState(wasCorrect ? "correct" : "wrong")
-        setFeedbackScoreDelta(room.trivia.lastResult.awardedPoints)
+        setFeedbackState(lastResult.wasCorrect ? "correct" : "wrong")
+        setFeedbackScoreDelta(lastResult.awardedPoints)
         setFeedbackContext({
           playerName: responderPlayerName,
           teamName: awardedTeamName,
-          points: room.trivia.lastResult.awardedPoints,
-          reason,
+          points: lastResult.awardedPoints,
+          reason: lastResult.reason,
+          detailText: isStealHandoff
+            ? `تم نقل السؤال إلى ${nextResponderPlayerName} من ${nextResponderTeamName}.`
+            : undefined,
         })
-        setProcessedFeedbackQuestionId(qId)
+        setProcessedFeedbackKey(feedbackKey)
 
-        if (wasCorrect) {
+        if (lastResult.wasCorrect) {
           playCorrectAnswerSound()
           launchCelebrationConfetti(3000)
         } else {
@@ -676,9 +699,9 @@ export default function HostStagePage() {
         }
       }
     }
-    // Reset tracker when return to board
+
     if (room?.trivia?.phase === "board_turn") {
-      setProcessedFeedbackQuestionId(null)
+      setProcessedFeedbackKey(null)
       setFeedbackState(null)
       setFeedbackScoreDelta(null)
       setFeedbackContext(null)
@@ -687,7 +710,7 @@ export default function HostStagePage() {
     launchCelebrationConfetti,
     playCorrectAnswerSound,
     playWrongAnswerSound,
-    processedFeedbackQuestionId,
+    processedFeedbackKey,
     room,
   ])
 
@@ -1875,8 +1898,8 @@ export default function HostStagePage() {
                     <ul className="mt-3 space-y-2 text-base text-slate-200">
                       <li>1. كل دور لفريق واحد لاختيار الفئة والنقاط.</li>
                       <li>2. بعد الاختيار يبدأ عد تنازلي 5 ثوانٍ قبل كشف السؤال.</li>
-                      <li>3. البازر مفتوح للجميع لمدة 20 ثانية.</li>
-                      <li>4. أول لاعب يضغط البازر هو الوحيد الذي يرى الخيارات ويجيب.</li>
+                      <li>3. اللاعب المختار للاختيار هو أول من يجيب على السؤال.</li>
+                      <li>4. إذا أخطأ، تنتقل الفرصة إلى لاعب عشوائي من الفريق الآخر للسرقة.</li>
                     </ul>
                   </article>
                   <article className="rounded-2xl border border-white/20 bg-white/10 p-4">
@@ -1884,7 +1907,7 @@ export default function HostStagePage() {
                     <ul className="mt-3 space-y-2 text-base text-slate-200">
                       <li>1. إجابة صحيحة = إضافة قيمة السؤال.</li>
                       <li>2. إجابة خاطئة = خصم قيمة السؤال.</li>
-                      <li>3. لا يوجد سرقة نقاط في هذا الوضع.</li>
+                      <li>3. السرقة الخاطئة تخصم أيضًا قيمة السؤال من فريق السرقة.</li>
                       <li>4. يمكن للمضيف اختيار لاعب بديل من نفس الفريق عند الحاجة.</li>
                     </ul>
                   </article>
@@ -1949,7 +1972,7 @@ export default function HostStagePage() {
               <p className="text-xs uppercase tracking-[0.25em] text-amber-100/90">Paused</p>
               <h2 className="mt-2 text-4xl font-black text-amber-100">الجلسة متوقفة بانتظار عودة المضيف</h2>
               <p className="mx-auto mt-4 max-w-3xl text-lg text-slate-100">
-                تم إيقاف الفعالية مؤقتًا بسبب عدم نشاط المضيف. أمامك 20 دقيقة لاستئناف الجلسة قبل إنهائها تلقائيًا.
+                تم إيقاف الفعالية مؤقتًا بسبب عدم نشاط المضيف. أمامك 30 دقيقة لاستئناف الجلسة قبل إنهائها تلقائيًا.
               </p>
 
               <div className="mt-6 flex flex-wrap justify-center gap-3">

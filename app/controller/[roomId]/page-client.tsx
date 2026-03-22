@@ -256,11 +256,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     ) {
       const { reason, wasCorrect } = room.trivia.lastResult
       if (reason !== "host_skip") {
-        const responderPlayerId = room.trivia.currentResponderPlayerId
+        const responderPlayerId = room.trivia.lastResult.responderPlayerId
         const responderPlayerName = responderPlayerId
           ? room.players.find((player) => player.playerId === responderPlayerId)?.displayName ?? "لاعب"
           : "لاعب"
-        const awardedTeamId = room.trivia.lastResult.awardedTeamId ?? room.trivia.currentResponderTeamId
+        const awardedTeamId = room.trivia.lastResult.awardedTeamId ?? room.trivia.lastResult.responderTeamId
         const awardedTeamName = awardedTeamId
           ? room.teams.find((team) => team.teamId === awardedTeamId)?.name ?? "فريق"
           : "فريق"
@@ -516,6 +516,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const responderName = responderId ? playerNameById.get(responderId) ?? "لاعب" : null
   const responderTeam = responderTeamId ? teamById.get(responderTeamId) ?? null : null
   const activeTone = getTeamTone(responderTeamId ?? myTeamId)
+  const isAssignedResponder = Boolean(session && responderId && responderId === session.playerId)
   const isStealTurn =
     Boolean(room?.trivia.currentTeamId) &&
     Boolean(responderTeamId) &&
@@ -602,7 +603,11 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     if (room.trivia.phase === "countdown") {
-      return `السؤال سيظهر بعد ${countdownSeconds} ثوانٍ. استعد لدور اللاعب المكلّف بالإجابة.`
+      const teamName = responderTeam?.name ?? "فريق"
+      const playerName = responderName ?? "لاعب"
+      return isAssignedResponder
+        ? `أنت اللاعب المكلّف بالإجابة. سيظهر السؤال بعد ${countdownSeconds} ثوانٍ.`
+        : `${playerName} من ${teamName} هو اللاعب المكلّف بالإجابة على هذا السؤال.`
     }
 
     if (room.trivia.phase === "answer_active") {
@@ -635,6 +640,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     room,
     session,
     teamById,
+    isAssignedResponder,
     isStealTurn,
     isHarajActiveGame,
     isTriviaActiveGame,
@@ -726,7 +732,6 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         currentStatus={feedbackState}
         scoreDelta={feedbackState ? feedbackScoreDelta : null}
         context={feedbackState ? feedbackContext : null}
-        showStickers={false}
         onComplete={() => {
           setFeedbackState(null)
           setFeedbackScoreDelta(null)
@@ -868,7 +873,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-300">
                   {selectedClue.categoryName} | {selectedClue.points} points
                 </p>
-                {isCountdownPhase ? (
+                {isCountdownPhase && isAssignedResponder ? (
                   <div className="mt-3 rounded-2xl border border-amber-300/35 bg-amber-500/12 p-4 text-center">
                     <p className="text-sm text-amber-100">استعد للإجابة المخصّصة</p>
                     <p className="mt-1 text-7xl font-black leading-none text-amber-300 animate-pulse">

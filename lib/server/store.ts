@@ -1621,6 +1621,8 @@ function setAnswerReveal(
     questionId: payload.questionId,
     answeredOption: payload.answeredOption,
     correctOption: payload.correctOption,
+    responderPlayerId: session.currentResponderPlayerId,
+    responderTeamId: session.currentResponderTeamId,
     awardedPoints: payload.awardedPoints,
     awardedTeamId: payload.awardedTeamId,
     wasCorrect: payload.wasCorrect,
@@ -1706,6 +1708,18 @@ function resolveIncorrectTriviaAttempt(
   const wasPrimaryResponder = responderTeamId === session.currentTeamId
   const scoreResult = addTeamScore(store, room.id, responderTeamId, -input.question.points)
   const awardedPoints = scoreResult.ok ? -input.question.points : 0
+
+  session.lastResult = {
+    questionId: input.question.id,
+    answeredOption: input.answeredOption,
+    correctOption: input.question.correctOption,
+    responderPlayerId,
+    responderTeamId,
+    awardedTeamId: responderTeamId,
+    awardedPoints,
+    wasCorrect: false,
+    reason: input.reason,
+  }
 
   if (
     wasPrimaryResponder &&

@@ -67,6 +67,7 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
    - Horizontal team scoreboard.
    - Turn context (which team picks category/points next).
    - Active responder context (player + team) for the currently assigned answering player.
+   - On wrong primary answers, immediate negative score feedback plus explicit handoff text naming the steal responder and team.
    - Manual fallback control to randomly select another responder from the same team.
 7. When Trivia ends, host sees a celebration/winner screen with scores and a CTA to move to the next game.
 8. During Haraj rounds, host sees product image, submission progress, reveal ranking, and team score updates.
@@ -81,8 +82,9 @@ Primary launch games are Jeopardy-style Trivia (4 multiple choices) and Haraj pr
 1. Controller view must clearly indicate whether the current question is for the current player or another player.
 2. Controller must use team color cues consistent with host screen for active team context.
 3. For active responder, controller shows explicit prompt like: `"X player, this question is for you."`
-4. For non-active players, controller shows who should answer and from which team.
-5. During countdown and non-assigned answer phases, non-selected players see a waiting state and no answer choices.
+4. Countdown digits are shown only on the controller of the currently assigned responder.
+5. For non-active players, controller shows a clear waiting state naming which player from which team is answering.
+6. During countdown and non-assigned answer phases, non-selected players see no answer choices.
 
 ### 6.3 Theme Policy
 1. Runtime UI is dark-mode only in v1.
@@ -166,10 +168,10 @@ Per turn:
 2. A random player from the active turn team is shown as picker for that turn.
 3. Host selects one available category/point clue.
 4. The same randomly selected picker becomes the first assigned responder for that clue.
-5. A `5` second countdown runs before the question reveal and answer phase begins.
+5. A `5` second countdown runs before the question reveal and answer phase begins, but the countdown digits are visible only to the assigned responder.
 6. Only the assigned responder sees answer choices on their controller.
 7. Correct answer gives responder team `+clue points`.
-8. Wrong answer subtracts `-clue points` from responder team and passes one steal chance to a random player from the other team.
+8. Wrong answer subtracts `-clue points` from responder team and passes one steal chance to a random player from the other team; host feedback must show both the negative score delta and the new responder handoff.
 9. If the steal player also answers wrong, the steal team also loses `-clue points` and host advances to the next question.
 10. If the assigned responder times out, treat it as a wrong answer for scoring and pass control using the same primary-then-steal sequence.
 11. Host can select another responder from the currently active answering team if the assigned player is absent/inactive.
