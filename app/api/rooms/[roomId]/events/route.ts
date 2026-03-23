@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
 import { getPlayerInRoom, getRoom, getRoomEventsSince, isRoomActiveState } from "@/lib/server/store"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { retryWithFreshRoomShard, withRoomShardStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
 
@@ -35,24 +35,56 @@ export async function GET(request: Request, context: RouteContext) {
       return errorResponse(actor.status, actor.code, actor.message)
     }
 
-    const room = getRoom(roomId)
-    if (!room) {
-      return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
-    }
+    const authorization = await retryWithFreshRoomShard(
+      roomId,
+      () => {
+        const room = getRoom(roomId)
+        if (!room) {
+          return { ok: false as const, status: 404, code: "ROOM_NOT_FOUND" as const, message: "Room not found" }
+        }
 
-    if (actor.actor.role === "host" && room.hostId !== actor.actor.actorId) {
-      return errorResponse(403, "HOST_ROOM_MISMATCH", "Room does not belong to host")
-    }
+        if (actor.actor.role === "host" && room.hostId !== actor.actor.actorId) {
+          return {
+            ok: false as const,
+            status: 403,
+            code: "HOST_ROOM_MISMATCH" as const,
+            message: "Room does not belong to host",
+          }
+        }
 
-    if (actor.actor.role === "player") {
-      if (!isRoomActiveState(room.state)) {
-        return errorResponse(409, "ROOM_NOT_ACTIVE", "Room is no longer active", { state: room.state })
-      }
+        if (actor.actor.role === "player") {
+          if (!isRoomActiveState(room.state)) {
+            return {
+              ok: false as const,
+              status: 409,
+              code: "ROOM_NOT_ACTIVE" as const,
+              message: "Room is no longer active",
+              details: { state: room.state },
+            }
+          }
 
-      const player = getPlayerInRoom(roomId, actor.actor.actorId)
-      if (!player) {
-        return errorResponse(404, "PLAYER_NOT_FOUND", "Player not found in this room")
-      }
+          const player = getPlayerInRoom(roomId, actor.actor.actorId)
+          if (!player) {
+            return {
+              ok: false as const,
+              status: 404,
+              code: "PLAYER_NOT_FOUND" as const,
+              message: "Player not found in this room",
+            }
+          }
+        }
+
+        return { ok: true as const, room }
+      },
+      (result) =>
+        !result.ok &&
+        (result.code === "ROOM_NOT_FOUND" ||
+          result.code === "HOST_ROOM_MISMATCH" ||
+          result.code === "ROOM_NOT_ACTIVE" ||
+          result.code === "PLAYER_NOT_FOUND")
+    )
+    if (!authorization.ok) {
+      return errorResponse(authorization.status, authorization.code, authorization.message, authorization.details)
     }
 
     const { searchParams } = new URL(request.url)
@@ -65,7 +97,7 @@ export async function GET(request: Request, context: RouteContext) {
       makeServerEnvelope("room.diff", {
         roomId,
         sinceVersion,
-        currentVersion: room.version,
+        currentVersion: authorization.room.version,
         events,
       })
     )

@@ -1,6 +1,6 @@
 import { buildRoomSnapshot, createPlayerForRoom, getRoom, isRoomJoinableState } from "@/lib/server/store"
 import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { retryWithFreshRoomShard, withRoomShardStore } from "@/lib/server/store-sync"
 import { signToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -27,13 +27,28 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   return withRoomShardStore(roomId, async () => {
-    const room = getRoom(roomId)
-    if (!room) {
-      return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
-    }
+    const joinableState = await retryWithFreshRoomShard(
+      roomId,
+      () => {
+        const room = getRoom(roomId)
+        if (!room) {
+          return { ok: false as const, code: "ROOM_NOT_FOUND" as const }
+        }
 
-    if (!isRoomJoinableState(room.state)) {
-      return errorResponse(409, "ROOM_NOT_JOINABLE", "Room is not accepting new players")
+        if (!isRoomJoinableState(room.state)) {
+          return { ok: false as const, code: "ROOM_NOT_JOINABLE" as const }
+        }
+
+        return { ok: true as const }
+      },
+      (result) => !result.ok
+    )
+    if (!joinableState.ok) {
+      if (joinableState.code === "ROOM_NOT_JOINABLE") {
+        return errorResponse(409, "ROOM_NOT_JOINABLE", "Room is not accepting new players")
+      }
+
+      return errorResponse(404, "ROOM_NOT_FOUND", "Room not found")
     }
 
     const body = await safeJson<JoinBody>(request)
@@ -46,11 +61,16 @@ export async function POST(request: Request, context: RouteContext) {
       return errorResponse(400, "VALIDATION_ERROR", "name must be between 2 and 40 characters")
     }
 
-    const created = createPlayerForRoom(roomId, {
-      displayName: name.trim(),
-      avatarEmoji: typeof body.avatarEmoji === "string" ? body.avatarEmoji : undefined,
-      avatarImageUrl: typeof body.avatarImageUrl === "string" ? body.avatarImageUrl : undefined,
-    })
+    const created = await retryWithFreshRoomShard(
+      roomId,
+      () =>
+        createPlayerForRoom(roomId, {
+          displayName: name.trim(),
+          avatarEmoji: typeof body.avatarEmoji === "string" ? body.avatarEmoji : undefined,
+          avatarImageUrl: typeof body.avatarImageUrl === "string" ? body.avatarImageUrl : undefined,
+        }),
+      (result) => !result.ok && (result.code === "ROOM_NOT_FOUND" || result.code === "ROOM_NOT_JOINABLE")
+    )
 
     if (!created.ok) {
       if (created.code === "ROOM_NOT_JOINABLE") {

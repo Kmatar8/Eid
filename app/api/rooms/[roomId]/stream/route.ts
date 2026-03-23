@@ -2,7 +2,7 @@ import { errorResponse } from "@/lib/server/http"
 import { makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor, type RoomActor } from "@/lib/server/room-auth"
 import { buildRoomSnapshot, getPlayerInRoom, getRoom, isRoomActiveState, subscribeRoomEvents } from "@/lib/server/store"
-import { withRoomShardStore } from "@/lib/server/store-sync"
+import { retryWithFreshRoomShard, withRoomShardStore } from "@/lib/server/store-sync"
 import type { RoomSnapshot } from "@/lib/server/types"
 
 export const runtime = "nodejs"
@@ -132,54 +132,91 @@ function authorizeSnapshotForSubscriber(
 
 async function readAuthorizedSnapshot(roomId: string, actor: RoomActor): Promise<SnapshotReadResult> {
   return withRoomShardStore(roomId, async () => {
-    const room = getRoom(roomId)
-    if (!room) {
-      return { ok: false, status: 404, code: "ROOM_NOT_FOUND", message: "Room not found" }
-    }
-
-    if (actor.role === "host" && room.hostId !== actor.actorId) {
-      return { ok: false, status: 403, code: "HOST_ROOM_MISMATCH", message: "Room does not belong to host" }
-    }
-
-    if (actor.role === "player") {
-      if (!isRoomActiveState(room.state)) {
-        return {
-          ok: false,
-          status: 409,
-          code: "ROOM_NOT_ACTIVE",
-          message: "Room is no longer active",
-          details: { state: room.state },
+    return retryWithFreshRoomShard(
+      roomId,
+      () => {
+        const room = getRoom(roomId)
+        if (!room) {
+          return { ok: false as const, status: 404, code: "ROOM_NOT_FOUND" as const, message: "Room not found" }
         }
-      }
 
-      const player = getPlayerInRoom(roomId, actor.actorId)
-      if (!player) {
-        return { ok: false, status: 404, code: "PLAYER_NOT_FOUND", message: "Player not found in this room" }
-      }
-    }
+        if (actor.role === "host" && room.hostId !== actor.actorId) {
+          return {
+            ok: false as const,
+            status: 403,
+            code: "HOST_ROOM_MISMATCH" as const,
+            message: "Room does not belong to host",
+          }
+        }
 
-    const snapshot = buildRoomSnapshot(roomId)
-    if (!snapshot) {
-      return { ok: false, status: 500, code: "ROOM_SNAPSHOT_FAILED", message: "Unable to build room snapshot" }
-    }
+        if (actor.role === "player") {
+          if (!isRoomActiveState(room.state)) {
+            return {
+              ok: false as const,
+              status: 409,
+              code: "ROOM_NOT_ACTIVE" as const,
+              message: "Room is no longer active",
+              details: { state: room.state },
+            }
+          }
 
-    return { ok: true, snapshot }
+          const player = getPlayerInRoom(roomId, actor.actorId)
+          if (!player) {
+            return {
+              ok: false as const,
+              status: 404,
+              code: "PLAYER_NOT_FOUND" as const,
+              message: "Player not found in this room",
+            }
+          }
+        }
+
+        const snapshot = buildRoomSnapshot(roomId)
+        if (!snapshot) {
+          return {
+            ok: false as const,
+            status: 500,
+            code: "ROOM_SNAPSHOT_FAILED" as const,
+            message: "Unable to build room snapshot",
+          }
+        }
+
+        return { ok: true as const, snapshot }
+      },
+      (result) =>
+        !result.ok &&
+        (result.code === "ROOM_NOT_FOUND" ||
+          result.code === "HOST_ROOM_MISMATCH" ||
+          result.code === "ROOM_NOT_ACTIVE" ||
+          result.code === "PLAYER_NOT_FOUND")
+    )
   })
 }
 
 async function readSnapshotForBroadcast(roomId: string): Promise<SnapshotReadResult> {
   return withRoomShardStore(roomId, async () => {
-    const room = getRoom(roomId)
-    if (!room) {
-      return { ok: false, status: 404, code: "ROOM_NOT_FOUND", message: "Room not found" }
-    }
+    return retryWithFreshRoomShard(
+      roomId,
+      () => {
+        const room = getRoom(roomId)
+        if (!room) {
+          return { ok: false as const, status: 404, code: "ROOM_NOT_FOUND" as const, message: "Room not found" }
+        }
 
-    const snapshot = buildRoomSnapshot(roomId)
-    if (!snapshot) {
-      return { ok: false, status: 500, code: "ROOM_SNAPSHOT_FAILED", message: "Unable to build room snapshot" }
-    }
+        const snapshot = buildRoomSnapshot(roomId)
+        if (!snapshot) {
+          return {
+            ok: false as const,
+            status: 500,
+            code: "ROOM_SNAPSHOT_FAILED" as const,
+            message: "Unable to build room snapshot",
+          }
+        }
 
-    return { ok: true, snapshot }
+        return { ok: true as const, snapshot }
+      },
+      (result) => !result.ok && result.code === "ROOM_NOT_FOUND"
+    )
   })
 }
 

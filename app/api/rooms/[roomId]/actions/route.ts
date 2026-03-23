@@ -2,7 +2,7 @@ import { errorResponse, jsonResponse, safeJson } from "@/lib/server/http"
 import { isActionAllowedForRole, isClientEnvelope, makeServerEnvelope } from "@/lib/server/protocol-v1"
 import { resolveRoomActor } from "@/lib/server/room-auth"
 import { applyRoomAction, buildRoomSnapshot } from "@/lib/server/store"
-import { withRoomScopedStore, withRoomShardStore } from "@/lib/server/store-sync"
+import { retryWithFreshRoomShard, withRoomScopedStore, withRoomShardStore } from "@/lib/server/store-sync"
 
 export const runtime = "nodejs"
 
@@ -33,6 +33,7 @@ const HOST_RATE_LIMIT_WINDOW_MS = 5000
 const DEFAULT_HOST_ACTION_RATE_LIMIT = 120
 const HOST_RATE_LIMIT_ENTRY_TTL_MS = 5 * 60 * 1000
 const HOST_RATE_LIMIT_SWEEP_INTERVAL = 200
+const RETRYABLE_ACTION_SHARD_CODES = new Set(["ROOM_NOT_FOUND", "ROOM_NOT_ACTIVE", "PLAYER_NOT_FOUND", "HOST_ROOM_MISMATCH"])
 
 type GlobalWithHostRateLimit = typeof globalThis & {
   __hroofHostActionRateLimitByRoom?: Map<string, number[]>
@@ -134,14 +135,19 @@ export async function POST(request: Request, context: RouteContext) {
   const syncOperation = rawBody.type === "host.endSession" ? withRoomScopedStore : withRoomShardStore
 
   return syncOperation(roomId, async () => {
-    const applied = applyRoomAction({
+    const applied = await retryWithFreshRoomShard(
       roomId,
-      actorRole: actor.actor.role,
-      actorId: actor.actor.actorId,
-      actionType: rawBody.type,
-      requestId: rawBody.requestId,
-      payload: rawBody.payload,
-    })
+      () =>
+        applyRoomAction({
+          roomId,
+          actorRole: actor.actor.role,
+          actorId: actor.actor.actorId,
+          actionType: rawBody.type,
+          requestId: rawBody.requestId,
+          payload: rawBody.payload,
+        }),
+      (result) => !result.ok && RETRYABLE_ACTION_SHARD_CODES.has(result.code)
+    )
 
     if (!applied.ok) {
       if (applied.code === "ROOM_NOT_FOUND") {

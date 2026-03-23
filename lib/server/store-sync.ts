@@ -48,6 +48,10 @@ type ScopeSyncState = {
 
 const roomScopeSyncByRoomId = new Map<string, ScopeSyncState>()
 
+type HydrateRoomShardOptions = {
+  force?: boolean
+}
+
 function parsePositiveInt(value: string | undefined, fallback: number) {
   if (!value) {
     return fallback
@@ -264,19 +268,21 @@ export async function persistSharedStoreToDurable() {
   }
 }
 
-export async function hydrateRoomShardFromDurable(roomId: string) {
+export async function hydrateRoomShardFromDurable(roomId: string, options: HydrateRoomShardOptions = {}) {
   if (!roomId) {
     return
   }
 
   const syncState = getRoomScopeSyncState(roomId)
-  if (Date.now() - syncState.lastHydratedAt < getRoomHydrateTtlMs()) {
+  if (!options.force && Date.now() - syncState.lastHydratedAt < getRoomHydrateTtlMs()) {
     return
   }
 
   if (syncState.hydrateInFlight) {
     await syncState.hydrateInFlight
-    return
+    if (!options.force) {
+      return
+    }
   }
 
   syncState.hydrateInFlight = (async () => {
@@ -312,6 +318,20 @@ export async function hydrateRoomShardFromDurable(roomId: string) {
   } finally {
     syncState.hydrateInFlight = null
   }
+}
+
+export async function retryWithFreshRoomShard<T>(
+  roomId: string,
+  read: () => Promise<T> | T,
+  shouldRetry: (value: T) => boolean
+): Promise<T> {
+  const firstResult = await read()
+  if (!roomId || !isRoomScopedStoreEnabled() || !shouldRetry(firstResult)) {
+    return firstResult
+  }
+
+  await hydrateRoomShardFromDurable(roomId, { force: true })
+  return await read()
 }
 
 export async function persistRoomShardToDurable(roomId: string) {
