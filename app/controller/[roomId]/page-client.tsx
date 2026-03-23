@@ -16,6 +16,8 @@ const CONTROLLER_POLL_BOARD_MS = 850
 const CONTROLLER_POLL_ACTIVE_MS = 280
 const HEARTBEAT_MS = 10000
 const CLOCK_TICK_MS = 300
+const CONTROLLER_ROOM_LOOKUP_GRACE_MS = 12000
+const CONTROLLER_ROOM_LOOKUP_MAX_MISSES = 4
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
 const CONTROLLER_ACTION_BUTTON_CLASS = `${JOIN_CTA_GRADIENT_CLASS} rounded-2xl border-0 font-black transition-all hover:brightness-110 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50 disabled:hover:brightness-100`
@@ -95,19 +97,25 @@ function isTerminalControllerSessionError(error: unknown) {
     return false
   }
 
-  if (error.status === 401 || error.status === 403 || error.status === 404) {
+  if (error.status === 401 || error.status === 403) {
     return true
   }
 
   return (
     error.code === "UNAUTHORIZED" ||
     error.code === "FORBIDDEN" ||
-    error.code === "ROOM_NOT_FOUND" ||
     error.code === "ROOM_NOT_ACTIVE" ||
     error.code === "ROOM_INACTIVE" ||
-    error.code === "ROOM_TOKEN_MISMATCH" ||
-    error.code === "PLAYER_NOT_FOUND"
+    error.code === "ROOM_TOKEN_MISMATCH"
   )
+}
+
+function isRoomLookupMismatchError(error: unknown) {
+  if (!(error instanceof LiveApiError)) {
+    return false
+  }
+
+  return error.status === 404 || error.code === "ROOM_NOT_FOUND" || error.code === "PLAYER_NOT_FOUND"
 }
 
 function isTerminalRoomState(state: RoomSnapshot["state"] | null | undefined) {
@@ -220,6 +228,8 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
   const refreshInFlightRef = useRef(false)
   const serverClockOffsetRef = useRef(0)
   const lastHarajRoundKeyRef = useRef<string | null>(null)
+  const roomLookupMissCountRef = useRef(0)
+  const roomLookupFirstMissAtRef = useRef<number | null>(null)
   const isTriviaActiveGame = room?.activeGame === "trivia" && room?.trivia.status === "in_progress"
   const isHarajActiveGame = room?.activeGame === "haraj" && room?.haraj.status === "in_progress"
 
@@ -243,6 +253,41 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       setError(toErrorMessage(reason))
     },
     [roomId]
+  )
+
+  const resetRoomLookupMissTracking = useCallback(() => {
+    roomLookupMissCountRef.current = 0
+    roomLookupFirstMissAtRef.current = null
+  }, [])
+
+  const shouldTerminateForRoomLookupMiss = useCallback(() => {
+    const now = Date.now()
+    if (roomLookupFirstMissAtRef.current === null) {
+      roomLookupFirstMissAtRef.current = now
+    }
+    roomLookupMissCountRef.current += 1
+    const firstMissAt = roomLookupFirstMissAtRef.current ?? now
+    const elapsedMs = now - firstMissAt
+    return (
+      roomLookupMissCountRef.current >= CONTROLLER_ROOM_LOOKUP_MAX_MISSES &&
+      elapsedMs >= CONTROLLER_ROOM_LOOKUP_GRACE_MS
+    )
+  }, [])
+
+  const handleRoomLookupMismatch = useCallback(
+    (requestError: unknown, terminalMessage: string) => {
+      if (!isRoomLookupMismatchError(requestError)) {
+        return false
+      }
+      if (shouldTerminateForRoomLookupMiss()) {
+        resetRoomLookupMissTracking()
+        terminateControllerSession(requestError, terminalMessage)
+        return true
+      }
+      setError("تعذر الوصول إلى الغرفة مؤقتًا. جارٍ إعادة الاتصال تلقائيًا.")
+      return true
+    },
+    [resetRoomLookupMissTracking, shouldTerminateForRoomLookupMiss, terminateControllerSession]
   )
 
   useEffect(() => {
@@ -293,12 +338,14 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     try {
       const response = await reconnectPlayer(roomId, session.token)
       if (isTerminalRoomState(response.room.state)) {
+        resetRoomLookupMissTracking()
         terminateControllerSession(
           new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
           "انتهت هذه الغرفة. يرجى الانضمام إلى غرفة جديدة."
         )
         return
       }
+      resetRoomLookupMissTracking()
       setRoom(response.room)
       setSession((previous) => {
         const next = {
@@ -312,13 +359,23 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       })
       setError(null)
     } catch (requestError) {
+      if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى إعادة الانضمام.")) {
+        return
+      }
       if (isTerminalControllerSessionError(requestError)) {
         terminateControllerSession(requestError, "انتهت هذه الغرفة. يرجى الانضمام إلى غرفة جديدة.")
         return
       }
+      resetRoomLookupMissTracking()
       setError(toErrorMessage(requestError))
     }
-  }, [roomId, session, terminateControllerSession])
+  }, [
+    handleRoomLookupMismatch,
+    resetRoomLookupMissTracking,
+    roomId,
+    session,
+    terminateControllerSession,
+  ])
 
   const refreshState = useCallback(async () => {
     if (!session) {
@@ -334,24 +391,37 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       const response = await getRoomState(roomId, session.token)
       syncServerClock(response.ts)
       if (isTerminalRoomState(response.payload.room.state)) {
+        resetRoomLookupMissTracking()
         terminateControllerSession(
           new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
           "تم إغلاق الغرفة. يرجى إعادة الانضمام."
         )
         return
       }
+      resetRoomLookupMissTracking()
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
+      if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى إعادة الانضمام.")) {
+        return
+      }
       if (isTerminalControllerSessionError(requestError)) {
         terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى إعادة الانضمام.")
         return
       }
+      resetRoomLookupMissTracking()
       setError(toErrorMessage(requestError))
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [roomId, session, syncServerClock, terminateControllerSession])
+  }, [
+    handleRoomLookupMismatch,
+    resetRoomLookupMissTracking,
+    roomId,
+    session,
+    syncServerClock,
+    terminateControllerSession,
+  ])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -396,21 +466,27 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       roomId,
       token: session.token,
       onError: (streamError) => {
+        if (handleRoomLookupMismatch(streamError, "تعذر الوصول إلى الغرفة. يرجى الانضمام إلى غرفة جديدة.")) {
+          return
+        }
         if (isTerminalControllerSessionError(streamError)) {
           terminateControllerSession(streamError, "تم إنهاء الغرفة الحالية. يرجى الانضمام إلى غرفة جديدة.")
           return
         }
+        resetRoomLookupMissTracking()
         setError(toErrorMessage(streamError))
       },
       onState: (envelope) => {
         syncServerClock(envelope.ts)
         if (isTerminalRoomState(envelope.payload.room.state)) {
+          resetRoomLookupMissTracking()
           terminateControllerSession(
             new LiveApiError(409, "ROOM_NOT_ACTIVE", "Room is no longer active"),
             "تم إنهاء الغرفة الحالية. يرجى الانضمام إلى غرفة جديدة."
           )
           return
         }
+        resetRoomLookupMissTracking()
         setRoom(envelope.payload.room)
         setError(null)
       },
@@ -419,7 +495,15 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return () => {
       unsubscribe()
     }
-  }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
+  }, [
+    handleRoomLookupMismatch,
+    isPageVisible,
+    resetRoomLookupMissTracking,
+    roomId,
+    session,
+    syncServerClock,
+    terminateControllerSession,
+  ])
 
   useEffect(() => {
     if (!session) {
@@ -466,9 +550,13 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
       void sendAction(roomId, session.token, "player.heartbeat")
         .then((ack) => {
+          resetRoomLookupMissTracking()
           syncServerClock(ack.ts)
         })
         .catch((requestError) => {
+          if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى الانضمام إلى غرفة جديدة.")) {
+            return
+          }
           if (isTerminalControllerSessionError(requestError)) {
             terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
             return
@@ -480,7 +568,15 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     return () => {
       window.clearInterval(timer)
     }
-  }, [isPageVisible, roomId, session, syncServerClock, terminateControllerSession])
+  }, [
+    handleRoomLookupMismatch,
+    isPageVisible,
+    resetRoomLookupMissTracking,
+    roomId,
+    session,
+    syncServerClock,
+    terminateControllerSession,
+  ])
 
   const selectedQuestionId = isTriviaActiveGame ? room?.trivia.selectedClue?.questionId ?? null : null
   const harajRoundKey =
@@ -669,10 +765,14 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       }
 
       syncServerClock(ack.ts)
+      resetRoomLookupMissTracking()
       setRoom(ack.payload.room)
       setNotice(`تم إرسال الإجابة: ${option}`)
     } catch (requestError) {
       setSubmittedQuestionId(null)
+      if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى الانضمام إلى غرفة جديدة.")) {
+        return
+      }
       if (isTerminalControllerSessionError(requestError)) {
         terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
         return
@@ -684,6 +784,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         setNotice("تم تغيير حالة السؤال قبل إرسال الإجابة. جارٍ مزامنة الحالة...")
         await refreshState()
       }
+      resetRoomLookupMissTracking()
       setError(toErrorMessage(requestError))
     } finally {
       setBusy(false)
@@ -708,14 +809,19 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     try {
       const ack = await sendAction(roomId, session.token, "player.submitHarajEstimate", { estimate })
       syncServerClock(ack.ts)
+      resetRoomLookupMissTracking()
       setRoom(ack.payload.room)
       setSubmittedHarajRoundKey(harajRoundKey)
       setNotice("تم إرسال التخمين بنجاح.")
     } catch (requestError) {
+      if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى الانضمام إلى غرفة جديدة.")) {
+        return
+      }
       if (isTerminalControllerSessionError(requestError)) {
         terminateControllerSession(requestError, "تم إغلاق الغرفة. يرجى الانضمام إلى غرفة جديدة.")
         return
       }
+      resetRoomLookupMissTracking()
       setError(toErrorMessage(requestError))
     } finally {
       setBusy(false)

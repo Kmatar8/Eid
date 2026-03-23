@@ -20,12 +20,9 @@ type StreamHandlers = {
 const FATAL_STREAM_ERROR_CODES = new Set([
   "UNAUTHORIZED",
   "FORBIDDEN",
-  "ROOM_NOT_FOUND",
   "ROOM_NOT_ACTIVE",
   "ROOM_INACTIVE",
   "ROOM_TOKEN_MISMATCH",
-  "HOST_ROOM_MISMATCH",
-  "PLAYER_NOT_FOUND",
 ])
 
 function safeParseJson<T>(text: string) {
@@ -88,7 +85,7 @@ function isFatalStreamFailure(error: unknown) {
     return false
   }
 
-  if (error.status === 401 || error.status === 403 || error.status === 404) {
+  if (error.status === 401 || error.status === 403) {
     return true
   }
 

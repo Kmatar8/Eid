@@ -31,6 +31,8 @@ const HOST_POLL_ACTIVE_MS = 260
 const CLOCK_TICK_MS = 300
 const HOST_HEARTBEAT_MS = 10000
 const HOST_BACKGROUND_HEARTBEAT_MS = 60000
+const HOST_ROOM_LOOKUP_GRACE_MS = 12000
+const HOST_ROOM_LOOKUP_MAX_MISSES = 4
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const
 const JOIN_CTA_GRADIENT_CLASS =
   "bg-gradient-to-r from-amber-400 via-pink-400 to-cyan-400 text-slate-950 shadow-[0_12px_30px_rgba(56,189,248,0.32)]"
@@ -92,20 +94,12 @@ function isInvalidTransitionAt(error: unknown, allowedStates: string[]) {
   return state ? allowedStates.includes(state) : false
 }
 
-function isFatalHostSessionError(error: unknown) {
+function isRoomLookupMismatchError(error: unknown) {
   if (!(error instanceof LiveApiError)) {
     return false
   }
 
-  return (
-    error.status === 401 ||
-    error.status === 403 ||
-    error.status === 404 ||
-    error.code === "UNAUTHORIZED" ||
-    error.code === "FORBIDDEN" ||
-    error.code === "ROOM_NOT_FOUND" ||
-    error.code === "HOST_ROOM_MISMATCH"
-  )
+  return error.status === 404 || error.code === "ROOM_NOT_FOUND" || error.code === "HOST_ROOM_MISMATCH"
 }
 
 function isStaleHostSessionError(error: unknown) {
@@ -444,6 +438,8 @@ export default function HostStagePage() {
   const processedHarajRevealRoundKeyRef = useRef<string | null>(null)
   const playedHarajRevealConfettiRoundKeyRef = useRef<string | null>(null)
   const sessionInvalidatedRef = useRef(false)
+  const roomLookupMissCountRef = useRef(0)
+  const roomLookupFirstMissAtRef = useRef<number | null>(null)
 
   const invalidateHostSession = useCallback(
     (reason: "session_expired" | "access_revoked") => {
@@ -495,6 +491,22 @@ export default function HostStagePage() {
     if (message) {
       setNotice(message)
     }
+  }, [])
+
+  const resetRoomLookupMissTracking = useCallback(() => {
+    roomLookupMissCountRef.current = 0
+    roomLookupFirstMissAtRef.current = null
+  }, [])
+
+  const shouldReleaseForRoomLookupMiss = useCallback(() => {
+    const now = Date.now()
+    if (roomLookupFirstMissAtRef.current === null) {
+      roomLookupFirstMissAtRef.current = now
+    }
+    roomLookupMissCountRef.current += 1
+    const firstMissAt = roomLookupFirstMissAtRef.current ?? now
+    const elapsedMs = now - firstMissAt
+    return roomLookupMissCountRef.current >= HOST_ROOM_LOOKUP_MAX_MISSES && elapsedMs >= HOST_ROOM_LOOKUP_GRACE_MS
   }, [])
 
   useEffect(() => {
@@ -939,18 +951,22 @@ export default function HostStagePage() {
       const response = await getRoomState(roomId, hostToken)
       syncServerClock(response.ts)
       if (isTerminalRoomState(response.payload.room.state)) {
+        resetRoomLookupMissTracking()
         setError(null)
         releaseRoomBinding("انتهت الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
         return
       }
+      resetRoomLookupMissTracking()
       setRoom(response.payload.room)
       setError(null)
     } catch (requestError) {
-      if (
-        requestError instanceof LiveApiError &&
-        (requestError.code === "ROOM_NOT_FOUND" || requestError.code === "HOST_ROOM_MISMATCH")
-      ) {
-        releaseRoomBinding("تعذر الوصول إلى الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
+      if (isRoomLookupMismatchError(requestError)) {
+        if (shouldReleaseForRoomLookupMiss()) {
+          resetRoomLookupMissTracking()
+          releaseRoomBinding("تعذر الوصول إلى الغرفة السابقة. جارٍ تجهيز غرفة جديدة.")
+          return
+        }
+        setError("تعذر الوصول إلى الغرفة مؤقتًا. جارٍ إعادة المحاولة تلقائيًا.")
         return
       }
 
@@ -958,11 +974,20 @@ export default function HostStagePage() {
         return
       }
 
+      resetRoomLookupMissTracking()
       setError(toErrorMessage(requestError))
     } finally {
       refreshInFlightRef.current = false
     }
-  }, [hostToken, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
+  }, [
+    hostToken,
+    recoverFromHostSessionError,
+    releaseRoomBinding,
+    resetRoomLookupMissTracking,
+    roomId,
+    shouldReleaseForRoomLookupMiss,
+    syncServerClock,
+  ])
 
   const bootstrapRoom = useCallback(async () => {
     if (!hostToken || roomId || isBootstrappingRoom) {
@@ -976,6 +1001,7 @@ export default function HostStagePage() {
 
     try {
       const created = await createRoom(hostToken)
+      resetRoomLookupMissTracking()
       setRoomId(created.room.roomId)
       setHostRoomId(created.room.roomId)
       setRoom(created.room)
@@ -985,6 +1011,7 @@ export default function HostStagePage() {
         const activeRoomId =
           typeof requestError.details?.activeRoomId === "string" ? requestError.details.activeRoomId : null
         if (activeRoomId) {
+          resetRoomLookupMissTracking()
           setRoomId(activeRoomId)
           setHostRoomId(activeRoomId)
           setNotice("تم استئناف غرفة المضيف الحالية.")
@@ -1001,7 +1028,7 @@ export default function HostStagePage() {
     } finally {
       setIsBootstrappingRoom(false)
     }
-  }, [hostToken, isBootstrappingRoom, recoverFromHostSessionError, roomId])
+  }, [hostToken, isBootstrappingRoom, recoverFromHostSessionError, resetRoomLookupMissTracking, roomId])
 
   useEffect(() => {
     if (!hostToken) {
@@ -1039,19 +1066,27 @@ export default function HostStagePage() {
         if (recoverFromHostSessionError(streamError)) {
           return
         }
-        if (isFatalHostSessionError(streamError)) {
-          releaseRoomBinding("انتهت صلاحية الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
+        if (isRoomLookupMismatchError(streamError)) {
+          if (shouldReleaseForRoomLookupMiss()) {
+            resetRoomLookupMissTracking()
+            releaseRoomBinding("تعذر الوصول إلى الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
+            return
+          }
+          setError("تعذر الوصول إلى الغرفة مؤقتًا عبر البث المباشر. جارٍ إعادة الاتصال تلقائيًا.")
           return
         }
+        resetRoomLookupMissTracking()
         setError(toErrorMessage(streamError))
       },
       onState: (envelope) => {
         syncServerClock(envelope.ts)
         if (isTerminalRoomState(envelope.payload.room.state)) {
+          resetRoomLookupMissTracking()
           setError(null)
           releaseRoomBinding("تم إغلاق الغرفة الحالية. جارٍ تجهيز غرفة جديدة.")
           return
         }
+        resetRoomLookupMissTracking()
         setRoom(envelope.payload.room)
         setError(null)
       },
@@ -1061,7 +1096,16 @@ export default function HostStagePage() {
       streamConnectedRef.current = false
       unsubscribe()
     }
-  }, [hostToken, isPageVisible, recoverFromHostSessionError, releaseRoomBinding, roomId, syncServerClock])
+  }, [
+    hostToken,
+    isPageVisible,
+    recoverFromHostSessionError,
+    releaseRoomBinding,
+    resetRoomLookupMissTracking,
+    roomId,
+    shouldReleaseForRoomLookupMiss,
+    syncServerClock,
+  ])
 
   useEffect(() => {
     if (!hostToken || !roomId) {

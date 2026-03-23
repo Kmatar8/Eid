@@ -17,6 +17,8 @@ type RequestOptions = {
   timeoutMs?: number
 }
 
+type LiveApiTimeoutDetails = Record<string, unknown>
+
 const RETRYABLE_STATUSES = new Set([429, 502, 503, 504])
 const DEFAULT_GET_TIMEOUT_MS = 5500
 const DEFAULT_MUTATION_TIMEOUT_MS = 12000
@@ -51,6 +53,51 @@ function sleep(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
+}
+
+function resolveVisibilityState(): DocumentVisibilityState | "unknown" {
+  if (typeof document === "undefined") {
+    return "unknown"
+  }
+
+  return document.visibilityState
+}
+
+function resolveOnlineState() {
+  if (typeof navigator === "undefined" || typeof navigator.onLine !== "boolean") {
+    return null
+  }
+
+  return navigator.onLine
+}
+
+function createTimeoutDetails(args: {
+  path: string
+  method: RequestOptions["method"]
+  attempt: number
+  maxAttempts: number
+  timeoutMs: number
+  durationMs: number
+  hasToken: boolean
+  payloadBytes: number | null
+}): LiveApiTimeoutDetails {
+  return {
+    path: args.path,
+    method: args.method ?? "GET",
+    attempt: args.attempt,
+    maxAttempts: args.maxAttempts,
+    timeoutMs: args.timeoutMs,
+    durationMs: args.durationMs,
+    hasToken: args.hasToken,
+    payloadBytes: args.payloadBytes,
+    visibilityState: resolveVisibilityState(),
+    online: resolveOnlineState(),
+    timestamp: new Date().toISOString(),
+  }
+}
+
+function logRequestTimeout(details: LiveApiTimeoutDetails) {
+  console.warn("[live-api] request timeout", details)
 }
 
 function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number) {
@@ -105,17 +152,20 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
   const isRetryableMethod = method === "GET"
   const timeoutMs = options.timeoutMs ?? (isRetryableMethod ? DEFAULT_GET_TIMEOUT_MS : DEFAULT_MUTATION_TIMEOUT_MS)
   const maxAttempts = isRetryableMethod ? 3 : 1
+  const serializedBody = options.body === undefined ? undefined : JSON.stringify(options.body)
+  const payloadBytes = serializedBody?.length ?? null
 
   let response: Response | null = null
   let lastFetchError: unknown = null
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const timedSignal = createTimeoutSignal(options.signal, timeoutMs)
+    const startedAt = Date.now()
     try {
       response = await fetch(path, {
         method,
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: serializedBody,
         signal: timedSignal.signal,
       })
 
@@ -123,9 +173,26 @@ async function requestJson<T>(path: string, options: RequestOptions = {}): Promi
         break
       }
     } catch (error) {
-      lastFetchError = timedSignal.didTimeout()
-        ? new LiveApiError(408, "REQUEST_TIMEOUT", "Live API request timed out")
-        : error
+      if (timedSignal.didTimeout()) {
+        const details = createTimeoutDetails({
+          path,
+          method,
+          attempt,
+          maxAttempts,
+          timeoutMs,
+          durationMs: Date.now() - startedAt,
+          hasToken: Boolean(options.token),
+          payloadBytes,
+        })
+
+        if (attempt === maxAttempts || !isRetryableMethod) {
+          logRequestTimeout(details)
+        }
+
+        lastFetchError = new LiveApiError(408, "REQUEST_TIMEOUT", "Live API request timed out", details)
+      } else {
+        lastFetchError = error
+      }
 
       if (options.signal?.aborted) {
         throw error

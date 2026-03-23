@@ -6,7 +6,7 @@ import {
   ensureHostSessionRecord,
   isHostSessionActive,
 } from "@/lib/server/store"
-import { withSharedStore } from "@/lib/server/store-sync"
+import { persistRoomShardToDurable, withSharedStore } from "@/lib/server/store-sync"
 import { isHostToken, verifyToken } from "@/lib/server/token"
 
 export const runtime = "nodejs"
@@ -61,6 +61,8 @@ export async function POST(request: Request) {
 
       return errorResponse(404, "HOST_NOT_FOUND", "Host account was not found")
     }
+
+    await persistRoomShardToDurable(created.room.id)
 
     const snapshot = buildRoomSnapshot(created.room.id)
     if (!snapshot) {

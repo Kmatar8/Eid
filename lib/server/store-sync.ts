@@ -3,6 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare"
 import {
   exportRoomShardSnapshot,
   exportStoreSnapshot,
+  getRoom,
   getStoreRevision,
   importRoomShardSnapshot,
   importStoreSnapshot,
@@ -411,6 +412,12 @@ async function withRoomStoreInternal<T>(roomId: string, operation: () => Promise
     await hydrateSharedStoreFromDurable()
   }
   await hydrateRoomShardFromDurable(roomId)
+  // Room creation currently starts in shared-store scope. If this process misses
+  // the room shard on first read, hydrate shared state as a fallback to avoid
+  // transient ROOM_NOT_FOUND responses during join/bootstrap.
+  if (!syncGlobalStore && !getRoom(roomId)) {
+    await hydrateSharedStoreFromDurable()
+  }
 
   try {
     return await operation()

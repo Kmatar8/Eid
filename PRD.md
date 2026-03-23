@@ -243,6 +243,7 @@ Per round:
 2. On reopen, client attempts reconnect automatically.
 3. If room still active and token valid -> player rejoins same room/team slot.
 4. If room inactive/expired/superseded -> show ended state and require new join.
+5. Transient room-lookup failures (for example shard/store sync lag returning temporary `ROOM_NOT_FOUND`) must not trigger immediate host room reset or immediate controller session termination; clients should apply bounded retry/grace logic before treating lookup failures as terminal.
 
 ## 10. Cloudflare Architecture
 ## 10.1 Stack
