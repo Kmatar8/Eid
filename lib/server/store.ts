@@ -477,6 +477,43 @@ export function getStoreRevision() {
   return getStore().revision
 }
 
+function resolveRoomShardLatestActivityAt(input: {
+  room: Pick<RoomRecord, "createdAt" | "updatedAt"> | null
+  hostLastSeenAt: number | null
+}) {
+  return Math.max(input.room?.createdAt ?? 0, input.room?.updatedAt ?? 0, input.hostLastSeenAt ?? 0)
+}
+
+function shouldImportRoomShardSnapshot(
+  currentRoom: RoomRecord | null,
+  currentHostLastSeenAt: number | null,
+  incomingRoom: RoomRecord | null,
+  incomingHostLastSeenAt: number | null
+) {
+  if (!incomingRoom) {
+    return currentRoom === null
+  }
+
+  if (!currentRoom) {
+    return true
+  }
+
+  if (incomingRoom.version !== currentRoom.version) {
+    return incomingRoom.version > currentRoom.version
+  }
+
+  const currentLatestActivityAt = resolveRoomShardLatestActivityAt({
+    room: currentRoom,
+    hostLastSeenAt: currentHostLastSeenAt,
+  })
+  const incomingLatestActivityAt = resolveRoomShardLatestActivityAt({
+    room: incomingRoom,
+    hostLastSeenAt: incomingHostLastSeenAt,
+  })
+
+  return incomingLatestActivityAt >= currentLatestActivityAt
+}
+
 export function importRoomShardSnapshot(roomId: string, snapshot: unknown): boolean {
   if (!snapshot || typeof snapshot !== "object") {
     return false
@@ -505,11 +542,22 @@ export function importRoomShardSnapshot(roomId: string, snapshot: unknown): bool
     }
 
     const store = getStore()
+    const incomingRoom = candidate.room ? ({ ...candidate.room } as RoomRecord) : null
+    if (incomingRoom) {
+      incomingRoom.activeGame = parseActiveGame((incomingRoom as { activeGame?: unknown }).activeGame)
+    }
+
+    const currentRoom = store.rooms.get(roomId) ?? null
+    const currentHostLastSeenAt = store.hostLastSeenByRoom.get(roomId) ?? null
+    const incomingHostLastSeenAt = typeof candidate.hostLastSeenAt === "number" ? candidate.hostLastSeenAt : null
+    if (!shouldImportRoomShardSnapshot(currentRoom, currentHostLastSeenAt, incomingRoom, incomingHostLastSeenAt)) {
+      return false
+    }
+
     removeRoomScopedStoreData(store, roomId)
 
-    if (candidate.room) {
-      candidate.room.activeGame = parseActiveGame((candidate.room as { activeGame?: unknown }).activeGame)
-      store.rooms.set(roomId, candidate.room)
+    if (incomingRoom) {
+      store.rooms.set(roomId, incomingRoom)
     }
 
     const playerIds = new Set<string>()
@@ -544,8 +592,8 @@ export function importRoomShardSnapshot(roomId: string, snapshot: unknown): bool
       store.harajByRoom.set(roomId, candidate.haraj)
     }
 
-    if (typeof candidate.hostLastSeenAt === "number") {
-      store.hostLastSeenByRoom.set(roomId, candidate.hostLastSeenAt)
+    if (incomingHostLastSeenAt !== null) {
+      store.hostLastSeenByRoom.set(roomId, incomingHostLastSeenAt)
     }
 
     if (candidate.pausedFromState) {
