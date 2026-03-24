@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers"
 
+import { mergeRoomStatePayloads } from "./state-merge.mjs"
+
 const ROOM_STATE_KEY = "room_state"
 const ROOM_LAST_EVENT_KEY = "room_last_event"
 const ROOM_ALARM_QUEUE_KEY = "room_alarm_queue"
@@ -95,9 +97,12 @@ export class RoomDurableObject extends DurableObject {
       body = {}
     }
 
-    await this.ctx.storage.put(ROOM_STATE_KEY, body)
-    await this.publish("room.state.persisted", { hasSnapshot: Boolean(body && body.snapshot !== undefined) })
-    return new Response(JSON.stringify({ ok: true }), {
+    const currentState = await this.readStatePayload()
+    const nextState = mergeRoomStatePayloads(currentState, body)
+
+    await this.ctx.storage.put(ROOM_STATE_KEY, nextState)
+    await this.publish("room.state.persisted", { hasSnapshot: Boolean(nextState && nextState.snapshot !== undefined) })
+    return new Response(JSON.stringify({ ok: true, snapshot: nextState?.snapshot ?? null }), {
       headers: { "content-type": "application/json; charset=utf-8" },
     })
   }

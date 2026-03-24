@@ -340,76 +340,89 @@ export async function persistRoomShardToDurable(roomId: string) {
   }
 
   const syncState = getRoomScopeSyncState(roomId)
-  const currentRevision = getStoreRevision()
-  if (currentRevision === syncState.lastPersistedRevision) {
-    return
-  }
-
-  if (syncState.persistInFlight) {
-    await syncState.persistInFlight
-    return
-  }
-
-  syncState.persistInFlight = (async () => {
-    const snapshot = exportRoomShardSnapshot(roomId)
-    if (!snapshot) {
-      syncState.lastPersistedRevision = currentRevision
+  while (true) {
+    const currentRevision = getStoreRevision()
+    if (currentRevision === syncState.lastPersistedRevision) {
       return
     }
 
-    const stub = await getRoomStoreStub(roomId)
-    if (!stub) {
-      return
+    if (syncState.persistInFlight) {
+      await syncState.persistInFlight
+      continue
     }
 
-    try {
-      await fetchWithTimeout(stub, STORE_STATE_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          snapshot,
-          updatedAt: Date.now(),
-        }),
-      })
-      const parsedSnapshot = snapshot as RoomShardPersistSnapshot
-      const roomVersion =
-        parsedSnapshot?.room && typeof parsedSnapshot.room.version === "number"
-          ? parsedSnapshot.room.version
-          : undefined
-      const roomState =
-        parsedSnapshot?.room && typeof parsedSnapshot.room.state === "string" ? parsedSnapshot.room.state : undefined
+    syncState.persistInFlight = (async () => {
+      const snapshot = exportRoomShardSnapshot(roomId)
+      if (!snapshot) {
+        syncState.lastPersistedRevision = currentRevision
+        return
+      }
 
-      // Best-effort DO event publish for cross-instance realtime fanout consumers.
-      void stub
-        .fetch("https://hroof-store/publish", {
+      const stub = await getRoomStoreStub(roomId)
+      if (!stub) {
+        return
+      }
+
+      try {
+        const response = await fetchWithTimeout(stub, STORE_STATE_URL, {
           method: "POST",
           headers: {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            type: "room.state.delta",
-            payload: {
-              roomId,
-              revision: currentRevision,
-              roomVersion,
-              roomState,
-            },
+            snapshot,
+            updatedAt: Date.now(),
           }),
         })
-        .catch(() => undefined)
-      syncState.lastPersistedRevision = currentRevision
-      syncState.lastHydratedAt = Date.now()
-    } catch {
-      // Intentionally non-fatal in runtimes where room-scoped snapshot is unavailable.
-    }
-  })()
+        if (!response.ok) {
+          return
+        }
 
-  try {
-    await syncState.persistInFlight
-  } finally {
-    syncState.persistInFlight = null
+        const payload = (await response.json().catch(() => null)) as { snapshot?: unknown } | null
+        if (payload && payload.snapshot !== undefined) {
+          importRoomShardSnapshot(roomId, payload.snapshot)
+        }
+        const parsedSnapshot = snapshot as RoomShardPersistSnapshot
+        const roomVersion =
+          parsedSnapshot?.room && typeof parsedSnapshot.room.version === "number"
+            ? parsedSnapshot.room.version
+            : undefined
+        const roomState =
+          parsedSnapshot?.room && typeof parsedSnapshot.room.state === "string" ? parsedSnapshot.room.state : undefined
+
+        // Best-effort DO event publish for cross-instance realtime fanout consumers.
+        void stub
+          .fetch("https://hroof-store/publish", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              type: "room.state.delta",
+              payload: {
+                roomId,
+                revision: currentRevision,
+                roomVersion,
+                roomState,
+              },
+            }),
+          })
+          .catch(() => undefined)
+        syncState.lastPersistedRevision = currentRevision
+        // Force the next room-scoped read to rehydrate from the DO so a process
+        // that just wrote one branch of a concurrent merge does not keep serving
+        // a partial local room view for the hydrate TTL window.
+        syncState.lastHydratedAt = 0
+      } catch {
+        // Intentionally non-fatal in runtimes where room-scoped snapshot is unavailable.
+      }
+    })()
+
+    try {
+      await syncState.persistInFlight
+    } finally {
+      syncState.persistInFlight = null
+    }
   }
 }
 

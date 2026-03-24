@@ -36,6 +36,9 @@
       }
     ]
   },
+  "vars": {
+    "HROOF_ROOM_SCOPED_DO_STORE": "true"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
