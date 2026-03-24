@@ -238,6 +238,31 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
   }, [])
 
+  const applyIncomingRoomSnapshot = useCallback(
+    (nextRoom: RoomSnapshot) => {
+      if (nextRoom.roomId !== roomId) {
+        return
+      }
+
+      setRoom((current) => {
+        if (!current) {
+          return nextRoom
+        }
+
+        if (nextRoom.version < current.version) {
+          return current
+        }
+
+        if (nextRoom.version === current.version && nextRoom.updatedAt < current.updatedAt) {
+          return current
+        }
+
+        return nextRoom
+      })
+    },
+    [roomId]
+  )
+
   const terminateControllerSession = useCallback(
     (reason: unknown, message?: string) => {
       clearPlayerSession(roomId)
@@ -346,7 +371,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         return
       }
       resetRoomLookupMissTracking()
-      setRoom(response.room)
+      applyIncomingRoomSnapshot(response.room)
       setSession((previous) => {
         const next = {
           roomId,
@@ -375,6 +400,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     roomId,
     session,
     terminateControllerSession,
+    applyIncomingRoomSnapshot,
   ])
 
   const refreshState = useCallback(async () => {
@@ -399,7 +425,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
         return
       }
       resetRoomLookupMissTracking()
-      setRoom(response.payload.room)
+      applyIncomingRoomSnapshot(response.payload.room)
       setError(null)
     } catch (requestError) {
       if (handleRoomLookupMismatch(requestError, "تعذر الوصول إلى الغرفة. يرجى إعادة الانضمام.")) {
@@ -421,6 +447,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     session,
     syncServerClock,
     terminateControllerSession,
+    applyIncomingRoomSnapshot,
   ])
 
   useEffect(() => {
@@ -487,7 +514,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
           return
         }
         resetRoomLookupMissTracking()
-        setRoom(envelope.payload.room)
+        applyIncomingRoomSnapshot(envelope.payload.room)
         setError(null)
       },
     })
@@ -503,6 +530,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     session,
     syncServerClock,
     terminateControllerSession,
+    applyIncomingRoomSnapshot,
   ])
 
   useEffect(() => {
@@ -718,10 +746,24 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
     }
 
     if (room.trivia.phase === "answer_reveal" && room.trivia.lastResult) {
-      if (room.trivia.lastResult.reason === "host_skip") {
+      const { lastResult } = room.trivia
+      if (lastResult.reason === "host_skip") {
         return "تم تخطي السؤال بواسطة المضيف."
       }
-      return room.trivia.lastResult.wasCorrect ? "إجابة صحيحة." : "إجابة خاطئة."
+
+      const resultPlayerName = lastResult.responderPlayerId
+        ? playerNameById.get(lastResult.responderPlayerId) ?? "لاعب"
+        : "لاعب"
+      const awardedTeamId = lastResult.awardedTeamId ?? lastResult.responderTeamId
+      const resultTeamName = awardedTeamId ? teamById.get(awardedTeamId)?.name ?? "فريق" : "فريق"
+      const pointsText =
+        lastResult.awardedPoints > 0
+          ? `+${lastResult.awardedPoints}`
+          : `${lastResult.awardedPoints}`
+
+      return lastResult.wasCorrect
+        ? `إجابة صحيحة من ${resultPlayerName} (${resultTeamName}) — ${pointsText} نقطة.`
+        : `إجابة خاطئة من ${resultPlayerName} (${resultTeamName}) — ${pointsText} نقطة.`
     }
 
     return "بانتظار التحديث التالي."
@@ -766,7 +808,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
 
       syncServerClock(ack.ts)
       resetRoomLookupMissTracking()
-      setRoom(ack.payload.room)
+      applyIncomingRoomSnapshot(ack.payload.room)
       setNotice(`تم إرسال الإجابة: ${option}`)
     } catch (requestError) {
       setSubmittedQuestionId(null)
@@ -810,7 +852,7 @@ export default function ControllerClientPage({ roomId }: ControllerClientPagePro
       const ack = await sendAction(roomId, session.token, "player.submitHarajEstimate", { estimate })
       syncServerClock(ack.ts)
       resetRoomLookupMissTracking()
-      setRoom(ack.payload.room)
+      applyIncomingRoomSnapshot(ack.payload.room)
       setSubmittedHarajRoundKey(harajRoundKey)
       setNotice("تم إرسال التخمين بنجاح.")
     } catch (requestError) {

@@ -483,6 +483,28 @@ export default function HostStagePage() {
     serverClockOffsetRef.current = serverClockOffsetRef.current * 0.8 + measuredOffset * 0.2
   }, [])
 
+  const applyIncomingRoomSnapshot = useCallback((nextRoom: RoomSnapshot) => {
+    setRoom((current) => {
+      if (!current) {
+        return nextRoom
+      }
+
+      if (current.roomId !== nextRoom.roomId) {
+        return nextRoom
+      }
+
+      if (nextRoom.version < current.version) {
+        return current
+      }
+
+      if (nextRoom.version === current.version && nextRoom.updatedAt < current.updatedAt) {
+        return current
+      }
+
+      return nextRoom
+    })
+  }, [])
+
   const releaseRoomBinding = useCallback((message?: string) => {
     clearHostRoomId()
     setRoomId(null)
@@ -957,7 +979,7 @@ export default function HostStagePage() {
         return
       }
       resetRoomLookupMissTracking()
-      setRoom(response.payload.room)
+      applyIncomingRoomSnapshot(response.payload.room)
       setError(null)
     } catch (requestError) {
       if (isRoomLookupMismatchError(requestError)) {
@@ -987,6 +1009,7 @@ export default function HostStagePage() {
     roomId,
     shouldReleaseForRoomLookupMiss,
     syncServerClock,
+    applyIncomingRoomSnapshot,
   ])
 
   const bootstrapRoom = useCallback(async () => {
@@ -1004,7 +1027,7 @@ export default function HostStagePage() {
       resetRoomLookupMissTracking()
       setRoomId(created.room.roomId)
       setHostRoomId(created.room.roomId)
-      setRoom(created.room)
+      applyIncomingRoomSnapshot(created.room)
       setNotice("تم إنشاء غرفة جديدة. اعرض رمز QR ليبدأ اللاعبون بالانضمام.")
     } catch (requestError) {
       if (requestError instanceof LiveApiError && requestError.code === "HOST_ALREADY_ACTIVE") {
@@ -1028,7 +1051,14 @@ export default function HostStagePage() {
     } finally {
       setIsBootstrappingRoom(false)
     }
-  }, [hostToken, isBootstrappingRoom, recoverFromHostSessionError, resetRoomLookupMissTracking, roomId])
+  }, [
+    hostToken,
+    isBootstrappingRoom,
+    recoverFromHostSessionError,
+    resetRoomLookupMissTracking,
+    roomId,
+    applyIncomingRoomSnapshot,
+  ])
 
   useEffect(() => {
     if (!hostToken) {
@@ -1087,7 +1117,7 @@ export default function HostStagePage() {
           return
         }
         resetRoomLookupMissTracking()
-        setRoom(envelope.payload.room)
+        applyIncomingRoomSnapshot(envelope.payload.room)
         setError(null)
       },
     })
@@ -1105,6 +1135,7 @@ export default function HostStagePage() {
     roomId,
     shouldReleaseForRoomLookupMiss,
     syncServerClock,
+    applyIncomingRoomSnapshot,
   ])
 
   useEffect(() => {
@@ -1183,7 +1214,7 @@ export default function HostStagePage() {
       try {
         const ack = await sendAction(roomId, hostToken, type, payload)
         syncServerClock(ack.ts)
-        setRoom(ack.payload.room)
+        applyIncomingRoomSnapshot(ack.payload.room)
         return ack.payload.room
       } catch (requestError) {
         if (recoverFromHostSessionError(requestError)) {
@@ -1201,7 +1232,7 @@ export default function HostStagePage() {
         setBusyAction(null)
       }
     },
-    [hostToken, recoverFromHostSessionError, refreshState, room, roomId, syncServerClock]
+    [hostToken, recoverFromHostSessionError, refreshState, room, roomId, syncServerClock, applyIncomingRoomSnapshot]
   )
 
   const assignPlayer = useCallback(
@@ -1246,7 +1277,7 @@ export default function HostStagePage() {
 
       try {
         const lockAck = await sendAction(roomId, hostToken, "host.lockLobby")
-        setRoom(lockAck.payload.room)
+        applyIncomingRoomSnapshot(lockAck.payload.room)
       } catch (requestError) {
         if (!isInvalidTransitionAt(requestError, ["lobby_locked", "teams_ready", "game_live"])) {
           throw requestError
@@ -1255,7 +1286,7 @@ export default function HostStagePage() {
 
       try {
         const teamsAck = await sendAction(roomId, hostToken, "host.startTeams")
-        setRoom(teamsAck.payload.room)
+        applyIncomingRoomSnapshot(teamsAck.payload.room)
       } catch (requestError) {
         if (!isInvalidTransitionAt(requestError, ["teams_ready", "game_live"])) {
           throw requestError
@@ -1272,7 +1303,16 @@ export default function HostStagePage() {
     } finally {
       setBusyAction(null)
     }
-  }, [hostToken, recoverFromHostSessionError, refreshState, room, roomId, startSessionReadiness, teamNameDrafts])
+  }, [
+    hostToken,
+    recoverFromHostSessionError,
+    refreshState,
+    room,
+    roomId,
+    startSessionReadiness,
+    teamNameDrafts,
+    applyIncomingRoomSnapshot,
+  ])
 
   const handleAssignPlayerFromPicker = useCallback(
     async (teamId: string) => {
