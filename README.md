@@ -1,114 +1,154 @@
-# Hroof
+# Eid | ألعاب العيد
+### A shared screen. A room full of players. Everyone’s phone is a controller.
 
-Realtime party-game platform (host TV + mobile controllers) built with Next.js and Cloudflare.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Local Development
+Eid is an Arabic party-game platform for gatherings, built around a host display and mobile controllers. The codebase uses the internal name **Hroof** (`hroof-app`).
+
+Hosts create rooms and guide play; players join from their phones. The project includes trivia, a Jeopardy-style board, Haraj gameplay, team management, scoring, reconnect support, and an Arabic support chatbot.
+
+## How it works
+
+| Surface | Route | Purpose |
+| --- | --- | --- |
+| Host | `/host` | Sign in, create a room, manage teams and run games |
+| Join | `/join/<roomId>` | Register a player |
+| Controller | `/controller/<roomId>` | Send player input and answers |
+| Shared display | `/room/<roomId>` | Show the room on a TV or shared screen |
+
+## Built with
+
+- **Next.js 16, React 19 and TypeScript** for the application.
+- **Tailwind CSS 4, Radix UI and Motion** for the interface.
+- **Cloudflare Workers and OpenNext** for the deployed application.
+- **Durable Objects** for room state and **D1** for persistent data.
+- **Gemini** for the optional landing-page support chatbot.
+
+## Get started
+
+Use a Node.js version supported by the pinned Next.js and Wrangler packages, plus npm.
 
 ```bash
-npm install
+git clone https://github.com/Kmatar8/Eid.git
+cd Eid
+npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open [localhost:3000](http://localhost:3000).
 
-## Live Testing Surfaces
+**The development server alone does not provision the full multiplayer backend.** Host login requires D1; deployed room services require the Cloudflare bindings described below. Provision your own resources and generate your own host codes.
 
-After deployment, use these routes:
+## Configure your own backend
 
-1. `/host` for host login, room creation, and game actions.
-2. `/join/<roomId>` for player registration.
-3. `/controller/<roomId>` for player controller + answer submission.
-4. `/room/<roomId>` for TV/host display view.
+The existing deployment targets Cloudflare. Review these files before deploying:
 
-Generate host credential pool (500 rows by default):
+| File | Responsibility |
+| --- | --- |
+| `wrangler.jsonc` | Main application, D1, queue producer and room service bindings |
+| `workers/room-do/wrangler.jsonc` | Room Durable Object worker |
+| `workers/activity-cron/wrangler.toml` | Activity monitoring worker |
+| `migrations/` | D1 schema migrations |
+| `open-next.config.ts` | OpenNext configuration |
+
+Replace the checked-in Cloudflare account/database identifiers with your own. Create the D1 database and queue referenced by the configuration, apply the migrations to your database, and configure the room worker. R2 bindings are currently commented out.
+
+Keep runtime secrets in local environment files or Cloudflare secrets, never in Git. Inspect the server code for the configuration needed by the features you enable.
+
+### Host access codes
+
+Hosts sign in with an access code. Access lasts **60 days from first successful login**, and a new login rotates the active session.
+
+Generate a private credential pool:
 
 ```bash
 npm run seed:redeem-codes -- 500 docs/seeds/host-redeem-codes.csv 12 lib/server/host-credentials.generated.json
 ```
 
-Sync generated codes to D1:
+After configuring your own D1 database, synchronize the codes:
 
 ```bash
-# remote D1
 npm run sync:host-codes:d1 -- docs/seeds/host-redeem-codes.csv --remote
 ```
 
-CSV format is `code` only. Host login uses the code directly.
-Credential tracking is stored in `host_access_codes` (D1):
-- `active` before first login
-- `redeemed` after first successful login
-- `expired` after access expiry
+The CSV contains a `code` column. Treat both generated files as credentials. Never reuse codes from repository history or publish generated exports.
 
-Access window is `60 days` from first successful login.
+### Optional support chatbot
 
-## Deployed Smoke Test
+Set the server-side `HROOF_GEMINI_API_KEY` secret to enable Gemini integration. The default model is `gemini-2.5-flash`.
 
-Run the API-level smoke script against your deployed domain:
+Edit the chatbot’s knowledge and tone in `public/chatbot/`:
 
-```bash
-BASE_URL=https://<your-deployed-domain> scripts/smoke-live.sh
-```
+- `knowledge-base.md`
+- `system-instructions.md`
+- `fallback-message.md`
+- `social-intents.md`
 
-Optional env vars:
+These files are public assets: keep private information out of them. Redeploy after changing production content.
 
-- `HOST_USER` (optional; defaults to first CSV row username when available)
-- `HOST_CREDENTIALS_CSV` (optional; defaults to `docs/seeds/host-redeem-codes.csv`)
-
-The script validates login, room creation, join flow, host lifecycle actions, responder answer submission, reconnect, and session end behavior.
-
-## 100-Room Load Canary
-
-Run the constrained load profile (capped to 100 rooms):
-
-```bash
-BASE_URL=https://<your-deployed-domain> npm run load:rooms-100
-```
-
-Important notes:
-
-- The script requires one unique host credential per concurrently active room.
-- Provide credential pool via `HOST_CREDENTIALS_JSON`:
-  - `HOST_CREDENTIALS_JSON='[{"username":"host-1"}, ... ]'`
-- Defaults are `LOAD_ROOMS=100` and `PLAYERS_PER_ROOM=20`.
-- The script outputs p50/p95/p99 latency for login, create, joins, host actions, state reads, and end-session.
-
-## Build and Deploy
+## Validation and deployment
 
 ```bash
 npm run lint
+npx tsc --noEmit
 npm run build
+```
+
+For an account you have configured:
+
+```bash
 npm run deploy
 ```
 
-For Cloudflare CI deployment reliability (transient `502` deployment API failures), use:
+A retry helper is available for transient Cloudflare deployment failures:
 
 ```bash
 npm run build:worker
 npm run deploy:cf:retry -- --config wrangler.jsonc
 ```
 
-Optional retry tuning env vars:
+Optional settings: `CF_DEPLOY_MAX_ATTEMPTS` (default 3) and `CF_DEPLOY_RETRY_DELAY_MS` (default 8000).
 
-- `CF_DEPLOY_MAX_ATTEMPTS` (default: `3`)
-- `CF_DEPLOY_RETRY_DELAY_MS` (default: `8000`)
+### Deployed smoke test
 
-## Landing Chatbot (Gemini + Markdown KB)
+Run only against an environment you control:
 
-The landing page includes an Arabic support chatbot backed by:
+```bash
+BASE_URL=https://your-test-domain.example scripts/smoke-live.sh
+```
 
-- API route: `/api/chat/support`
-- Gemini model: `gemini-2.5-flash` (default)
-- Server env var: `HROOF_GEMINI_API_KEY`
+The script exercises login, room creation, joining, host actions, answers, reconnect and session termination. Review `scripts/smoke-live.sh` for credential inputs.
 
-Editable chatbot content lives in:
+### Load canary
 
-- `public/chatbot/knowledge-base.md`
-- `public/chatbot/system-instructions.md`
-- `public/chatbot/fallback-message.md`
-- `public/chatbot/social-intents.md`
+```bash
+BASE_URL=https://your-test-domain.example npm run load:rooms-100
+```
 
-Update flow:
+The default profile uses 100 rooms and 20 players per room. Supply one unique host credential per active room through `HOST_CREDENTIALS_JSON`. Run against a dedicated test environment and account for service costs.
 
-1. Edit files in `public/chatbot/`.
-2. Local `npm run dev`: changes apply to new chat requests immediately.
-3. Deployed environment: push changes and run `npm run deploy`.
+## Repository guide
+
+```text
+app/          Pages and API routes
+components/   Shared interface components
+lib/client/   Client API and session helpers
+lib/server/   Authentication, game content and room persistence
+workers/      Room and monitoring workers
+migrations/   D1 database migrations
+scripts/      Credentials, assets, smoke tests and load tools
+public/       Images, sounds and chatbot content
+docs/         Milestone tracking and implementation tasks
+```
+
+## Contributing
+
+Bug reports and focused improvements are welcome. Include reproduction steps, expected behavior and relevant logs with secrets removed.
+
+Read [AGENTS.md](AGENTS.md) for the task and branch workflow, and [PRD.md](PRD.md) for product requirements. Document changes in `docs/tasks/` and run the relevant checks before submitting a contribution.
+
+## License
+
+The project’s original code is available under the [MIT License](LICENSE), permitting commercial use, modification and redistribution subject to its terms.
+
+Third-party dependencies and assets remain subject to their respective licenses. The project license does not grant rights to third-party brands or trademarks.
