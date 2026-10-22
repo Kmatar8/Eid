@@ -41,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Private host credential exports (existing tracked files require separate cleanup)
+/docs/seeds/*.csv
+/lib/server/host-credentials.generated.json
