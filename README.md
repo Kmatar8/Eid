@@ -145,7 +145,7 @@ docs/         Milestone tracking and implementation tasks
 
 Bug reports and focused improvements are welcome. Include reproduction steps, expected behavior and relevant logs with secrets removed.
 
-Read [AGENTS.md](AGENTS.md) for the task and branch workflow, and [PRD.md](PRD.md) for product requirements. Document changes in `docs/tasks/` and run the relevant checks before submitting a contribution.
+Keep contributions focused, describe the changes clearly, and run the relevant checks before submitting a contribution.
 
 ## License
 
